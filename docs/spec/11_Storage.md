@@ -101,7 +101,7 @@ ON job.create:
 
 ### Overview
 
-Splice uses a Runway-style refund policy: automatic refunds for system errors,
+Framecast uses a Runway-style refund policy: automatic refunds for system errors,
 partial charges for cancellations, and no refunds for completed jobs.
 
 ### Refund Rules by Failure Type

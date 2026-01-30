@@ -17,7 +17,7 @@ E2E tests verify the **entire system** from an external client perspective. Writ
 ```toml
 # tests/e2e/pyproject.toml
 [project]
-name = "splice-e2e"
+name = "framecast-e2e"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [

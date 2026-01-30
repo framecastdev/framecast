@@ -37,17 +37,17 @@ This is the canonical identifier used in:
 For consistency with other URN schemes, system assets can also be referenced using URN format:
 
 ```
-splice:system:{category}:{asset_name}
+framecast:system:{category}:{asset_name}
 ```
 
 **Examples:**
-- `splice:system:sfx:whoosh` â†’ resolves to `asset_sfx_whoosh`
-- `splice:system:ambient:crowd` â†’ resolves to `asset_ambient_crowd`
+- `framecast:system:sfx:whoosh` â†’ resolves to `asset_sfx_whoosh`
+- `framecast:system:ambient:crowd` â†’ resolves to `asset_ambient_crowd`
 
 **Conversion Rules:**
 ```
-URN to ID:  splice:system:{cat}:{name} â†’ asset_{cat}_{name}
-ID to URN:  asset_{cat}_{name} â†’ splice:system:{cat}:{name}
+URN to ID:  framecast:system:{cat}:{name} â†’ asset_{cat}_{name}
+ID to URN:  asset_{cat}_{name} â†’ framecast:system:{cat}:{name}
 ```
 
 **Note:** In spec JSONB, always use the entity ID format (`asset_sfx_whoosh`), not the URN format. The URN format is for documentation and API discoverability.
@@ -135,7 +135,7 @@ System assets are referenced in spec definitions using standard asset reference 
 
 ```yaml
 version: 1.0
-id: splice:user:projects:prj_abc123:assets:ast_001
+id: framecast:user:projects:prj_abc123:assets:ast_001
 name: "Demo Project with System Assets"
 created_at: "2024-01-15T10:30:00Z"
 updated_at: "2024-01-15T14:22:00Z"
@@ -177,7 +177,7 @@ System asset references must conform to the following validation rules:
 
 ### URN Format Validation
 
-- System asset URNs MUST follow the format: `splice:system:{category}:{asset_name}`
+- System asset URNs MUST follow the format: `framecast:system:{category}:{asset_name}`
 - `category` MUST be one of: `sfx`, `ambient`, `music`, `transition`
 - `asset_name` MUST be a valid asset identifier from the system catalog
 - Asset names are case-sensitive and use lowercase with underscores

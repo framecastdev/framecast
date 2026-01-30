@@ -222,7 +222,7 @@ Sent when a job enters the queue or starts processing.
   "delivery_id": "uuid",
   "job": {
     "id": "uuid",
-    "owner": "splice:team:tm_xyz",
+    "owner": "framecast:team:tm_xyz",
     "project_id": "uuid or null",
     "triggered_by": "uuid",
     "status": "queued",
@@ -290,7 +290,7 @@ Sent when a job finishes successfully.
   "delivery_id": "uuid",
   "job": {
     "id": "uuid",
-    "owner": "splice:team:tm_xyz",
+    "owner": "framecast:team:tm_xyz",
     "project_id": "uuid or null",
     "status": "completed",
     "output": {

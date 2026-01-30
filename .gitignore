@@ -1,4 +1,4 @@
-# === Splice API .gitignore ===
+# === Framecast API .gitignore ===
 # Following 12-factor principles: dependencies must be locked
 # Cargo.lock and .terraform.lock.hcl MUST be committed
 
@@ -173,8 +173,8 @@ $RECYCLE.BIN/
 
 # === Project Specific ===
 # Local development artifacts
-.splice/
-splice-local/
+.framecast/
+framecast-local/
 
 # RunPod local outputs
 outputs/
