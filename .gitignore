@@ -1,0 +1,184 @@
+# === Splice API .gitignore ===
+# Following 12-factor principles: dependencies must be locked
+# Cargo.lock and .terraform.lock.hcl MUST be committed
+
+# === Environment Variables (Factor III) ===
+# Store config in environment, never commit secrets
+.env
+.env.local
+.env.*.local
+# Keep template file
+!.env.example
+
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# === Rust Build Artifacts ===
+# Compiled files
+target/
+**/*.rs.bk
+*.pdb
+
+# === Python Cache & Virtual Environments ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.env.python
+
+# === Python Testing ===
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# === OpenTofu/Terraform State Files ===
+# State files contain sensitive data
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform/
+# Lock file MUST be committed (12-factor Rule II)
+# !.terraform.lock.hcl
+
+# === LocalStack ===
+.localstack/
+localstack-data/
+
+# === IDE and Editor Files ===
+# JetBrains
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# === Logs ===
+# Logs should go to stdout (Factor XI)
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# === Runtime Artifacts ===
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# === Docker ===
+.dockerignore
+
+# === AWS ===
+.aws/
+
+# === Node.js (if used for tooling) ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+
+# === Database ===
+# Don't commit local database files
+*.sqlite
+*.sqlite3
+*.db
+
+# === Security ===
+# Never commit keys, certificates, or secrets
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.jks
+*.keystore
+
+# === OS Generated ===
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# === Project Specific ===
+# Local development artifacts
+.splice/
+splice-local/
+
+# RunPod local outputs
+outputs/
+assets/local/
+
+# ComfyUI local data
+comfyui-data/

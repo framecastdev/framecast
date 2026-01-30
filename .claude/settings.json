@@ -1,0 +1,24 @@
+{
+  "model": "claude-sonnet-4-20250514",
+  "permissions": {
+    "allow": [
+      "Bash(cargo:*)",
+      "Bash(just:*)",
+      "Bash(uv:*)",
+      "Bash(git:*)",
+      "Bash(rg:*)",
+      "Bash(fd:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(terraform:*)",
+      "Bash(docker:*)",
+      "Read",
+      "Write"
+    ],
+    "deny": []
+  }
+}
