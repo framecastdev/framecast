@@ -100,7 +100,7 @@ class Job(BaseModel):
     credits_charged: int
     credits_refunded: int = 0
 
-class SpliceClient:
+class FramecastClient:
     def __init__(self, base_url: str, token: str | None = None) -> None:
         self.base_url = base_url
         self._client = httpx.AsyncClient(
@@ -163,7 +163,7 @@ async def poll_until(
 # conftest.py
 import pytest
 import pytest_asyncio
-from e2e.client import SpliceClient
+from e2e.client import FramecastClient
 from e2e.config import TestConfig
 
 @pytest.fixture(scope="session")
@@ -171,8 +171,8 @@ def config() -> TestConfig:
     return TestConfig.from_env()
 
 @pytest_asyncio.fixture
-async def client(config: TestConfig) -> SpliceClient:
-    async with SpliceClient(config.api_base_url, config.test_token) as c:
+async def client(config: TestConfig) -> FramecastClient:
+    async with FramecastClient(config.api_base_url, config.test_token) as c:
         yield c
 
 @pytest.fixture

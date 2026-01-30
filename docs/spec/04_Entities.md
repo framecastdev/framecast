@@ -144,8 +144,8 @@ Indexes:
   - INDEX(owner)
 
 Constraints:
-  - (user.tier = 'starter') Ã¢â€ â€™ (owner = 'splice:user:' + user.id)
-  - (owner STARTS WITH 'splice:team:' Ã¢Ë†Â¨ owner MATCHES 'splice:tm_[^:]+:usr_') Ã¢â€ â€™ (user.tier = 'creator')
+  - (user.tier = 'starter') Ã¢â€ â€™ (owner = 'framecast:user:' + user.id)
+  - (owner STARTS WITH 'framecast:team:' Ã¢Ë†Â¨ owner MATCHES 'framecast:tm_[^:]+:usr_') Ã¢â€ â€™ (user.tier = 'creator')
 
 Derived:
   is_valid Ã¢â€°Â¡ (revoked_at IS NULL) Ã¢Ë†Â§ (expires_at IS NULL Ã¢Ë†Â¨ expires_at > now())
@@ -222,7 +222,7 @@ Indexes:
   - UNIQUE(triggered_by, idempotency_key) WHERE idempotency_key IS NOT NULL
 
 Constraints:
-  - (project_id IS NOT NULL) Ã¢â€ â€™ (owner STARTS WITH 'splice:team:')
+  - (project_id IS NOT NULL) Ã¢â€ â€™ (owner STARTS WITH 'framecast:team:')
     (project jobs are always team-owned)
   - status Ã¢Ë†Ë† {completed, failed, canceled} Ã¢â€ â€™ completed_at IS NOT NULL
     (terminal jobs have completion timestamp)

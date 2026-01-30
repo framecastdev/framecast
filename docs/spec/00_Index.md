@@ -1,4 +1,4 @@
-# Splice API Ã¢â‚¬â€ Formal Specification v0.4.3
+# Framecast API Ã¢â‚¬â€ Formal Specification v0.4.3
 
 **Version:** 0.4.2
 **Date:** 2025-01-30
@@ -8,7 +8,7 @@
 
 ## Overview
 
-This is the formal specification for the Splice API, a comprehensive system for managing users, teams, jobs, assets, and authentication. This document defines all data entities, operations, permissions, constraints, and system behaviors required for implementation.
+This is the formal specification for the Framecast API, a comprehensive system for managing users, teams, jobs, assets, and authentication. This document defines all data entities, operations, permissions, constraints, and system behaviors required for implementation.
 
 ---
 
@@ -98,7 +98,7 @@ This is the formal specification for the Splice API, a comprehensive system for 
 
 ## Key Concepts
 
-This specification defines the complete contract for the Splice API system, including:
+This specification defines the complete contract for the Framecast API system, including:
 
 - **Entity Model:** User, Team, Job, Asset, Invitation, and SystemAsset entities with full field definitions
 - **State Machines:** State transitions for Jobs, Invitations, and other entities with triggering conditions

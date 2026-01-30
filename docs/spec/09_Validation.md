@@ -2,7 +2,7 @@
 
 ## 10.1 Spec Validation
 
-All validation rules for Splice specs must satisfy the following constraints:
+All validation rules for Framecast specs must satisfy the following constraints:
 
 ### Size Limits
 
@@ -196,7 +196,7 @@ When validating a spec, the API returns a comprehensive validation response with
 
 ## 10.3 Webhook Event Types (NEW in v0.4.0)
 
-Webhooks allow your application to receive real-time notifications about job state changes. The Splice API sends webhook events to your registered endpoints for job lifecycle events.
+Webhooks allow your application to receive real-time notifications about job state changes. The Framecast API sends webhook events to your registered endpoints for job lifecycle events.
 
 ### Valid Webhook Events
 
@@ -483,7 +483,7 @@ function verifyWebhookSignature(headers, rawBody, webhookSecret) {
 
 ### Delivery Guarantees
 
-Splice webhook delivery provides the following guarantees:
+Framecast webhook delivery provides the following guarantees:
 
 ```
 - At-least-once delivery: Each event will be delivered at least once, but may be delivered multiple times. Clients SHOULD use the delivery_id field to deduplicate.

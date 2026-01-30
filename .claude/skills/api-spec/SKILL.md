@@ -72,9 +72,9 @@ Derived: state ∈ {pending|accepted|expired|revoked}
 
 | Pattern | Example | Who Can Use |
 |---------|---------|-------------|
-| `splice:user:<user_id>` | `splice:user:usr_abc` | Starter or Creator |
-| `splice:team:<team_id>` | `splice:team:tm_xyz` | Creator only |
-| `splice:<team_id>:<user_id>` | `splice:tm_xyz:usr_abc` | Creator only |
+| `framecast:user:<user_id>` | `framecast:user:usr_abc` | Starter or Creator |
+| `framecast:team:<team_id>` | `framecast:team:tm_xyz` | Creator only |
+| `framecast:<team_id>:<user_id>` | `framecast:tm_xyz:usr_abc` | Creator only |
 
 ## Key Invariants
 

@@ -130,7 +130,7 @@ Operation: create_api_key(user_id: UUID, params: ApiKeyParams) Ã¢â€ â€�
   Post: ApiKey created with:
           id = uuid()
           user_id = user_id
-          owner = params.owner ?? 'splice:user:' || user_id
+          owner = params.owner ?? 'framecast:user:' || user_id
           name = params.name ?? 'Default'
           key_prefix = 'sk_live_' + random(4)
           key_hash = sha256(raw_key)

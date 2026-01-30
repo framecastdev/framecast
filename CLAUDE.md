@@ -1,4 +1,4 @@
-# Splice API
+# Framecast API
 
 Storyboard-to-video generation API. Converts YAML/JSON specs → videos via ComfyUI.
 
@@ -73,7 +73,7 @@ Since this is a greenfield project, you'll need to create the core infrastructur
 Single monorepo tracked in Git. Same codebase deploys to dev, staging, production.
 
 ```
-splice/                 # ONE repo
+framecast/              # ONE repo
 ├── crates/             # All Rust code
 ├── tests/e2e/          # E2E tests
 ├── infra/              # IaC (OpenTofu)
@@ -109,7 +109,7 @@ Store config in environment variables. **Never** in code.
 DATABASE_URL=${DATABASE_URL}
 
 # ✗ WRONG: Hardcoded config
-DATABASE_URL="postgres://localhost:5432/splice"
+DATABASE_URL="postgres://localhost:5432/framecast"
 ```
 
 **Config Categories:**
@@ -130,7 +130,7 @@ S3_BUCKET_ASSETS=
 # Runtime Config
 AWS_REGION=us-east-1
 LOG_LEVEL=info
-RUST_LOG=splice=debug
+RUST_LOG=framecast=debug
 ```
 
 **Never commit `.env` files with secrets.** Use `.env.example` as template.
@@ -154,7 +154,7 @@ Treat all external services as attached resources. Swap without code changes.
 let db_url = std::env::var("DATABASE_URL")?;
 
 // ✗ WRONG: Hardcoded resource
-let db_url = "postgres://localhost/splice";
+let db_url = "postgres://localhost/framecast";
 ```
 
 ### V. Build, Release, Run — Strict Separation
@@ -411,7 +411,7 @@ Job Created → Inngest Event → Worker Processes → Webhook Delivery
 ## Project Structure
 
 ```
-splice/
+framecast/
 ├── Cargo.toml              # Dependencies (II)
 ├── Cargo.lock              # Lockfile (II) ✓ committed
 ├── Justfile                # Task runner
@@ -505,9 +505,9 @@ Current version: v0.4.3 (2025-01-30)
 **User Tiers**: Visitor → Starter → Creator
 
 **URN Ownership**:
-- `splice:user:usr_X` - Personal (Starter or Creator)
-- `splice:team:tm_X` - Team-shared (Creator only)
-- `splice:tm_X:usr_Y` - User's work within team (Creator only)
+- `framecast:user:usr_X` - Personal (Starter or Creator)
+- `framecast:team:tm_X` - Team-shared (Creator only)
+- `framecast:tm_X:usr_Y` - User's work within team (Creator only)
 
 **Core Entities**: User, Team, Membership, Project, Job, AssetFile, Webhook, ApiKey
 

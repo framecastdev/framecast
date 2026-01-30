@@ -3,7 +3,7 @@
 ## 12.1 S3 Structure
 
 ```
-s3://splice-outputs/
+s3://framecast-outputs/
   ├── user/
   │   └── {user_id}/
   │       ├── jobs/
@@ -16,14 +16,14 @@ s3://splice-outputs/
   │
   └── team/
       └── {team_id}/
-          ├── {user_id}/                    # splice:{team_id}:{user_id}
+          ├── {user_id}/                    # framecast:{team_id}:{user_id}
           │   ├── jobs/{job_id}/
           │   └── assets/{asset_id}/
-          └── shared/                        # splice:team:{team_id}
+          └── shared/                        # framecast:team:{team_id}
               ├── jobs/{job_id}/
               └── assets/{asset_id}/
 
-s3://splice-system/
+s3://framecast-system/
   └── assets/
       └── {category}/
           └── {asset_id}.{ext}
@@ -40,9 +40,9 @@ s3://splice-system/
 
 | Owner | Retention |
 |-------|-----------|
-| `splice:user:*` | Until job deleted or user deleted |
-| `splice:{team}:{user}` | Until job deleted or team deleted |
-| `splice:team:*` | Until job deleted or team deleted |
+| `framecast:user:*` | Until job deleted or user deleted |
+| `framecast:{team}:{user}` | Until job deleted or team deleted |
+| `framecast:team:*` | Until job deleted or team deleted |
 
 No time-based expiry. Storage limits enforce cleanup pressure.
 
@@ -68,15 +68,15 @@ Credits are debited and refunded based on the job's `owner` URN:
 
 | Owner URN Pattern | Credit Source | Description |
 |-------------------|---------------|-------------|
-| `splice:user:{user_id}` | `User.credits` | Personal jobs (Starter or Creator) |
-| `splice:team:{team_id}` | `Team.credits` | Team-shared jobs |
-| `splice:{team_id}:{user_id}` | `Team.credits` | Team-private jobs (team pays) |
+| `framecast:user:{user_id}` | `User.credits` | Personal jobs (Starter or Creator) |
+| `framecast:team:{team_id}` | `Team.credits` | Team-shared jobs |
+| `framecast:{team_id}:{user_id}` | `Team.credits` | Team-private jobs (team pays) |
 
 ### Rules
 
 1. **Debit on job creation**: Credits are reserved from the source identified by `owner` URN
 2. **Refund on failure/cancel**: Credits are returned to the same source
-3. **Creator personal jobs**: When a Creator uses `splice:user:X`, their personal `User.credits` are used (not any team's credits)
+3. **Creator personal jobs**: When a Creator uses `framecast:user:X`, their personal `User.credits` are used (not any team's credits)
 4. **Membership URN jobs**: The team pays for member's work; useful for tracking individual output while billing the team
 5. **Insufficient credits**: Job creation fails with `INSUFFICIENT_CREDITS` error
 
@@ -84,11 +84,11 @@ Credits are debited and refunded based on the job's `owner` URN:
 
 ```
 ON job.create:
-  IF owner = 'splice:user:{user_id}' THEN
+  IF owner = 'framecast:user:{user_id}' THEN
     source = User WHERE id = user_id
-  ELSE IF owner = 'splice:team:{team_id}' THEN
+  ELSE IF owner = 'framecast:team:{team_id}' THEN
     source = Team WHERE id = team_id
-  ELSE IF owner = 'splice:{team_id}:{user_id}' THEN
+  ELSE IF owner = 'framecast:{team_id}:{user_id}' THEN
     source = Team WHERE id = team_id
   
   IF source.credits < estimated_credits THEN
@@ -176,7 +176,7 @@ ON job.status → {failed, canceled}:
     credits_refunded = MIN(credits_refunded, credits_charged * 0.9)
 
   -- Update owner balance
-  IF owner STARTS WITH 'splice:user:' THEN
+  IF owner STARTS WITH 'framecast:user:' THEN
     UPDATE User SET credits = credits + credits_refunded WHERE id = owner_user_id
   ELSE
     UPDATE Team SET credits = credits + credits_refunded WHERE id = owner_team_id

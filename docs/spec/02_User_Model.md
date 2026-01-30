@@ -75,7 +75,7 @@ action:     BEGIN TRANSACTION
               CREATE Project {
                 id: uuid(),
                 team_id: team.id,
-                name: "Welcome to Splice",
+                name: "Welcome to Framecast",
                 status: "draft",
                 spec: WELCOME_SPEC,
                 created_by: user.id
@@ -119,7 +119,7 @@ action:     BEGIN TRANSACTION
               CREATE Project {
                 id: uuid(),
                 team_id: new_team.id,
-                name: "Welcome to Splice",
+                name: "Welcome to Framecast",
                 status: "draft",
                 spec: WELCOME_SPEC,
                 created_by: user.id
@@ -160,7 +160,7 @@ action:     BEGIN TRANSACTION
               CREATE Project {
                 id: uuid(),
                 team_id: new_team.id,
-                name: "Welcome to Splice",
+                name: "Welcome to Framecast",
                 status: "draft",
                 spec: WELCOME_SPEC,
                 created_by: user.id

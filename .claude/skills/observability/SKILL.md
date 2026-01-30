@@ -32,7 +32,7 @@ Every log entry must include:
     "request_id": "req_abc123",
     "trace_id": "trace_xyz789",
     "span_id": "span_456",
-    "service": "splice-api",
+    "service": "framecast-api",
     "environment": "production",
     "user_id": "usr_123",
     "team_id": "tm_456",

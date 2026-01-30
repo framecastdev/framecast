@@ -2,7 +2,7 @@
 
 ## 13.1 Overview
 
-System assets are pre-loaded assets available to all users within the Splice platform. These assets represent commonly-used audio elements (sound effects, ambient sounds, music, and transitions) that serve as a foundation for content creation. Unlike user-created assets, system assets are:
+System assets are pre-loaded assets available to all users within the Framecast platform. These assets represent commonly-used audio elements (sound effects, ambient sounds, music, and transitions) that serve as a foundation for content creation. Unlike user-created assets, system assets are:
 
 - **Pre-loaded**: Automatically available without explicit user creation
 - **Universal**: Accessible to all authenticated users

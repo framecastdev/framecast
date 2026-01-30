@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn parse_urn_valid() {
-        let urn = "splice:user:usr_abc123";
+        let urn = "framecast:user:usr_abc123";
         let parsed = Urn::parse(urn).unwrap();
         assert_eq!(parsed.owner_type(), OwnerType::User);
     }

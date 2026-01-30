@@ -8,7 +8,7 @@
 
 ## Appendix A: Spec Schema (JSONB)
 
-Complete TypeScript interface definitions for Splice specification structures.
+Complete TypeScript interface definitions for Framecast specification structures.
 
 ```typescript
 interface Spec {
@@ -122,11 +122,11 @@ interface TreatmentDef {
 
 ## Appendix B: WELCOME_SPEC
 
-The complete Welcome to Splice spec constant demonstrating typical spec structure and assets.
+The complete Welcome to Framecast spec constant demonstrating typical spec structure and assets.
 
 ```typescript
 const WELCOME_SPEC: Spec = {
-  title: "Welcome to Splice",
+  title: "Welcome to Framecast",
 
   global_prompt: {
     positive: "cinematic, first-person POV, warm lighting, celebratory atmosphere, high quality",

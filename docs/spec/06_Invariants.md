@@ -158,7 +158,7 @@ INV-J10: âˆ€ j âˆˆ Job : j.created_at â‰¤ j.updated_at
         (Creation timestamp precedes update timestamp)
 
 INV-J11: âˆ€ j âˆˆ Job :
-        (j.project_id IS NOT NULL) â†’ (j.owner STARTS WITH 'splice:team:')
+        (j.project_id IS NOT NULL) â†’ (j.owner STARTS WITH 'framecast:team:')
         (Project-based jobs must be team-owned)
 
 INV-J12: âˆ€ p âˆˆ Project :
@@ -189,11 +189,11 @@ INV-A5: âˆ€ k âˆˆ ApiKey : k.expires_at IS NOT NULL âˆ§ k.expires_at <
 
 INV-A6: âˆ€ k âˆˆ ApiKey :
         (SELECT tier FROM User WHERE id = k.user_id) = 'starter' â†’
-        k.owner = 'splice:user:' || k.user_id
+        k.owner = 'framecast:user:' || k.user_id
         (Starter user keys must be personal URN)
 
 INV-A7: âˆ€ k âˆˆ ApiKey :
-        (k.owner STARTS WITH 'splice:team:' âˆ¨ k.owner MATCHES 'splice:tm_[^:]+:usr_') â†’
+        (k.owner STARTS WITH 'framecast:team:' âˆ¨ k.owner MATCHES 'framecast:tm_[^:]+:usr_') â†’
         (SELECT tier FROM User WHERE id = k.user_id) = 'creator'
         (Team/membership URN keys require creator tier)
 ```
@@ -315,23 +315,23 @@ INV-SA3: âˆ€ a1, a2 âˆˆ SystemAsset : a1 â‰  a2 â†’ a1.s3_key â
 
 ```
 INV-X1: âˆ€ j âˆˆ Job :
-        (j.owner = 'splice:user:' || j.triggered_by) âˆ¨
+        (j.owner = 'framecast:user:' || j.triggered_by) âˆ¨
         (âˆƒ m âˆˆ Membership : m.team_id âˆˆ extract_team_from_urn(j.owner) âˆ§ m.user_id = j.triggered_by)
         (Job owner URN must be accessible by triggered_by user)
 
 INV-X2: âˆ€ a âˆˆ AssetFile :
-        (a.owner = 'splice:user:' || a.uploaded_by) âˆ¨
+        (a.owner = 'framecast:user:' || a.uploaded_by) âˆ¨
         (âˆƒ m âˆˆ Membership : m.team_id âˆˆ extract_team_from_urn(a.owner) âˆ§ m.user_id = a.uploaded_by)
         (Asset owner URN must be accessible by uploaded_by user)
 
 INV-X3: âˆ€ a âˆˆ AssetFile :
         (a.project_id IS NOT NULL) â†’
-        (a.owner STARTS WITH 'splice:team:' âˆ§
-         âˆƒ p âˆˆ Project : p.id = a.project_id âˆ§ a.owner = 'splice:team:' || p.team_id)
+        (a.owner STARTS WITH 'framecast:team:' âˆ§
+         âˆƒ p âˆˆ Project : p.id = a.project_id âˆ§ a.owner = 'framecast:team:' || p.team_id)
         (Project-scoped assets must be owned by project's team)
 
 INV-X4: âˆ€ k âˆˆ ApiKey :
-        (k.owner MATCHES 'splice:([^:]+):([^:]+)' AS (team_id, user_id)) â†’
+        (k.owner MATCHES 'framecast:([^:]+):([^:]+)' AS (team_id, user_id)) â†’
         âˆƒ m âˆˆ Membership : m.team_id = team_id âˆ§ m.user_id = k.user_id
         (Membership URN keys require valid membership)
 ```
@@ -372,12 +372,12 @@ CARD-4: âˆ€ t âˆˆ Team : |{i âˆˆ Invitation : i.team_id = t.id âˆ§ 
         (Max 50 pending invitations per team)
 
 CARD-5: âˆ€ t âˆˆ Team, owner âˆˆ URN :
-        owner STARTS WITH 'splice:team:' || t.id â†’
+        owner STARTS WITH 'framecast:team:' || t.id â†’
         |{j âˆˆ Job : j.owner = owner âˆ§ j.status âˆˆ {'queued', 'processing'}}| â‰¤ 5
         (Max 5 concurrent jobs per team)
 
 CARD-6: âˆ€ u âˆˆ User WHERE tier = 'starter' :
-        |{j âˆˆ Job : j.owner = 'splice:user:' || u.id âˆ§ j.status âˆˆ {'queued', 'processing'}}| â‰¤ 1
+        |{j âˆˆ Job : j.owner = 'framecast:user:' || u.id âˆ§ j.status âˆˆ {'queued', 'processing'}}| â‰¤ 1
         (Max 1 concurrent job per starter user)
 ```
 
