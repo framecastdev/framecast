@@ -1,0 +1,248 @@
+# Framecast API - Local Development Environment
+# Following 12-Factor Rules IV & X: Backing Services, Dev/Prod Parity
+#
+# This compose file provides backing services that match production:
+# - LocalStack (AWS S3 compatible storage)
+# - Inngest (Job orchestration)
+# - PostgreSQL (Database - optional, can use Supabase)
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # LOCALSTACK - AWS Services Emulation
+  # ============================================================================
+  localstack:
+    container_name: framecast-localstack
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"     # LocalStack Gateway
+      - "4510-4559:4510-4559"  # External services port range
+    environment:
+      # Core LocalStack configuration
+      DEBUG: 1
+      PERSISTENCE: 1
+      LAMBDA_EXECUTOR: docker-reuse
+      DOCKER_HOST: unix:///var/run/docker.sock
+
+      # Enable services we need
+      SERVICES: s3,lambda,iam,cloudformation,cloudwatch,logs
+
+      # S3 Configuration
+      S3_SKIP_SIGNATURE_VALIDATION: 1
+      S3_SKIP_KMS_KEY_VALIDATION: 1
+
+      # Disable unwanted features for faster startup
+      DISABLE_EVENTS: 1
+      SKIP_INFRA_DOWNLOADS: 1
+
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./tmp/localstack:/var/lib/localstack"
+    networks:
+      - framecast-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ============================================================================
+  # INNGEST - Job Orchestration and Event Processing
+  # ============================================================================
+  inngest:
+    container_name: framecast-inngest
+    image: inngest/inngest:latest
+    ports:
+      - "8288:8288"     # Inngest Dev Server UI
+    environment:
+      # Inngest configuration
+      INNGEST_LOG_LEVEL: info
+      INNGEST_DEV: 1
+
+      # Event key for development
+      INNGEST_EVENT_KEY: dev-event-key-framecast-local
+      INNGEST_SIGNING_KEY: dev-signing-key-framecast-local
+
+    volumes:
+      - "./tmp/inngest:/var/lib/inngest"
+    networks:
+      - framecast-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8288/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # POSTGRESQL - Database (Optional - can use Supabase instead)
+  # ============================================================================
+  postgres:
+    container_name: framecast-postgres
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: framecast_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev-password-framecast
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - framecast-postgres-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d/
+    networks:
+      - framecast-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d framecast_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Uncomment to enable PostgreSQL by default
+    # profiles:
+    #   - postgres
+
+  # ============================================================================
+  # REDIS - Session Store and Caching (Optional)
+  # ============================================================================
+  redis:
+    container_name: framecast-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass dev-redis-password
+    volumes:
+      - framecast-redis-data:/data
+    networks:
+      - framecast-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "dev-redis-password", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    profiles:
+      - redis
+
+  # ============================================================================
+  # JAEGER - Distributed Tracing (Optional)
+  # ============================================================================
+  jaeger:
+    container_name: framecast-jaeger
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "14268:14268"   # Jaeger collector HTTP
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: :9411
+    networks:
+      - framecast-dev
+    profiles:
+      - observability
+
+  # ============================================================================
+  # PROMETHEUS - Metrics Collection (Optional)
+  # ============================================================================
+  prometheus:
+    container_name: framecast-prometheus
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - framecast-dev
+    profiles:
+      - observability
+
+  # ============================================================================
+  # GRAFANA - Metrics Dashboard (Optional)
+  # ============================================================================
+  grafana:
+    container_name: framecast-grafana
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"     # Different port to avoid conflict with API
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - framecast-grafana-data:/var/lib/grafana
+    networks:
+      - framecast-dev
+    profiles:
+      - observability
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  framecast-dev:
+    driver: bridge
+    name: framecast-dev-network
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  framecast-postgres-data:
+    name: framecast-postgres-data
+  framecast-redis-data:
+    name: framecast-redis-data
+  framecast-grafana-data:
+    name: framecast-grafana-data
+
+# ============================================================================
+# USAGE INSTRUCTIONS
+# ============================================================================
+#
+# Start core services (LocalStack + Inngest):
+#   docker compose -f docker-compose.local.yml up -d
+#
+# Start with PostgreSQL:
+#   docker compose -f docker-compose.local.yml --profile postgres up -d
+#
+# Start with Redis caching:
+#   docker compose -f docker-compose.local.yml --profile redis up -d
+#
+# Start with full observability stack:
+#   docker compose -f docker-compose.local.yml --profile observability up -d
+#
+# View logs:
+#   docker compose -f docker-compose.local.yml logs -f
+#
+# Stop all services:
+#   docker compose -f docker-compose.local.yml down
+#
+# Remove all data (DESTRUCTIVE):
+#   docker compose -f docker-compose.local.yml down -v --remove-orphans
+#
+# ============================================================================
+# SERVICE ACCESS POINTS
+# ============================================================================
+#
+# LocalStack:
+#   - API Gateway: http://localhost:4566
+#   - Health Check: http://localhost:4566/_localstack/health
+#   - S3 Endpoint: http://localhost:4566 (AWS CLI compatible)
+#
+# Inngest:
+#   - Dev Server UI: http://localhost:8288
+#   - Health Check: http://localhost:8288/health
+#   - Event Submission: http://localhost:8288/events
+#
+# PostgreSQL:
+#   - Connection: postgresql://postgres:dev-password-framecast@localhost:5432/framecast_dev
+#   - Admin Tool: Use any PostgreSQL client (psql, pgAdmin, etc.)
+#
+# Redis (if enabled):
+#   - Connection: redis://localhost:6379
+#   - Password: dev-redis-password
+#
+# Observability (if enabled):
+#   - Jaeger UI: http://localhost:16686
+#   - Prometheus: http://localhost:9090
+#   - Grafana: http://localhost:3001 (admin/admin)
+#
+# ============================================================================

@@ -1,0 +1,38 @@
+[package]
+name = "framecast-comfyui"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+description = "RunPod and ComfyUI video generation client for Framecast"
+
+[dependencies]
+# Shared crates
+framecast-common.workspace = true
+framecast-domain.workspace = true
+
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+
+# HTTP client
+reqwest.workspace = true
+
+# AWS S3
+aws-config.workspace = true
+aws-sdk-s3.workspace = true
+
+# Logging
+tracing.workspace = true
+
+[dev-dependencies]
+tokio-test.workspace = true
+wiremock.workspace = true

@@ -1,0 +1,42 @@
+[package]
+name = "framecast-common"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+description = "Shared utilities, configuration, and error handling for Framecast"
+
+[dependencies]
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Configuration
+config.workspace = true
+dotenvy.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# HTTP
+reqwest.workspace = true
+axum.workspace = true
+
+# Authentication
+jsonwebtoken.workspace = true
+base64.workspace = true
+
+# Database
+sqlx.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+tokio-test.workspace = true
+tempfile.workspace = true

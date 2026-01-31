@@ -1,0 +1,32 @@
+[package]
+name = "framecast-domain"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+description = "Domain entities, business logic, and state machines for Framecast"
+
+[dependencies]
+# Shared crates
+framecast-common.workspace = true
+
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Database mapping
+sqlx.workspace = true
+
+# Logging
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+tokio-test.workspace = true

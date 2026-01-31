@@ -1,0 +1,34 @@
+[package]
+name = "framecast-db"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+description = "Database layer, repositories, and migrations for Framecast"
+
+[dependencies]
+# Shared crates
+framecast-common.workspace = true
+framecast-domain.workspace = true
+
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+
+# Database
+sqlx.workspace = true
+
+# Logging
+tracing.workspace = true
+
+[dev-dependencies]
+tokio-test.workspace = true
+tempfile.workspace = true

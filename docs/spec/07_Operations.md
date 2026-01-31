@@ -349,5 +349,5 @@ Operation: estimate_spec(spec: JSONB, user_id: UUID, owner?: URN) â†’ Estim
 
 ---
 
-**Document Version: 0.4.3
+**Document Version: 0.0.1-SNAPSHOT
 **Last Updated**: 2025-01-30

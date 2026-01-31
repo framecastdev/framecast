@@ -1,4 +1,4 @@
-# Framecast API Ã¢â‚¬â€ Formal Specification v0.4.3
+# Framecast API Ã¢â‚¬â€ Formal Specification v0.0.1-SNAPSHOT
 
 **Version:** 0.4.2
 **Date:** 2025-01-30
@@ -40,7 +40,7 @@ This is the formal specification for the Framecast API, a comprehensive system f
 - **12.6:** Added Credit Refund Policy section
 - **Appendix F:** Removed Team Creation and Credit Refunds from deferred
 
-### v0.4.3 Changes (Spec Integrity Pass)
+### v0.0.1-SNAPSHOT Changes (Spec Integrity Pass)
 
 - **4.12:** Added `credits_refunded` field to Usage entity with `net_credits` derived field
 - **6 (all):** Complete rewrite of Invariants to match entity definitions exactly
@@ -57,7 +57,7 @@ This is the formal specification for the Framecast API, a comprehensive system f
 - **9.2:** Added Archive/Unarchive permissions for projects (Owner/Admin only)
 - **9.3:** Added `webhooks:read` and `webhooks:write` scopes
 
-### v0.4.3 Changes (Entity & Operations Completeness)
+### v0.0.1-SNAPSHOT Changes (Entity & Operations Completeness)
 
 - **4.2:** Added NOT NULL constraint to Team.name (`String!`, min 1)
 - **4.7:** Added `updated_at` field and ON UPDATE trigger to Job entity
@@ -111,7 +111,7 @@ This specification defines the complete contract for the Framecast API system, i
 
 ## Status and Version History
 
-- **v0.4.3 (Current): January 30, 2025 â€” Entity completeness: Job/AssetFile updated_at, Team.name constraint, validate_spec, Credit Source Rules
+- **v0.0.1-SNAPSHOT (Current): January 30, 2025 â€” Entity completeness: Job/AssetFile updated_at, Team.name constraint, validate_spec, Credit Source Rules
 - **v0.4.2:** January 30, 2025 â€” Spec integrity pass: fixed invariants, added missing operations (webhooks, API keys, archive), endpoint mapping table
 - **v0.4.1:** January 30, 2025 Ã¢â‚¬â€ Added team creation, job cloning, team limits, and credit refund policy
 - **v0.4.0:** January 2025 Ã¢â‚¬â€ Major expansion with system assets, SSE events, and permission matrix
