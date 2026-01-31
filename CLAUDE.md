@@ -2,6 +2,139 @@
 
 Storyboard-to-video generation API. Converts YAML/JSON specs → videos via ComfyUI.
 
+---
+
+<law>
+## CRITICAL RULES — READ FIRST
+
+These rules are NON-NEGOTIABLE. Violations require immediate correction.
+
+### Rule 1: Just is the ONLY Entry Point
+**YOU MUST** use Just targets for ALL tasks. NEVER run commands directly.
+
+```bash
+# ✅ CORRECT — Always use Just
+just build
+just test
+just migrate
+
+# ❌ FORBIDDEN — Never bypass Just
+cargo build          # WRONG
+npm run build        # WRONG
+pytest               # WRONG
+uv run pytest        # WRONG
+```
+
+If a Just target doesn't exist: **CREATE IT FIRST**, then run `just <task>`.
+
+### Rule 2: Tests Before Code
+**YOU MUST** brainstorm test cases BEFORE writing implementation code.
+Cover: happy path, edge cases, error conditions, invariants.
+
+### Rule 3: No .unwrap() in Production
+**NEVER** use `.unwrap()` or `.expect()` in production Rust code.
+Use `?` operator or proper error handling.
+
+### Rule 4: Config via Environment Only
+**NEVER** hardcode credentials, URLs, or configuration.
+All config comes from environment variables.
+
+### Rule 5: Stateless Processes
+**NEVER** store state in memory between requests.
+All persistent data goes to database or S3.
+
+### Rule 6: Leverage Third-Party Libraries First
+**YOU MUST** leverage third-party libraries before implementing custom solutions. NEVER reinvent the wheel.
+
+```rust
+// ✅ CORRECT — Use established crate
+use serde_json::Value;
+use chrono::{DateTime, Utc};
+
+// ❌ FORBIDDEN — Custom implementation when library exists
+fn parse_json_manually(input: &str) -> Result<MyJson, Error> { ... }
+```
+
+Only implement custom solutions if you cannot find a third-party library that properly addresses the problem.
+
+### Rule 7: Assess Library Quality
+**YOU MUST** assess third-party library quality before adoption. Check:
+
+- GitHub stars (>500 preferred)
+- Last release date (avoid abandoned projects)
+- Maintainer activity and community support
+- Known CVEs and security issues
+- Community adoption and ecosystem fit
+
+### Rule 8: Follow Industry Best Practices
+**YOU MUST** follow Rust and general software engineering industry standard best practices:
+
+- SOLID principles
+- DRY (Don't Repeat Yourself)
+- YAGNI (You Ain't Gonna Need It)
+- Rust idioms (ownership, borrowing, error handling)
+- Clean code principles
+- Security best practices (OWASP guidelines)
+
+### Rule 9: Break Problems into Phases
+**YOU MUST** break problems into phases, tasks, and branches:
+
+```bash
+# Example breakdown
+Phase: Job Management System
+├── Task 1: Job entity and database schema    → branch: feature/job-schema
+├── Task 2: Job creation API endpoint         → branch: feature/job-create-api
+├── Task 3: Job status tracking              → branch: feature/job-status
+└── Task 4: Job cancellation logic           → branch: feature/job-cancel
+```
+
+- Phase: High-level milestone
+- Task: Specific deliverable
+- Branch: Git branch per task/fix
+
+### Rule 10: Feature Branch Workflow
+**YOU MUST** always work on feature/fix branches. NEVER commit directly to main.
+
+```bash
+# ✅ CORRECT — Feature branch workflow
+git checkout -b feature/add-webhook-retries
+# ... implement, test ...
+git add . && git commit -m "feat: add webhook retry logic"
+git checkout main
+git checkout -b feature/next-task
+
+# ❌ FORBIDDEN — Working on main
+git checkout main
+# ... make changes directly ...
+git commit -m "some changes"
+```
+
+**Workflow:**
+1. Create feature/fix branch
+2. Implement/fix
+3. Test thoroughly (`just test`, `just check`)
+4. Commit with conventional commit message
+5. Switch to new branch for next task
+6. Merge to main via PR (when ready for deployment)
+
+### Compliance Check
+Before executing ANY command, ask yourself:
+- Is there a Just target for this? → Use it
+- Am I about to run cargo/npm/pytest directly? → STOP, use Just
+- Does the Just target exist? → If not, create it first
+- Did I brainstorm tests before writing code? → Tests first, code second
+- Am I using .unwrap() in production code? → STOP, use proper error handling
+- Am I hardcoding any config? → Use environment variables only
+- Am I storing state in memory? → Use database or S3
+- Is there a library for this? → Research before implementing custom
+- Did I assess library quality? → Check stars, activity, CVEs
+- Am I following best practices? → Review SOLID, DRY, YAGNI principles
+- Did I break this into phases/tasks? → Plan before implementing
+- Am I working on main branch? → STOP, create feature branch
+</law>
+
+---
+
 ## Project Status
 
 **Current Phase:** Specification Complete, Implementation Infrastructure Setup Required
@@ -475,9 +608,57 @@ git add . && git commit -m "feat: your change"
 
 ---
 
+## Reference Experimental Projects
+
+> **🚨 CRITICAL DEVELOPMENT RESOURCE** — Always check these when facing implementation challenges.
+
+During development, you have access to reference experimental projects with **proven solutions** and working code patterns. These contain valuable implementations that have been tested and can guide you through difficult problems.
+
+### Access Information
+**Location:** Ubuntu host via SSH
+- `~/workspace/splice-experimental-1`
+- `~/workspace/splice-experimental-2`
+
+### When to Use Reference Projects
+**YOU SHOULD** consult these projects whenever you encounter:
+- Implementation blockers or technical challenges
+- Unclear patterns for Rust + Lambda integration
+- Database schema or migration questions
+- Testing patterns (unit, integration, E2E)
+- Infrastructure setup issues
+- ComfyUI or RunPod integration problems
+- Authentication or authorization patterns
+- Job orchestration with Inngest
+- Error handling strategies
+
+### Reference Project Workflow
+1. **Before implementing complex features**: Check if similar functionality exists
+2. **When stuck on technical problems**: Look for proven solutions
+3. **When designing patterns**: Review existing approaches that worked
+4. **When debugging**: Compare your implementation with working examples
+
+```bash
+# Example: Researching job processing patterns
+ssh ubuntu-host
+cd ~/workspace/splice-experimental-1
+find . -name "*.rs" | xargs grep -l "job.*process"
+# Review job processing implementations
+```
+
+### Important Notes
+- These are **experimental projects** — extract patterns, not entire implementations
+- Always adapt code to match current project structure and rules
+- Verify any copied patterns follow the 10 Critical Rules
+- Reference projects may use different dependency versions
+- Focus on **architectural patterns** and **proven approaches**
+
+**Remember:** When facing any development challenge, check the reference projects FIRST before reinventing solutions. They contain battle-tested code that can save significant development time.
+
+---
+
 ## Specification Integration
 
-The `spec/` directory contains the formal API specification (v0.4.3). Key files for implementation:
+The `spec/` directory contains the formal API specification (v0.0.1-SNAPSHOT). Key files for implementation:
 
 ### Core Reference Files
 - `spec/00_Index.md` - Specification overview and changelog
@@ -494,7 +675,7 @@ The `spec/` directory contains the formal API specification (v0.4.3). Key files 
 - Use `08_Permissions.md` for authorization logic
 
 ### Spec Versioning
-Current version: v0.4.3 (2025-01-30)
+Current version: v0.0.1-SNAPSHOT (2025-01-30)
 - Breaking changes require version bump
 - Implementation must match spec version exactly
 
@@ -543,7 +724,7 @@ feat: add webhook retry logic
 fix: correct refund calculation for canceled jobs
 refactor: extract URN parser to common crate
 test: add E2E tests for team invitation flow
-docs: update API spec for v0.4.3
+docs: update API spec for v0.0.1-SNAPSHOT
 ```
 
 ---
