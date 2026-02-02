@@ -8,7 +8,7 @@ set -e
 echo "🚀 Setting up LocalStack SES service..."
 
 # Wait for LocalStack to be ready
-while ! curl -s http://localhost:4566/_localstack/health | grep -q '"ses": "available"'; do
+while ! curl -s http://localhost:4566/_localstack/health | grep -q -E '"ses": "(available|running)"'; do
     echo "⏳ Waiting for LocalStack SES service..."
     sleep 2
 done

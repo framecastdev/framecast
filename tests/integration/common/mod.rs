@@ -42,8 +42,7 @@ impl TestConfig {
             database_url: env::var("TEST_DATABASE_URL")
                 .or_else(|_| env::var("DATABASE_URL"))
                 .unwrap_or_else(|_| {
-                    "postgresql://postgres:password@localhost:5432/framecast_test".to_string()
-                    // pragma: allowlist secret
+                    "postgresql://postgres:password@localhost:5432/framecast_test".to_string() // pragma: allowlist secret
                 }),
             jwt_secret: env::var("TEST_JWT_SECRET")
                 .unwrap_or_else(|_| "test_secret_key_for_testing_only".to_string()),
@@ -136,10 +135,7 @@ impl TestApp {
     pub async fn create_test_team(&self, owner_id: Uuid) -> Result<(Team, Membership)> {
         let team_id = Uuid::new_v4();
         let name = format!("Test Team {}", &team_id.to_string()[0..8]);
-        let slug = format!(
-            "test-team-{}",
-            &team_id.simple().to_string()[0..8]
-        );
+        let slug = format!("test-team-{}", &team_id.simple().to_string()[0..8]);
 
         let mut team = Team::new(name, Some(slug))?;
         team.id = team_id;

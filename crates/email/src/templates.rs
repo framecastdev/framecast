@@ -231,7 +231,7 @@ impl PasswordResetTemplate {
     ) -> Result<EmailMessage, EmailError> {
         let reset_url = format!(
             "https://framecast.app/auth/reset-password?token={}", // pragma: allowlist secret
-            self.reset_token  // pragma: allowlist secret
+            self.reset_token                                      // pragma: allowlist secret
         );
 
         let greeting = match &self.user_name {

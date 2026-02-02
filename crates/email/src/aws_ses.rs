@@ -266,7 +266,8 @@ impl EmailService for SesEmailService {
         .with_html(body_html)
         .with_metadata("email_type".to_string(), "team_invitation".to_string())
         .with_metadata("team_id".to_string(), team_id.to_string())
-        .with_metadata("invitation_id".to_string(), invitation_id.to_string());
+        .with_metadata("invitation_id".to_string(), invitation_id.to_string())
+        .with_metadata("role".to_string(), role.to_string());
 
         self.send_email(message).await
     }

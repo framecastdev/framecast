@@ -222,9 +222,11 @@ test-integration-ses:
     @echo "🚀 Starting LocalStack if needed..."
     @docker-compose -f docker-compose.localstack.yml up -d localstack
     @echo "⏳ Waiting for LocalStack to be ready..."
-    @sleep 10
+    @sleep 15
+    @echo "🔧 Setting up SES identities..."
+    @./scripts/localstack-init/01-setup-ses.sh
     @echo "🧪 Running SES integration tests..."
-    cargo test --package framecast-integration-tests email_ses_e2e_test -- --nocapture
+    cd tests/integration && cargo test --test email_ses_e2e_test -- --nocapture
     @echo "✅ SES integration tests completed!"
 
 # Start LocalStack services for testing
