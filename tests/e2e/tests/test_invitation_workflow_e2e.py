@@ -9,24 +9,25 @@ invitation flow including email delivery and content validation.
 """
 
 import asyncio
-import pytest
-import httpx
-
-from conftest import (
-    E2EConfig,
-    UserPersona,
-    TestDataFactory,
-    localstack_email_client,
-    email_cleanup,
-    authenticated_client,
-    creator_user,
-    starter_user,
-    assert_valid_urn,
-    assert_user_tier_valid,
-    assert_credits_non_negative,
-)
 import sys
 from pathlib import Path
+
+import httpx
+import pytest
+from conftest import (
+    E2EConfig,
+    TestDataFactory,
+    UserPersona,
+    assert_credits_non_negative,
+    assert_user_tier_valid,
+    assert_valid_urn,
+    authenticated_client,
+    creator_user,
+    email_cleanup,
+    localstack_email_client,
+    starter_user,
+)
+
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.localstack_email import LocalStackEmailClient

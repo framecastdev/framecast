@@ -5,10 +5,10 @@ Provides functionality to retrieve and parse emails sent through LocalStack SES
 for comprehensive E2E testing of email workflows.
 """
 
-import re
 import asyncio
-from typing import Dict, List, Optional, Any
+import re
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import httpx
 

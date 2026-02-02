@@ -21,7 +21,6 @@ import respx
 from faker import Faker
 from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings
-
 from utils.localstack_email import LocalStackEmailClient
 
 
