@@ -70,6 +70,8 @@ aws-sdk-s3 = "1.44"
 # === Validation & Time ===
 validator = { version = "0.18", features = ["derive"] }
 time = { version = "0.3", features = ["serde", "macros"] }
+regex = "1.10"
+lazy_static = "1.5"
 
 # === Testing ===
 tokio-test = "0.4"

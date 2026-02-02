@@ -3,6 +3,7 @@
 pub mod handlers;
 pub mod middleware;
 pub mod routes;
+pub mod validation;
 
 use axum::Router;
 use framecast_common::config::Config;

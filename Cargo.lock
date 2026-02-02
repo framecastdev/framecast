@@ -1494,6 +1494,8 @@ dependencies = [
  "jsonwebtoken",
  "lambda-web",
  "lambda_runtime 0.8.3",
+ "lazy_static",
+ "regex",
  "serde",
  "serde_json",
  "sqlx",

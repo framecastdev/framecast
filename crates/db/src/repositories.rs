@@ -5,7 +5,8 @@
 
 use framecast_common::{Error, Result};
 use framecast_domain::entities::*;
-use sqlx::PgPool;
+use sqlx::{types::Json, PgPool};
+use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -229,6 +230,44 @@ impl MembershipRepository {
         Self { pool }
     }
 
+    /// Count how many teams a user owns
+    pub async fn count_owned_teams(&self, user_id: Uuid) -> Result<i64> {
+        let count = sqlx::query!(
+            r#"
+            SELECT COUNT(*) as count
+            FROM memberships
+            WHERE user_id = $1 AND role = 'owner'
+            "#,
+            user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(count.count.unwrap_or(0))
+    }
+
+    /// Get membership by team and user
+    pub async fn get_by_team_and_user(
+        &self,
+        team_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Option<Membership>> {
+        let row = sqlx::query_as!(
+            Membership,
+            r#"
+            SELECT id, team_id, user_id, role as "role: MembershipRole", created_at
+            FROM memberships
+            WHERE team_id = $1 AND user_id = $2
+            "#,
+            team_id,
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row)
+    }
+
     /// Find membership by team and user
     pub async fn find(&self, team_id: Uuid, user_id: Uuid) -> Result<Option<Membership>> {
         let membership = sqlx::query_as!(
@@ -340,6 +379,107 @@ impl TeamRepository {
         Self { pool }
     }
 
+    /// Find team by ID
+    pub async fn get_by_id(&self, team_id: Uuid) -> Result<Option<Team>> {
+        let row = sqlx::query_as!(
+            Team,
+            r#"
+            SELECT id, name, slug, credits, ephemeral_storage_bytes,
+                   settings as "settings: Json<HashMap<String, serde_json::Value>>",
+                   created_at, updated_at
+            FROM teams
+            WHERE id = $1
+            "#,
+            team_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row)
+    }
+
+    /// Find team by slug
+    pub async fn get_by_slug(&self, slug: &str) -> Result<Option<Team>> {
+        let row = sqlx::query_as!(
+            Team,
+            r#"
+            SELECT id, name, slug, credits, ephemeral_storage_bytes,
+                   settings as "settings: Json<HashMap<String, serde_json::Value>>",
+                   created_at, updated_at
+            FROM teams
+            WHERE slug = $1
+            "#,
+            slug
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row)
+    }
+
+    /// Create a new team
+    pub async fn create(&self, team: &Team) -> Result<Team> {
+        let created_team = sqlx::query_as!(
+            Team,
+            r#"
+            INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id, name, slug, credits, ephemeral_storage_bytes,
+                      settings as "settings: Json<HashMap<String, serde_json::Value>>",
+                      created_at, updated_at
+            "#,
+            team.id,
+            team.name,
+            team.slug,
+            team.credits,
+            team.ephemeral_storage_bytes,
+            &team.settings as &Json<HashMap<String, serde_json::Value>>,
+            team.created_at,
+            team.updated_at
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(created_team)
+    }
+
+    /// Update an existing team
+    pub async fn update(&self, team: &Team) -> Result<Team> {
+        let updated_team = sqlx::query_as!(
+            Team,
+            r#"
+            UPDATE teams
+            SET name = $2, settings = $3, updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, name, slug, credits, ephemeral_storage_bytes,
+                      settings as "settings: Json<HashMap<String, serde_json::Value>>",
+                      created_at, updated_at
+            "#,
+            team.id,
+            team.name,
+            &team.settings as &Json<HashMap<String, serde_json::Value>>
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(updated_team)
+    }
+
+    /// Delete a team
+    pub async fn delete(&self, team_id: Uuid) -> Result<()> {
+        sqlx::query!(
+            r#"
+            DELETE FROM teams
+            WHERE id = $1
+            "#,
+            team_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// Get teams for user with roles
     pub async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<(Team, MembershipRole)>> {
         let rows = sqlx::query!(
@@ -378,6 +518,29 @@ impl TeamRepository {
             .collect();
 
         Ok(teams)
+    }
+}
+
+// =============================================================================
+// Job Repository (Placeholder)
+// =============================================================================
+
+#[derive(Clone)]
+pub struct JobRepository {
+    #[allow(dead_code)] // Placeholder for future job functionality
+    pool: PgPool,
+}
+
+impl JobRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Count active jobs for a team (placeholder implementation)
+    pub async fn count_active_jobs_for_team(&self, _team_id: Uuid) -> Result<i64> {
+        // Placeholder implementation until Job entity is available
+        // For now, return 0 to allow team deletion
+        Ok(0)
     }
 }
 
@@ -548,6 +711,7 @@ pub struct Repositories {
     pub users: UserRepository,
     pub teams: TeamRepository,
     pub memberships: MembershipRepository,
+    pub jobs: JobRepository,
     pub api_keys: ApiKeyRepository,
 }
 
@@ -557,6 +721,7 @@ impl Repositories {
             users: UserRepository::new(pool.clone()),
             teams: TeamRepository::new(pool.clone()),
             memberships: MembershipRepository::new(pool.clone()),
+            jobs: JobRepository::new(pool.clone()),
             api_keys: ApiKeyRepository::new(pool),
         }
     }
