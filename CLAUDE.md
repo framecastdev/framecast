@@ -139,7 +139,7 @@ Before executing ANY command, ask yourself:
 
 **Current Phase:** Specification Complete, Implementation Infrastructure Setup Required
 
-This project has a complete formal specification (see `spec/` directory) and comprehensive development guidelines, but the code infrastructure is not yet established.
+This project has a complete formal specification (see `docs/spec/` directory) and comprehensive development guidelines, but the code infrastructure is not yet established.
 
 ### Before You Start:
 - [ ] Run project scaffold creation (see Setup Checklist)
@@ -658,15 +658,15 @@ find . -name "*.rs" | xargs grep -l "job.*process"
 
 ## Specification Integration
 
-The `spec/` directory contains the formal API specification (v0.0.1-SNAPSHOT). Key files for implementation:
+The `docs/spec/` directory contains the formal API specification (v0.0.1-SNAPSHOT). Key files for implementation:
 
 ### Core Reference Files
-- `spec/00_Index.md` - Specification overview and changelog
-- `spec/04_Entities.md` - Database entities, field definitions
-- `spec/05_Relationships_States.md` - State machines, entity relationships
-- `spec/06_Invariants.md` - Business rules that MUST be enforced
-- `spec/07_Operations.md` - API endpoint specifications
-- `spec/08_Permissions.md` - Role-based access control matrix
+- `docs/spec/00_Index.md` - Specification overview and changelog
+- `docs/spec/04_Entities.md` - Database entities, field definitions
+- `docs/spec/05_Relationships_States.md` - State machines, entity relationships
+- `docs/spec/06_Invariants.md` - Business rules that MUST be enforced
+- `docs/spec/07_Operations.md` - API endpoint specifications
+- `docs/spec/08_Permissions.md` - Role-based access control matrix
 
 ### Implementation Guidance
 - Read `04_Entities.md` before creating any database schema
@@ -733,12 +733,12 @@ docs: update API spec for v0.0.1-SNAPSHOT
 
 ### Prerequisites
 1. Ensure all setup checklist items are completed
-2. Read relevant spec files (located in `spec/` directory)
+2. Read relevant spec files (located in `docs/spec/` directory)
 3. Load appropriate Claude skills (see Skills section)
 
 ### Implementation Workflow
 1. **Plan & Research**
-   - Read spec files: `04_Entities.md`, `06_Invariants.md`, `07_Operations.md`
+   - Read spec files: `docs/spec/04_Entities.md`, `docs/spec/06_Invariants.md`, `docs/spec/07_Operations.md`
    - Review similar implementations in existing crates
    - Brainstorm test cases FIRST (P2: Tests Before Code)
 
