@@ -4,6 +4,9 @@
 
 set dotenv-load := true
 
+# Ensure Rust tools are available
+export PATH := env_var('HOME') + "/.cargo/bin:" + env_var('PATH')
+
 # Show all available commands
 default:
     @just --list
@@ -82,7 +85,7 @@ dev: start-backing-services start-api
 # Start the API server in local development mode
 start-api:
     @echo "🚀 Starting Framecast API server..."
-    source "$HOME/.cargo/env" && cargo run --bin local
+    cargo run --bin local
 
 # Start complete development environment (backing services + API)
 start-full: start-backing-services
@@ -180,7 +183,7 @@ seed:
 # Run all Rust unit and integration tests
 test *args="":
     @echo "🧪 Running Rust tests..."
-    source "$HOME/.cargo/env" && cargo test --workspace {{args}}
+    cargo test --workspace {{args}}
 
 # Run tests with file watching for development
 test-watch:
@@ -219,7 +222,7 @@ check: fmt-check clippy test
 # Check code formatting
 fmt-check:
     @echo "📐 Checking code formatting..."
-    source "$HOME/.cargo/env" && cargo fmt --all -- --check
+    cargo fmt --all -- --check
 
 # Format all code
 fmt:
@@ -229,7 +232,7 @@ fmt:
 # Run Clippy linter
 clippy:
     @echo "📎 Running Clippy linter..."
-    source "$HOME/.cargo/env" && cargo clippy --workspace --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets -- -D warnings
 
 # Fix common linting issues automatically
 fix:
