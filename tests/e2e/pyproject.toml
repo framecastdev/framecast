@@ -1,6 +1,6 @@
 [project]
 name = "framecast-e2e-tests"
-version = "0.0.1-SNAPSHOT"
+version = "0.0.1.dev0"
 description = "End-to-end tests for Framecast API"
 requires-python = ">=3.11"
 dependencies = [
@@ -50,6 +50,8 @@ markers = [
     "webhooks: webhook delivery tests",
     "performance: performance and load tests",
     "security: security validation tests",
+    "invitation: invitation workflow tests",
+    "error_handling: error handling and edge case tests",
 ]
 
 [tool.coverage.run]

@@ -22,9 +22,11 @@ from faker import Faker
 from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings
 
+from utils.localstack_email import LocalStackEmailClient
+
 
 # Test environment configuration
-class TestConfig(BaseSettings):
+class E2EConfig(BaseSettings):
     """Configuration for E2E tests loaded from environment variables."""
 
     # Test mode: "mocked" or "real"
@@ -50,6 +52,12 @@ class TestConfig(BaseSettings):
     s3_bucket_assets: str = "test-framecast-assets"
     aws_region: str = "us-east-1"
     s3_endpoint_url: str = "http://localhost:4566"  # LocalStack
+
+    # LocalStack email retrieval settings
+    localstack_ses_url: str = "http://localhost:4566"
+    email_retrieval_enabled: bool = True
+    email_retrieval_timeout: int = 10
+    email_cleanup_enabled: bool = True
 
     model_config = ConfigDict(env_prefix="TEST_", env_file=".env.test")
 
@@ -166,9 +174,9 @@ def team_member() -> UserPersona:
 
 # Configuration and test environment
 @pytest.fixture(scope="session")
-def test_config() -> TestConfig:
+def test_config() -> E2EConfig:
     """Test configuration loaded from environment."""
-    return TestConfig()
+    return E2EConfig()
 
 
 @pytest.fixture(scope="session")
@@ -182,7 +190,7 @@ def event_loop():
 # HTTP client for API testing
 @pytest.fixture
 async def http_client(
-    test_config: TestConfig,
+    test_config: E2EConfig,
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
     """HTTP client for making API requests."""
     async with httpx.AsyncClient(
@@ -204,9 +212,36 @@ async def authenticated_client(
     return http_client
 
 
+# LocalStack email client for E2E testing
+@pytest.fixture
+async def localstack_email_client(test_config: E2EConfig) -> AsyncGenerator[LocalStackEmailClient, None]:
+    """LocalStack SES email client for E2E tests."""
+    client = LocalStackEmailClient(test_config.localstack_ses_url)
+    try:
+        yield client
+    finally:
+        await client.close()
+
+
+@pytest.fixture
+async def email_cleanup(localstack_email_client: LocalStackEmailClient):
+    """Clean up emails after test completion."""
+    collected_emails = []
+
+    def register_email(email_address: str, message_id: str):
+        """Register an email for cleanup after test completion."""
+        collected_emails.append((email_address, message_id))
+
+    yield register_email
+
+    # Cleanup after test
+    for email_address, msg_id in collected_emails:
+        await localstack_email_client.delete_email(msg_id)
+
+
 # Mock service infrastructure
 @pytest.fixture
-def mock_runpod(test_config: TestConfig):
+def mock_runpod(test_config: E2EConfig):
     """Mock RunPod API for video generation testing."""
     if test_config.test_mode != "mocked":
         yield None
@@ -247,7 +282,7 @@ def mock_runpod(test_config: TestConfig):
 
 
 @pytest.fixture
-def mock_anthropic(test_config: TestConfig):
+def mock_anthropic(test_config: E2EConfig):
     """Mock Anthropic Claude API for AI interactions."""
     if test_config.test_mode != "mocked":
         yield None
@@ -278,7 +313,7 @@ def mock_anthropic(test_config: TestConfig):
 
 
 @pytest.fixture
-def mock_inngest(test_config: TestConfig):
+def mock_inngest(test_config: E2EConfig):
     """Mock Inngest event API for job orchestration."""
     if test_config.test_mode != "mocked":
         yield None
@@ -292,7 +327,7 @@ def mock_inngest(test_config: TestConfig):
 
 
 @pytest.fixture
-async def mock_s3(test_config: TestConfig):
+async def mock_s3(test_config: E2EConfig):
     """Mock S3 operations using LocalStack."""
     if test_config.test_mode != "mocked":
         # In real mode, we use actual LocalStack
@@ -316,7 +351,7 @@ async def mock_s3(test_config: TestConfig):
 
 # Database utilities
 @pytest.fixture
-async def clean_database(test_config: TestConfig):
+async def clean_database(test_config: E2EConfig):
     """Ensure clean database state for testing."""
     # This will be implemented when we have database layer
     # For now, it's a placeholder
@@ -390,7 +425,7 @@ def test_data_factory() -> TestDataFactory:
 
 # Session-level setup and teardown
 @pytest.fixture(scope="session", autouse=True)
-async def setup_test_environment(test_config: TestConfig):
+async def setup_test_environment(test_config: E2EConfig):
     """Set up the test environment before running tests."""
     print(f"\n🧪 Setting up E2E test environment (mode: {test_config.test_mode})")
 
@@ -437,11 +472,13 @@ def assert_credits_non_negative(credits: int) -> None:
 
 # Export commonly used fixtures and utilities
 __all__ = [
-    "TestConfig",
+    "E2EConfig",
     "UserPersona",
     "test_config",
     "http_client",
     "authenticated_client",
+    "localstack_email_client",
+    "email_cleanup",
     "visitor_user",
     "starter_user",
     "creator_user",
