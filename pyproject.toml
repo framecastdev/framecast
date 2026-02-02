@@ -2,7 +2,7 @@
 
 [tool.black]
 line-length = 88
-target-version = ['py38']
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -29,8 +29,8 @@ line_length = 88
 known_first_party = ["framecast"]
 
 [tool.ruff]
-# Assume Python 3.8+
-target-version = "py38"
+# Modern Python version for latest features and optimizations
+target-version = "py312"
 line-length = 88
 
 # Enable rules
