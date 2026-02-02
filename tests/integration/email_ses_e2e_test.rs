@@ -421,7 +421,10 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         Ok(true) => println!("✅ LocalStack SES service is healthy"),
         Ok(false) => println!("⚠️ LocalStack SES service health check inconclusive"),
         Err(e) => {
-            println!("⚠️ LocalStack health check failed: {}, continuing anyway", e);
+            println!(
+                "⚠️ LocalStack health check failed: {}, continuing anyway",
+                e
+            );
         }
     }
 
@@ -444,14 +447,23 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
     println!("🔑 Role: {}", role);
 
     // Clear any existing emails for this address first
-    let cleared = localstack_client.clear_emails(invitee_email).await
+    let cleared = localstack_client
+        .clear_emails(invitee_email)
+        .await
         .unwrap_or(0);
     if cleared > 0 {
         println!("🧹 Cleared {} existing emails for test address", cleared);
     }
 
     let receipt = email_service
-        .send_team_invitation(team_name, team_id, invitation_id, invitee_email, inviter_name, role)
+        .send_team_invitation(
+            team_name,
+            team_id,
+            invitation_id,
+            invitee_email,
+            inviter_name,
+            role,
+        )
         .await
         .expect("Failed to send team invitation");
 
@@ -471,7 +483,12 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
     println!("🔍 Checking LocalStack SES API for emails...");
 
     // First, try a direct API call to see what's there
-    match reqwest::get(&format!("http://localhost:4566/_aws/ses?email={}", invitee_email)).await {
+    match reqwest::get(&format!(
+        "http://localhost:4566/_aws/ses?email={}",
+        invitee_email
+    ))
+    .await
+    {
         Ok(response) => {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
@@ -482,7 +499,10 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         }
     }
 
-    let retrieved_email = match localstack_client.wait_for_invitation_email(invitee_email, 10).await {
+    let retrieved_email = match localstack_client
+        .wait_for_invitation_email(invitee_email, 10)
+        .await
+    {
         Ok(Some(email)) => {
             println!("✅ Email retrieved successfully!");
             email
@@ -497,7 +517,10 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         Err(e) => {
             println!("⚠️ Failed to retrieve email from LocalStack: {}", e);
             println!("   This may be expected if LocalStack SES email storage is not configured");
-            println!("✅ Email sending test completed successfully (retrieval failed: {})", e);
+            println!(
+                "✅ Email sending test completed successfully (retrieval failed: {})",
+                e
+            );
             return; // Exit the test gracefully
         }
     };
@@ -514,16 +537,26 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
     println!("\n🔍 Step 3: Validating email content and metadata...");
 
     // Validate basic email properties
-    assert!(retrieved_email.subject.contains(team_name),
-        "Email subject should contain team name");
-    assert!(retrieved_email.body.contains(inviter_name),
-        "Email body should contain inviter name");
-    assert!(retrieved_email.body.contains(role),
-        "Email body should contain role");
-    assert!(retrieved_email.to.contains(&invitee_email.to_string()),
-        "Email should be addressed to invitee");
-    assert_eq!(retrieved_email.from, "invitations@framecast.app",
-        "Email should be from invitations address");
+    assert!(
+        retrieved_email.subject.contains(team_name),
+        "Email subject should contain team name"
+    );
+    assert!(
+        retrieved_email.body.contains(inviter_name),
+        "Email body should contain inviter name"
+    );
+    assert!(
+        retrieved_email.body.contains(role),
+        "Email body should contain role"
+    );
+    assert!(
+        retrieved_email.to.contains(&invitee_email.to_string()),
+        "Email should be addressed to invitee"
+    );
+    assert_eq!(
+        retrieved_email.from, "invitations@framecast.app",
+        "Email should be from invitations address"
+    );
 
     println!("✅ Basic email content validation passed!");
 
@@ -537,8 +570,10 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         .extract_invitation_id(&retrieved_email)
         .expect("Failed to extract invitation ID from email content");
 
-    assert_eq!(extracted_invitation_id, invitation_id,
-        "Extracted invitation ID should match sent invitation ID");
+    assert_eq!(
+        extracted_invitation_id, invitation_id,
+        "Extracted invitation ID should match sent invitation ID"
+    );
 
     println!("✅ Invitation ID extracted: {}", extracted_invitation_id);
 
@@ -547,26 +582,35 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         .extract_team_id(&retrieved_email)
         .expect("Failed to extract team ID from email content");
 
-    assert_eq!(extracted_team_id, team_id,
-        "Extracted team ID should match sent team ID");
+    assert_eq!(
+        extracted_team_id, team_id,
+        "Extracted team ID should match sent team ID"
+    );
 
     println!("✅ Team ID extracted: {}", extracted_team_id);
 
     // Extract invitation URL from email content
-    let invitation_url = localstack_client
-        .extract_invitation_url(&retrieved_email);
+    let invitation_url = localstack_client.extract_invitation_url(&retrieved_email);
 
     if let Some(url) = &invitation_url {
-        assert!(url.contains(&invitation_id.to_string()),
-            "Invitation URL should contain invitation ID");
-        assert!(url.contains(&team_id.to_string()),
-            "Invitation URL should contain team ID");
-        assert!(url.contains("/accept"),
-            "Invitation URL should contain accept endpoint");
+        assert!(
+            url.contains(&invitation_id.to_string()),
+            "Invitation URL should contain invitation ID"
+        );
+        assert!(
+            url.contains(&team_id.to_string()),
+            "Invitation URL should contain team ID"
+        );
+        assert!(
+            url.contains("/accept"),
+            "Invitation URL should contain accept endpoint"
+        );
 
         println!("✅ Invitation URL extracted: {}", url);
     } else {
-        println!("⚠️ Could not extract invitation URL (may be expected depending on email template)");
+        println!(
+            "⚠️ Could not extract invitation URL (may be expected depending on email template)"
+        );
     }
 
     // ============================================================================
@@ -598,9 +642,15 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         .await
         .expect("Failed to get latest invitation");
 
-    assert!(latest_invitation.is_some(), "Should have a latest invitation");
-    assert_eq!(latest_invitation.as_ref().unwrap().id, retrieved_email.id,
-        "Latest invitation should match retrieved email");
+    assert!(
+        latest_invitation.is_some(),
+        "Should have a latest invitation"
+    );
+    assert_eq!(
+        latest_invitation.as_ref().unwrap().id,
+        retrieved_email.id,
+        "Latest invitation should match retrieved email"
+    );
 
     println!("✅ All email retrieval methods working correctly!");
 
@@ -650,11 +700,18 @@ async fn test_localstack_client_health_and_basic_operations() {
 
     match emails {
         Ok(emails) => {
-            println!("📧 Retrieved {} emails for test address {}", emails.len(), test_email);
+            println!(
+                "📧 Retrieved {} emails for test address {}",
+                emails.len(),
+                test_email
+            );
             assert!(emails.is_empty() || !emails.is_empty()); // Either is valid for empty mailbox
         }
         Err(e) => {
-            println!("⚠️ Email retrieval failed (may be expected if LocalStack SES not configured): {}", e);
+            println!(
+                "⚠️ Email retrieval failed (may be expected if LocalStack SES not configured): {}",
+                e
+            );
         }
     }
 

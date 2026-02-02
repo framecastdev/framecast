@@ -27,7 +27,7 @@ pub struct LocalStackEmail {
     pub timestamp: Option<String>,
 
     #[serde(flatten)]
-    #[allow(dead_code)]  // Reserved for debugging and future extensibility
+    #[allow(dead_code)] // Reserved for debugging and future extensibility
     pub raw_data: HashMap<String, serde_json::Value>,
 }
 
@@ -97,31 +97,37 @@ impl LocalStackEmailClient {
                     }
                 }
                 result
-            },
+            }
             serde_json::Value::Object(obj) if obj.contains_key("emails") => {
                 // Wrapped in "emails" field
-                if let Ok(emails) = serde_json::from_value::<Vec<LocalStackEmail>>(obj["emails"].clone()) {
+                if let Ok(emails) =
+                    serde_json::from_value::<Vec<LocalStackEmail>>(obj["emails"].clone())
+                {
                     emails
                 } else {
                     Vec::new()
                 }
-            },
+            }
             serde_json::Value::Object(obj) if obj.contains_key("messages") => {
                 // LocalStack format: wrapped in "messages" field
-                if let Ok(emails) = serde_json::from_value::<Vec<LocalStackEmail>>(obj["messages"].clone()) {
+                if let Ok(emails) =
+                    serde_json::from_value::<Vec<LocalStackEmail>>(obj["messages"].clone())
+                {
                     emails
                 } else {
                     Vec::new()
                 }
-            },
+            }
             serde_json::Value::Object(obj) => {
                 // Single email object - try to parse it directly
-                if let Ok(email) = serde_json::from_value::<LocalStackEmail>(serde_json::Value::Object(obj)) {
+                if let Ok(email) =
+                    serde_json::from_value::<LocalStackEmail>(serde_json::Value::Object(obj))
+                {
                     vec![email]
                 } else {
                     Vec::new()
                 }
-            },
+            }
             _ => Vec::new(),
         };
 
@@ -154,10 +160,8 @@ impl LocalStackEmailClient {
     pub async fn get_latest_invitation(&self, email: &str) -> Result<Option<LocalStackEmail>> {
         let emails = self.get_emails(email).await?;
 
-        let invitation_emails: Vec<LocalStackEmail> = emails
-            .into_iter()
-            .filter(|e| e.is_invitation())
-            .collect();
+        let invitation_emails: Vec<LocalStackEmail> =
+            emails.into_iter().filter(|e| e.is_invitation()).collect();
 
         if invitation_emails.is_empty() {
             return Ok(None);
@@ -165,13 +169,11 @@ impl LocalStackEmailClient {
 
         // Sort by timestamp and return most recent
         let mut sorted_emails = invitation_emails;
-        sorted_emails.sort_by(|a, b| {
-            match (&a.timestamp, &b.timestamp) {
-                (Some(ts_a), Some(ts_b)) => ts_b.cmp(ts_a),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => b.id.cmp(&a.id),
-            }
+        sorted_emails.sort_by(|a, b| match (&a.timestamp, &b.timestamp) {
+            (Some(ts_a), Some(ts_b)) => ts_b.cmp(ts_a),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => b.id.cmp(&a.id),
         });
 
         Ok(sorted_emails.into_iter().next())
@@ -295,7 +297,10 @@ impl LocalStackEmailClient {
                         } else if url.starts_with("http") {
                             return Some(url.to_string());
                         } else {
-                            return Some(format!("https://framecast.app/{}", url.trim_start_matches('/')));
+                            return Some(format!(
+                                "https://framecast.app/{}",
+                                url.trim_start_matches('/')
+                            ));
                         }
                     }
                 }
@@ -306,7 +311,7 @@ impl LocalStackEmailClient {
     }
 
     /// Wait for an email to arrive (with polling)
-    #[allow(dead_code)]  // Available for future test scenarios
+    #[allow(dead_code)] // Available for future test scenarios
     pub async fn wait_for_email(
         &self,
         email: &str,
@@ -408,7 +413,7 @@ mod tests {
         let email = LocalStackEmail {
             id: "test".to_string(),
             subject: "Invitation".to_string(),
-            body: "Accept invitation: https://framecast.app/teams/team123/invitations/12345678-1234-4567-89ab-123456789012/accept".to_string(),
+            body: "Accept invitation: https://framecast.app/teams/team123/invitations/12345678-1234-4567-89ab-123456789012/accept".to_string(), // pragma: allowlist secret
             from: "noreply@framecast.app".to_string(),
             to: vec!["user@example.com".to_string()],
             timestamp: None,
@@ -417,7 +422,10 @@ mod tests {
 
         let invitation_id = client.extract_invitation_id(&email);
         assert!(invitation_id.is_some());
-        assert_eq!(invitation_id.unwrap().to_string(), "12345678-1234-4567-89ab-123456789012");
+        assert_eq!(
+            invitation_id.unwrap().to_string(),
+            "12345678-1234-4567-89ab-123456789012" // pragma: allowlist secret
+        );
     }
 
     #[test]
@@ -427,7 +435,7 @@ mod tests {
         let email = LocalStackEmail {
             id: "test".to_string(),
             subject: "Team Invitation".to_string(),
-            body: "Join team: https://framecast.app/teams/87654321-4321-7654-ba98-876543210987/invitations/12345678-1234-4567-89ab-123456789012/accept".to_string(),
+            body: "Join team: https://framecast.app/teams/87654321-4321-7654-ba98-876543210987/invitations/12345678-1234-4567-89ab-123456789012/accept".to_string(), // pragma: allowlist secret
             from: "noreply@framecast.app".to_string(),
             to: vec!["user@example.com".to_string()],
             timestamp: None,
@@ -436,7 +444,10 @@ mod tests {
 
         let team_id = client.extract_team_id(&email);
         assert!(team_id.is_some());
-        assert_eq!(team_id.unwrap().to_string(), "87654321-4321-7654-ba98-876543210987");
+        assert_eq!(
+            team_id.unwrap().to_string(),
+            "87654321-4321-7654-ba98-876543210987" // pragma: allowlist secret
+        );
     }
 
     #[test]
@@ -446,7 +457,7 @@ mod tests {
         let email = LocalStackEmail {
             id: "test".to_string(),
             subject: "Invitation".to_string(),
-            body: r#"<a href="https://framecast.app/teams/team123/invitations/12345678-1234-4567-89ab-123456789012/accept">Accept Invitation</a>"#.to_string(),
+            body: r#"<a href="https://framecast.app/teams/team123/invitations/12345678-1234-4567-89ab-123456789012/accept">Accept Invitation</a>"#.to_string(), // pragma: allowlist secret
             from: "noreply@framecast.app".to_string(),
             to: vec!["user@example.com".to_string()],
             timestamp: None,
