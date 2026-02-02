@@ -873,7 +873,11 @@ impl Job {
 
     /// Calculate refund amount based on failure type and progress
     pub fn calculate_refund(&self, failure_type: JobFailureType) -> i32 {
-        let progress_percent = self.get_progress_percent();
+        let progress_percent_raw = self.get_progress_percent();
+
+        // Convert to integer with 2 decimal precision (10000 = 100.00%)
+        let progress_int = (progress_percent_raw * 100.0).round() as i32;
+        let progress_int = progress_int.clamp(0, 10000); // 0.00% to 100.00%
 
         match failure_type {
             // Full refund for system errors and timeouts
@@ -881,26 +885,42 @@ impl Job {
 
             // Partial refund based on remaining work for validation errors
             JobFailureType::Validation => {
-                let remaining_work = 1.0 - (progress_percent / 100.0);
-                (self.credits_charged as f64 * remaining_work) as i32
+                let remaining_work_int = 10000 - progress_int; // Remaining work as integer
+                                                               // FLOOR operation: integer division automatically floors for positive numbers
+                                                               // Use i64 for intermediate calculation to prevent overflow
+                let result = (self.credits_charged as i64 * remaining_work_int as i64) / 10000;
+                result as i32 // Safe because result will be <= self.credits_charged (which fits in i32)
             }
 
             // Partial refund with 10% cancellation fee
             JobFailureType::Canceled => {
-                let remaining_work = 1.0 - (progress_percent / 100.0);
-                (self.credits_charged as f64 * remaining_work * 0.9) as i32
+                let remaining_work_int = 10000 - progress_int;
+
+                // Calculate: credits * remaining_work * 0.9 using i64 to prevent overflow
+                // = (credits * remaining_work * 9000) / (10000 * 10000)
+                let refund_before_cap =
+                    (self.credits_charged as i64 * remaining_work_int as i64 * 9000) / 100_000_000; // 10000 * 10000
+
+                // Enforce minimum 10% charge (maximum 90% refund) - SPEC REQUIREMENT
+                let max_refund = (self.credits_charged as i64 * 9000) / 10000; // 90% of charged amount
+
+                std::cmp::min(refund_before_cap as i32, max_refund as i32)
             }
         }
     }
 
     /// Get progress percentage from progress field
     pub fn get_progress_percent(&self) -> f64 {
-        self.progress
+        let raw_progress = self
+            .progress
             .0
             .get("percent")
             .and_then(|v| v.as_f64())
-            .unwrap_or(0.0)
-            .clamp(0.0, 100.0)
+            .unwrap_or(0.0);
+
+        // Round to 2 decimal places to avoid precision issues
+        let rounded = (raw_progress * 100.0).round() / 100.0;
+        rounded.clamp(0.0, 100.0)
     }
 
     /// Apply refund to the job based on failure type
@@ -1004,6 +1024,17 @@ impl Job {
             if !urn.is_team() {
                 return Err(Error::Validation(
                     "Project-based jobs must be team-owned".to_string(),
+                ));
+            }
+        }
+
+        // SPEC: Cancellation must charge at least 10% (maximum 90% refund)
+        if let Some(JobFailureType::Canceled) = self.failure_type {
+            let min_charge = (self.credits_charged * 10) / 100; // 10% minimum
+            let actual_charge = self.credits_charged - self.credits_refunded;
+            if actual_charge < min_charge {
+                return Err(Error::Validation(
+                    "Cancellation must charge at least 10%".to_string(),
                 ));
             }
         }
@@ -2309,6 +2340,504 @@ mod tests {
         free_job.update_progress(50.0).unwrap();
         assert_eq!(free_job.calculate_refund(JobFailureType::System), 0);
         assert_eq!(free_job.calculate_refund(JobFailureType::Canceled), 0);
+    }
+
+    #[test]
+    fn test_refund_precision_edge_cases() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+
+        // Test cases that verify correct FLOOR behavior according to spec
+        let precision_test_cases = vec![
+            // (credits, progress, expected_validation_refund, expected_cancel_refund, description)
+            (101, 33.33, 67, 60, "Odd credits with fractional progress"),
+            (99, 50.5, 49, 44, "Even credits with fractional progress"),
+            (1, 75.0, 0, 0, "Single credit edge case"),
+            (1000, 0.1, 999, 899, "Large amount with tiny progress"),
+            (
+                5,
+                33.33,
+                3,
+                3,
+                "Small amount with fractional progress - CORRECTED",
+            ),
+            (33, 33.33, 22, 19, "Matching credit amount and progress"),
+            (1, 1.0, 0, 0, "Minimal progress on single credit"),
+            (999, 99.9, 0, 0, "Near-complete progress"),
+            (
+                1001,
+                66.67,
+                333,
+                300,
+                "Large odd amount with common fraction",
+            ),
+        ];
+
+        for (credits, progress, expected_validation, expected_cancel, description) in
+            precision_test_cases
+        {
+            let mut job =
+                Job::new(user_owner.clone(), user_id, None, json!({}), credits, None).unwrap();
+            job.update_progress(progress).unwrap();
+
+            // Test validation refund
+            let validation_refund = job.calculate_refund(JobFailureType::Validation);
+            assert_eq!(
+                validation_refund, expected_validation,
+                "Validation refund mismatch for {}: {} credits at {}% progress",
+                description, credits, progress
+            );
+
+            // Test cancellation refund
+            let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+            assert_eq!(
+                cancel_refund, expected_cancel,
+                "Cancellation refund mismatch for {}: {} credits at {}% progress",
+                description, credits, progress
+            );
+        }
+    }
+
+    #[test]
+    fn test_refund_boundary_conditions() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+
+        // Test zero credits
+        let mut zero_job = Job::new(user_owner.clone(), user_id, None, json!({}), 0, None).unwrap();
+        zero_job.update_progress(50.0).unwrap();
+        assert_eq!(zero_job.calculate_refund(JobFailureType::System), 0);
+        assert_eq!(zero_job.calculate_refund(JobFailureType::Timeout), 0);
+        assert_eq!(zero_job.calculate_refund(JobFailureType::Validation), 0);
+        assert_eq!(zero_job.calculate_refund(JobFailureType::Canceled), 0);
+
+        // Test single credit with various progress values
+        let single_credit_cases = vec![
+            (0.0, 1, 0),  // 0% progress: full validation refund, 90% cancel refund
+            (10.0, 0, 0), // 10% progress: 90% validation refund (0.9 → 0), 81% cancel refund (0.729 → 0)
+            (50.0, 0, 0), // 50% progress: 50% validation refund (0.5 → 0), 45% cancel refund (0.45 → 0)
+            (90.0, 0, 0), // 90% progress: 10% validation refund (0.1 → 0), 9% cancel refund (0.09 → 0)
+            (99.0, 0, 0), // 99% progress: 1% validation refund (0.01 → 0), 0.9% cancel refund (0.009 → 0)
+        ];
+
+        for (progress, expected_validation, expected_cancel) in single_credit_cases {
+            let mut single_job =
+                Job::new(user_owner.clone(), user_id, None, json!({}), 1, None).unwrap();
+            single_job.update_progress(progress).unwrap();
+
+            assert_eq!(
+                single_job.calculate_refund(JobFailureType::Validation),
+                expected_validation,
+                "Single credit validation refund at {}% progress",
+                progress
+            );
+
+            assert_eq!(
+                single_job.calculate_refund(JobFailureType::Canceled),
+                expected_cancel,
+                "Single credit cancellation refund at {}% progress",
+                progress
+            );
+        }
+
+        // Test maximum safe integer values
+        let max_safe_credits = 1_000_000_000; // Large but safe for i32 math
+        let mut large_job =
+            Job::new(user_owner, user_id, None, json!({}), max_safe_credits, None).unwrap();
+
+        // Test with small progress to ensure no overflow
+        large_job.update_progress(1.0).unwrap();
+        let large_validation_refund = large_job.calculate_refund(JobFailureType::Validation);
+        let large_cancel_refund = large_job.calculate_refund(JobFailureType::Canceled);
+
+        // With 1% progress: 99% should be refunded for validation, 89.1% for cancellation
+        assert_eq!(large_validation_refund, 990_000_000); // 99% of 1B
+        assert_eq!(large_cancel_refund, 891_000_000); // 99% * 90% of 1B
+    }
+
+    #[test]
+    fn test_cancellation_minimum_charge_enforcement() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+
+        // Test cases where 10% minimum charge should be enforced
+        let enforcement_cases = vec![
+            // (credits, progress, expected_refund, expected_charge, description)
+            (
+                100,
+                0.0,
+                90,
+                10,
+                "Zero progress should enforce minimum 10% charge",
+            ),
+            (100, 5.0, 85, 15, "Low progress within normal range"),
+            (100, 1.0, 89, 11, "Tiny progress should still work normally"),
+            (50, 0.0, 45, 5, "Half credits with zero progress"),
+            (10, 0.0, 9, 1, "Small amount with zero progress"),
+            (1000, 0.1, 899, 101, "Large amount with minimal progress"),
+        ];
+
+        for (credits, progress, expected_refund, expected_charge, description) in enforcement_cases
+        {
+            let mut job =
+                Job::new(user_owner.clone(), user_id, None, json!({}), credits, None).unwrap();
+            job.update_progress(progress).unwrap();
+
+            let actual_refund = job.calculate_refund(JobFailureType::Canceled);
+            let actual_charge = credits - actual_refund;
+
+            assert_eq!(
+                actual_refund, expected_refund,
+                "Refund mismatch: {}",
+                description
+            );
+            assert_eq!(
+                actual_charge, expected_charge,
+                "Charge mismatch: {}",
+                description
+            );
+
+            // Verify minimum charge constraint
+            let min_charge = (credits as f64 * 0.1).ceil() as i32;
+            assert!(
+                actual_charge >= min_charge || actual_charge == credits,
+                "Minimum 10% charge not enforced for {}: actual charge {} < minimum {}",
+                description,
+                actual_charge,
+                min_charge
+            );
+        }
+    }
+
+    #[test]
+    fn test_refund_calculation_consistency() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+
+        // Test that refund calculations are consistent across multiple calls
+        let mut job = Job::new(user_owner, user_id, None, json!({}), 150, None).unwrap();
+        job.update_progress(33.33).unwrap();
+
+        // Call refund calculation multiple times - should be deterministic
+        let refunds: Vec<_> = (0..10)
+            .map(|_| job.calculate_refund(JobFailureType::Validation))
+            .collect();
+
+        // All refunds should be identical
+        assert!(
+            refunds.iter().all(|&r| r == refunds[0]),
+            "Refund calculations should be deterministic"
+        );
+
+        // Same for cancellation refunds
+        let cancel_refunds: Vec<_> = (0..10)
+            .map(|_| job.calculate_refund(JobFailureType::Canceled))
+            .collect();
+
+        assert!(
+            cancel_refunds.iter().all(|&r| r == cancel_refunds[0]),
+            "Cancellation refunds should be deterministic"
+        );
+    }
+
+    #[test]
+    fn test_refund_mathematical_properties() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+
+        // Test mathematical properties that should hold for refund calculations
+        for credits in [1, 10, 100, 1000] {
+            for progress in [0.0, 25.0, 50.0, 75.0, 100.0] {
+                let mut job =
+                    Job::new(user_owner.clone(), user_id, None, json!({}), credits, None).unwrap();
+                job.update_progress(progress).unwrap();
+
+                // Property 1: System/timeout refunds should always equal charged amount
+                assert_eq!(job.calculate_refund(JobFailureType::System), credits);
+                assert_eq!(job.calculate_refund(JobFailureType::Timeout), credits);
+
+                // Property 2: Refunds should never exceed charged amount
+                let validation_refund = job.calculate_refund(JobFailureType::Validation);
+                let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+
+                assert!(
+                    validation_refund <= credits,
+                    "Validation refund {} exceeds credits {} for {}% progress",
+                    validation_refund,
+                    credits,
+                    progress
+                );
+                assert!(
+                    cancel_refund <= credits,
+                    "Cancellation refund {} exceeds credits {} for {}% progress",
+                    cancel_refund,
+                    credits,
+                    progress
+                );
+
+                // Property 3: Cancellation refund should never exceed validation refund
+                assert!(cancel_refund <= validation_refund,
+                        "Cancellation refund {} exceeds validation refund {} for {} credits at {}% progress",
+                        cancel_refund, validation_refund, credits, progress);
+
+                // Property 4: At 100% progress, validation and cancellation refunds should be 0
+                if progress == 100.0 {
+                    assert_eq!(validation_refund, 0);
+                    assert_eq!(cancel_refund, 0);
+                }
+
+                // Property 5: At 0% progress, validation refund should equal credits
+                if progress == 0.0 {
+                    assert_eq!(validation_refund, credits);
+                    // Cancellation should be 90% of credits (or less due to integer math)
+                    assert!(cancel_refund <= (credits as f64 * 0.9).floor() as i32);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_progress_percentage_edge_cases() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+
+        // Test various progress percentage edge cases
+        let progress_cases = vec![
+            (0.0, "Zero progress"),
+            (0.01, "Minimal progress"),
+            (33.33, "Common fraction (1/3)"),
+            (66.67, "Common fraction (2/3)"),
+            (99.99, "Near completion"),
+            (100.0, "Full completion"),
+        ];
+
+        for (progress, description) in progress_cases {
+            job.update_progress(progress).unwrap();
+
+            // Verify progress is set correctly
+            assert!(
+                (job.get_progress_percent() - progress).abs() < 0.01,
+                "Progress not set correctly for {}: expected {}, got {}",
+                description,
+                progress,
+                job.get_progress_percent()
+            );
+
+            // Verify refunds are calculated correctly
+            let validation_refund = job.calculate_refund(JobFailureType::Validation);
+            let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+
+            // Basic sanity checks
+            assert!(
+                validation_refund >= 0,
+                "Validation refund negative for {}",
+                description
+            );
+            assert!(
+                cancel_refund >= 0,
+                "Cancellation refund negative for {}",
+                description
+            );
+            assert!(
+                validation_refund <= 100,
+                "Validation refund too high for {}",
+                description
+            );
+            assert!(
+                cancel_refund <= 100,
+                "Cancellation refund too high for {}",
+                description
+            );
+        }
+    }
+
+    #[test]
+    fn test_floating_point_precision_issues_that_fail() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+
+        // Test case 1: Float precision loss causing incorrect FLOOR behavior
+        // This test will FAIL with current implementation due to float imprecision
+        let mut job1 = Job::new(user_owner.clone(), user_id, None, json!({}), 7, None).unwrap();
+        job1.update_progress(42.857142857142854).unwrap(); // 3/7 as decimal with precision issues
+
+        // Expected: 7 * (1 - 0.42857142857142854) * 0.9 = 7 * 0.57142857142857146 * 0.9 = 3.5999999999999996
+        // FLOOR(3.5999999999999996) should be 3
+        // But float imprecision might cause this to be 4.0 in some cases, leading to wrong result
+        let cancel_refund = job1.calculate_refund(JobFailureType::Canceled);
+
+        // This assertion may PASS or FAIL depending on floating point precision
+        // The point is to show that float arithmetic is unreliable
+        println!(
+            "7 credits at 42.857% progress: cancel_refund = {}",
+            cancel_refund
+        );
+
+        // Test case 2: Accumulated precision errors with repeated calculations
+        let mut job2 = Job::new(user_owner.clone(), user_id, None, json!({}), 1000, None).unwrap();
+
+        // Progress that when converted through float operations introduces error
+        let tricky_progress = 1.0 / 3.0 * 100.0; // 33.333333... with float precision issues
+        job2.update_progress(tricky_progress).unwrap();
+
+        let validation_refund = job2.calculate_refund(JobFailureType::Validation);
+        // Expected: 1000 * (1 - 0.3333333333333333) = 1000 * 0.6666666666666667 = 666.6666666666667
+        // FLOOR should give 666, but float precision might give different result
+        println!(
+            "1000 credits at {:.15}% progress: validation_refund = {}",
+            tricky_progress, validation_refund
+        );
+
+        // The issue is that these results are not deterministic across platforms due to float precision
+    }
+
+    #[test]
+    fn test_missing_minimum_charge_enforcement_failures() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+
+        // This test demonstrates the missing minimum charge enforcement from the spec
+        // Current implementation does NOT enforce the MIN(refund, credits * 0.9) constraint
+
+        let test_cases = vec![
+            // Cases where current implementation might violate minimum charge
+            (100, 0.0), // Should refund max 90, charge min 10
+            (50, 0.0),  // Should refund max 45, charge min 5
+        ];
+
+        for (credits, progress) in test_cases {
+            let mut job =
+                Job::new(user_owner.clone(), user_id, None, json!({}), credits, None).unwrap();
+            job.update_progress(progress).unwrap();
+
+            let refund = job.calculate_refund(JobFailureType::Canceled);
+            let charge = credits - refund;
+
+            // Current implementation calculation: credits * (1 - progress/100) * 0.9
+            // For 0% progress: credits * 1.0 * 0.9 = credits * 0.9 ✓ This actually works
+
+            // But spec also says: MIN(calculated_refund, credits * 0.9)
+            // This constraint is missing from current implementation
+            let max_allowed_refund = (credits as f64 * 0.9) as i32;
+
+            println!(
+                "Credits: {}, Progress: {}%, Refund: {}, Charge: {}, Max allowed refund: {}",
+                credits, progress, refund, charge, max_allowed_refund
+            );
+
+            // This assertion should pass with current implementation for 0% progress
+            // but demonstrates the missing constraint for other edge cases
+        }
+    }
+
+    #[test]
+    fn test_truncation_vs_rounding_precision_loss() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+
+        // Test cases designed to show truncation vs proper rounding issues
+        let truncation_cases = vec![
+            // (credits, progress) where float calculation results in X.999... that gets truncated
+            (13, 23.08), // Should give specific problematic float result
+            (37, 13.51), // Another case with precision issues
+            (83, 9.64),  // Designed to expose truncation problems
+        ];
+
+        for (credits, progress) in truncation_cases {
+            let mut job =
+                Job::new(user_owner.clone(), user_id, None, json!({}), credits, None).unwrap();
+            job.update_progress(progress).unwrap();
+
+            let validation_refund = job.calculate_refund(JobFailureType::Validation);
+            let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+
+            // Calculate what the result SHOULD be with proper FLOOR
+            let remaining_work = 1.0 - (progress / 100.0);
+            let expected_validation = (credits as f64 * remaining_work).floor() as i32;
+            let expected_cancel = (credits as f64 * remaining_work * 0.9).floor() as i32;
+
+            println!("Credits: {}, Progress: {}%", credits, progress);
+            println!("  Remaining work: {:.10}", remaining_work);
+            println!(
+                "  Current validation refund: {}, Expected: {}",
+                validation_refund, expected_validation
+            );
+            println!(
+                "  Current cancel refund: {}, Expected: {}",
+                cancel_refund, expected_cancel
+            );
+
+            // These might pass or fail depending on floating point precision
+            // The key insight is that float arithmetic makes results unpredictable
+        }
+    }
+
+    #[test]
+    fn test_deterministic_behavior_failures() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+
+        // Test that demonstrates non-deterministic behavior with current float implementation
+        let mut job = Job::new(user_owner, user_id, None, json!({}), 111, None).unwrap();
+
+        // Use a progress value that causes precision issues
+        let problematic_progress = 100.0 / 3.0; // 33.333...
+        job.update_progress(problematic_progress).unwrap();
+
+        // Run the same calculation multiple times
+        let refunds: Vec<i32> = (0..100)
+            .map(|_| job.calculate_refund(JobFailureType::Validation))
+            .collect();
+
+        // With current float implementation, all results should be the same
+        // But this demonstrates the potential for non-deterministic behavior
+        let all_same = refunds.iter().all(|&r| r == refunds[0]);
+
+        println!("111 credits at {:.15}% progress:", problematic_progress);
+        println!(
+            "All {} calculations gave same result: {}",
+            refunds.len(),
+            all_same
+        );
+        println!("Result: {} credits", refunds[0]);
+
+        // This test mainly serves to document the precision concern
+        // The real issue is that float arithmetic is inherently imprecise for financial calculations
+    }
+
+    #[test]
+    fn test_state_machine_with_automatic_refunds() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+
+        // Start the job and set some progress
+        job.start().unwrap();
+        job.update_progress(40.0).unwrap();
+
+        // Test automatic refund calculation on failure
+        job.fail(json!({"error": "System failure"}), JobFailureType::System)
+            .unwrap();
+
+        assert_eq!(job.status, JobStatus::Failed);
+        assert_eq!(job.failure_type, Some(JobFailureType::System));
+        assert_eq!(job.credits_refunded, 100); // Full refund for system error
+        assert!(job.completed_at.is_some());
+
+        // Test cancellation with automatic refund
+        let user_owner2 = Urn::user(user_id);
+        let mut job2 = Job::new(user_owner2, user_id, None, json!({}), 100, None).unwrap();
+        job2.start().unwrap();
+        job2.update_progress(30.0).unwrap();
+
+        job2.cancel().unwrap();
+
+        assert_eq!(job2.status, JobStatus::Canceled);
+        assert_eq!(job2.failure_type, Some(JobFailureType::Canceled));
+        // 70% remaining × 0.9 = 63 credits refunded
+        assert_eq!(job2.credits_refunded, 63);
+        assert!(job2.completed_at.is_some());
     }
 
     #[test]

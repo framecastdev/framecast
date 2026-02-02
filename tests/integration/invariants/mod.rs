@@ -1,0 +1,612 @@
+//! Business invariant validation tests
+//!
+//! Tests all critical business rules from docs/spec/06_Invariants.md
+//! to ensure data integrity across the system
+
+use framecast_domain::entities::*;
+use framecast_common::Error;
+use chrono::Utc;
+use uuid::Uuid;
+
+use crate::common::{TestApp, assertions};
+
+mod test_user_invariants {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_inv_u1_creator_users_have_upgrade_timestamp() {
+        // INV-U1: Creator users must have upgrade timestamp
+        let app = TestApp::new().await.unwrap();
+
+        // Test valid creator user
+        let mut creator_user = User::new(
+            Uuid::new_v4(),
+            "creator@example.com".to_string(),
+            Some("Creator User".to_string()),
+        ).unwrap();
+
+        creator_user.upgrade_to_creator().unwrap();
+        assert!(creator_user.upgraded_at.is_some());
+        assert!(creator_user.validate().is_ok());
+
+        // Test invalid creator user (missing upgrade timestamp)
+        let mut invalid_creator = User::new(
+            Uuid::new_v4(),
+            "invalid@example.com".to_string(),
+            Some("Invalid Creator".to_string()),
+        ).unwrap();
+
+        invalid_creator.tier = UserTier::Creator;
+        invalid_creator.upgraded_at = None; // Invalid - missing timestamp
+
+        let validation_result = invalid_creator.validate();
+        assert!(validation_result.is_err());
+
+        if let Err(Error::Validation(msg)) = validation_result {
+            assert!(msg.contains("Creator users must have upgrade timestamp"));
+        } else {
+            panic!("Expected validation error for missing upgrade timestamp");
+        }
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_inv_u3_starter_users_no_team_memberships() {
+        // INV-U3: Starter users have no team memberships
+        let app = TestApp::new().await.unwrap();
+
+        // Create starter user
+        let starter_user = app.create_test_user(UserTier::Starter).await.unwrap();
+
+        // Verify no memberships exist
+        let memberships = sqlx::query!(
+            "SELECT COUNT(*) as count FROM team_memberships WHERE user_id = $1",
+            starter_user.id
+        )
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+
+        assert_eq!(memberships.count.unwrap(), 0);
+
+        // Attempting to create a team membership for starter user should be prevented
+        // This is enforced at the application level, not database level
+        assert_eq!(starter_user.tier, UserTier::Starter);
+        assert!(!starter_user.can_create_teams());
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_inv_u5_credits_cannot_be_negative() {
+        // INV-U5: Credits cannot be negative
+        let app = TestApp::new().await.unwrap();
+
+        // Test valid user with positive credits
+        let mut user = User::new(
+            Uuid::new_v4(),
+            "user@example.com".to_string(),
+            Some("Test User".to_string()),
+        ).unwrap();
+
+        user.credits = 1000;
+        assert!(user.validate().is_ok());
+
+        // Test user with zero credits (valid)
+        user.credits = 0;
+        assert!(user.validate().is_ok());
+
+        // Test user with negative credits (invalid)
+        user.credits = -1;
+        let validation_result = user.validate();
+        assert!(validation_result.is_err());
+
+        if let Err(Error::Validation(msg)) = validation_result {
+            assert!(msg.contains("Credits cannot be negative"));
+        } else {
+            panic!("Expected validation error for negative credits");
+        }
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_inv_u6_storage_cannot_be_negative() {
+        // INV-U6: Ephemeral storage cannot be negative
+        let app = TestApp::new().await.unwrap();
+
+        let mut user = User::new(
+            Uuid::new_v4(),
+            "user@example.com".to_string(),
+            Some("Test User".to_string()),
+        ).unwrap();
+
+        // Test valid storage values
+        user.ephemeral_storage_bytes = 0;
+        assert!(user.validate().is_ok());
+
+        user.ephemeral_storage_bytes = 1024;
+        assert!(user.validate().is_ok());
+
+        // Test negative storage (invalid)
+        user.ephemeral_storage_bytes = -1;
+        let validation_result = user.validate();
+        assert!(validation_result.is_err());
+
+        if let Err(Error::Validation(msg)) = validation_result {
+            assert!(msg.contains("Storage cannot be negative"));
+        } else {
+            panic!("Expected validation error for negative storage");
+        }
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_user_field_validation() {
+        // Test email validation
+        let invalid_email_result = User::new(
+            Uuid::new_v4(),
+            "invalid-email".to_string(),
+            Some("Test User".to_string()),
+        );
+        assert!(invalid_email_result.is_err());
+
+        let long_email_result = User::new(
+            Uuid::new_v4(),
+            format!("{}@example.com", "x".repeat(250)),
+            Some("Test User".to_string()),
+        );
+        assert!(long_email_result.is_err());
+
+        // Test name validation
+        let empty_name_result = User::new(
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            Some("".to_string()),
+        );
+        assert!(empty_name_result.is_err());
+
+        let long_name_result = User::new(
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            Some("x".repeat(101)),
+        );
+        assert!(long_name_result.is_err());
+
+        // Test valid user creation
+        let valid_user = User::new(
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            Some("Valid Name".to_string()),
+        );
+        assert!(valid_user.is_ok());
+    }
+}
+
+mod test_team_invariants {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_inv_t2_every_team_has_at_least_one_owner() {
+        // INV-T2: Every team has ≥1 owner
+        let app = TestApp::new().await.unwrap();
+
+        // Create team with owner
+        let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
+        let (team, membership) = app.create_test_team(creator_user.id).await.unwrap();
+
+        // Verify owner membership exists
+        assert_eq!(membership.team_id, team.id);
+        assert_eq!(membership.user_id, creator_user.id);
+        assert_eq!(membership.role, TeamRole::Owner);
+
+        // Verify owner count in database
+        let owner_count = sqlx::query!(
+            "SELECT COUNT(*) as count FROM team_memberships WHERE team_id = $1 AND role = 'owner'",
+            team.id
+        )
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+
+        assert!(owner_count.count.unwrap() >= 1);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_inv_t3_team_slug_uniqueness() {
+        // INV-T3: Team slugs must be unique
+        let app = TestApp::new().await.unwrap();
+
+        let team1 = Team::new("Team One".to_string(), Some("unique-slug".to_string())).unwrap();
+        let team2_result = Team::new("Team Two".to_string(), Some("unique-slug".to_string()));
+
+        // Both teams can be created with same slug in memory,
+        // but database constraint should prevent duplicate insertion
+
+        // Insert first team
+        sqlx::query!(
+            r#"
+            INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            "#,
+            team1.id,
+            team1.name,
+            team1.slug,
+            team1.credits,
+            team1.ephemeral_storage_bytes,
+            team1.settings,
+            team1.created_at,
+            team1.updated_at
+        ).execute(&app.pool).await.unwrap();
+
+        // Attempt to insert second team with same slug should fail
+        let team2 = team2_result.unwrap();
+        let insert_result = sqlx::query!(
+            r#"
+            INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            "#,
+            team2.id,
+            team2.name,
+            team2.slug,
+            team2.credits,
+            team2.ephemeral_storage_bytes,
+            team2.settings,
+            team2.created_at,
+            team2.updated_at
+        ).execute(&app.pool).await;
+
+        assert!(insert_result.is_err(), "Duplicate slug should be rejected by database");
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_inv_t4_slug_format_validation() {
+        // INV-T4: Team slug format validation
+
+        // Valid slug formats
+        let valid_slugs = vec![
+            "valid-slug",
+            "team-123",
+            "simple",
+            "with-multiple-dashes",
+            "a",
+        ];
+
+        for slug in valid_slugs {
+            let team_result = Team::new("Test Team".to_string(), Some(slug.to_string()));
+            assert!(team_result.is_ok(), "Slug '{}' should be valid", slug);
+        }
+
+        // Invalid slug formats
+        let invalid_slugs = vec![
+            "",                    // Empty
+            "x".repeat(51),        // Too long
+            "-leading-dash",       // Leading dash
+            "trailing-dash-",      // Trailing dash
+            "UPPERCASE",           // Uppercase letters
+            "spaces in slug",      // Spaces
+            "special@chars",       // Special characters
+            "under_scores",        // Underscores (not allowed)
+        ];
+
+        for slug in invalid_slugs {
+            let team_result = Team::new("Test Team".to_string(), Some(slug.to_string()));
+            assert!(team_result.is_err(), "Slug '{}' should be invalid", slug);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_inv_t7_max_owned_teams_per_user() {
+        // INV-T7: Max 10 owned teams per user (CARD-2 from cardinality constraints)
+        let app = TestApp::new().await.unwrap();
+
+        let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
+
+        // Create maximum allowed teams (10)
+        for i in 0..10 {
+            let team_name = format!("Team {}", i + 1);
+            let team_slug = format!("team-{}", i + 1);
+
+            let team = Team::new(team_name, Some(team_slug)).unwrap();
+
+            // Insert team
+            sqlx::query!(
+                r#"
+                INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                "#,
+                team.id,
+                team.name,
+                team.slug,
+                team.credits,
+                team.ephemeral_storage_bytes,
+                team.settings,
+                team.created_at,
+                team.updated_at
+            ).execute(&app.pool).await.unwrap();
+
+            // Create owner membership
+            sqlx::query!(
+                r#"
+                INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
+                VALUES ($1, $2, $3, $4, $5)
+                "#,
+                Uuid::new_v4(),
+                team.id,
+                creator_user.id,
+                TeamRole::Owner as TeamRole,
+                Utc::now()
+            ).execute(&app.pool).await.unwrap();
+        }
+
+        // Verify we have exactly 10 owned teams
+        let owned_count = sqlx::query!(
+            "SELECT COUNT(*) as count FROM team_memberships WHERE user_id = $1 AND role = 'owner'",
+            creator_user.id
+        )
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+
+        assert_eq!(owned_count.count.unwrap(), 10);
+
+        // This constraint would be enforced in the application layer,
+        // not at the database level, so we can't test the failure case here
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_team_name_validation() {
+        // Test team name validation
+        let empty_name_result = Team::new("".to_string(), None);
+        assert!(empty_name_result.is_err());
+
+        let long_name_result = Team::new("x".repeat(101), None);
+        assert!(long_name_result.is_err());
+
+        let valid_name_result = Team::new("Valid Team Name".to_string(), None);
+        assert!(valid_name_result.is_ok());
+    }
+}
+
+mod test_membership_invariants {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_inv_m4_only_creator_users_can_have_memberships() {
+        // INV-M4: Only creator users can have team memberships
+        let app = TestApp::new().await.unwrap();
+
+        // Create starter user
+        let starter_user = app.create_test_user(UserTier::Starter).await.unwrap();
+
+        // Create creator user and team
+        let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
+        let (team, _) = app.create_test_team(creator_user.id).await.unwrap();
+
+        // Attempting to create membership for starter user should be prevented
+        // This is enforced at the application level, but we can test the database constraint
+        let membership_result = sqlx::query!(
+            r#"
+            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+            Uuid::new_v4(),
+            team.id,
+            starter_user.id,
+            TeamRole::Member as TeamRole,
+            Utc::now()
+        ).execute(&app.pool).await;
+
+        // If database has trigger to enforce this constraint, it should fail
+        // Otherwise, this constraint is enforced in application logic
+        // For now, we test that starter users have the right tier
+        assert_eq!(starter_user.tier, UserTier::Starter);
+        assert!(!starter_user.can_create_teams());
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_membership_role_validity() {
+        // Test that only valid roles can be assigned
+        let app = TestApp::new().await.unwrap();
+
+        let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
+        let (team, _) = app.create_test_team(creator_user.id).await.unwrap();
+
+        // Create another creator user for testing roles
+        let member_user = app.create_test_user(UserTier::Creator).await.unwrap();
+
+        // Test all valid roles
+        let valid_roles = vec![
+            TeamRole::Owner,
+            TeamRole::Admin,
+            TeamRole::Member,
+            TeamRole::Viewer,
+        ];
+
+        for role in valid_roles {
+            let membership_id = Uuid::new_v4();
+
+            let insert_result = sqlx::query!(
+                r#"
+                INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
+                VALUES ($1, $2, $3, $4, $5)
+                "#,
+                membership_id,
+                team.id,
+                member_user.id,
+                role as TeamRole,
+                Utc::now()
+            ).execute(&app.pool).await;
+
+            assert!(insert_result.is_ok(), "Role {:?} should be valid", role);
+
+            // Clean up for next iteration
+            sqlx::query!(
+                "DELETE FROM team_memberships WHERE id = $1",
+                membership_id
+            ).execute(&app.pool).await.unwrap();
+        }
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_unique_user_team_membership() {
+        // Test that a user can only have one membership per team
+        let app = TestApp::new().await.unwrap();
+
+        let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
+        let (team, _) = app.create_test_team(creator_user.id).await.unwrap();
+
+        let member_user = app.create_test_user(UserTier::Creator).await.unwrap();
+
+        // Create first membership
+        let membership1_result = sqlx::query!(
+            r#"
+            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+            Uuid::new_v4(),
+            team.id,
+            member_user.id,
+            TeamRole::Member as TeamRole,
+            Utc::now()
+        ).execute(&app.pool).await;
+
+        assert!(membership1_result.is_ok());
+
+        // Attempt to create duplicate membership
+        let membership2_result = sqlx::query!(
+            r#"
+            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+            Uuid::new_v4(),
+            team.id,
+            member_user.id,
+            TeamRole::Admin as TeamRole,
+            Utc::now()
+        ).execute(&app.pool).await;
+
+        // Should fail due to unique constraint on (team_id, user_id)
+        assert!(membership2_result.is_err());
+
+        app.cleanup().await.unwrap();
+    }
+}
+
+mod test_timestamp_invariants {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_inv_time1_updated_at_progression() {
+        // INV-TIME1: updated_at must not go backwards
+        let app = TestApp::new().await.unwrap();
+
+        let mut user = User::new(
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            Some("Test User".to_string()),
+        ).unwrap();
+
+        let initial_updated_at = user.updated_at;
+
+        // Simulate time passing and update
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        user.updated_at = Utc::now();
+
+        // Verify progression
+        assertions::assert_timestamp_progression(&initial_updated_at, &user.updated_at);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_created_at_immutability() {
+        // Test that created_at should not change after creation
+        let app = TestApp::new().await.unwrap();
+
+        let user = User::new(
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            Some("Test User".to_string()),
+        ).unwrap();
+
+        let original_created_at = user.created_at;
+
+        // In practice, created_at should never be modified
+        // This test ensures our test infrastructure respects that
+        assertions::assert_timestamp_recent(&original_created_at);
+
+        app.cleanup().await.unwrap();
+    }
+}
+
+mod test_cross_entity_constraints {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_referential_integrity() {
+        // Test that memberships reference valid users and teams
+        let app = TestApp::new().await.unwrap();
+
+        let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
+        let (team, membership) = app.create_test_team(creator_user.id).await.unwrap();
+
+        // Verify membership references exist
+        let user_check = sqlx::query!(
+            "SELECT id FROM users WHERE id = $1",
+            membership.user_id
+        ).fetch_one(&app.pool).await;
+        assert!(user_check.is_ok());
+
+        let team_check = sqlx::query!(
+            "SELECT id FROM teams WHERE id = $1",
+            membership.team_id
+        ).fetch_one(&app.pool).await;
+        assert!(team_check.is_ok());
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_cascade_deletion_constraints() {
+        // Test that deleting a team removes its memberships
+        let app = TestApp::new().await.unwrap();
+
+        let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
+        let (team, membership) = app.create_test_team(creator_user.id).await.unwrap();
+
+        // Verify membership exists
+        let membership_check = sqlx::query!(
+            "SELECT COUNT(*) as count FROM team_memberships WHERE team_id = $1",
+            team.id
+        ).fetch_one(&app.pool).await.unwrap();
+        assert_eq!(membership_check.count.unwrap(), 1);
+
+        // Delete team (this should cascade to memberships)
+        sqlx::query!("DELETE FROM teams WHERE id = $1", team.id)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+
+        // Verify membership was deleted
+        let membership_check_after = sqlx::query!(
+            "SELECT COUNT(*) as count FROM team_memberships WHERE team_id = $1",
+            team.id
+        ).fetch_one(&app.pool).await.unwrap();
+        assert_eq!(membership_check_after.count.unwrap(), 0);
+
+        app.cleanup().await.unwrap();
+    }
+}

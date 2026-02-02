@@ -6,6 +6,7 @@ members = [
     "crates/inngest",
     "crates/comfyui",
     "crates/common",
+    "tests/integration",
 ]
 resolver = "2"
 

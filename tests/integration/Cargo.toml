@@ -1,0 +1,55 @@
+[package]
+name = "framecast-integration-tests"
+version = "0.0.1-SNAPSHOT"
+edition = "2021"
+
+[[test]]
+name = "simple_test"
+path = "simple_test.rs"
+
+[[test]]
+name = "invitation_workflow_demo"
+path = "invitation_workflow_demo.rs"
+
+[[test]]
+name = "invitation_workflow_test"
+path = "invitation_workflow_test.rs"
+
+[dependencies]
+# === Core Dependencies ===
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+
+# === HTTP Testing ===
+axum = { workspace = true }
+tower = { workspace = true }
+hyper = { workspace = true }
+reqwest = { workspace = true }
+
+# === Database Testing ===
+sqlx = { workspace = true }
+
+# === Testing Framework ===
+tokio-test = { workspace = true }
+tempfile = { workspace = true }
+test-log = { workspace = true }
+
+# === Internal Crates ===
+framecast-api = { path = "../../crates/api" }
+framecast-domain = { workspace = true }
+framecast-db = { workspace = true }
+framecast-common = { workspace = true }
+
+# === Authentication Testing ===
+jsonwebtoken = { workspace = true }
+base64 = { workspace = true }
+
+# === Configuration ===
+dotenvy = { workspace = true }
+
+# === Email Mock Dependencies ===
+regex = { workspace = true }
