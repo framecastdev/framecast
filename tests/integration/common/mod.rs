@@ -42,7 +42,8 @@ impl TestConfig {
             database_url: env::var("TEST_DATABASE_URL")
                 .or_else(|_| env::var("DATABASE_URL"))
                 .unwrap_or_else(|_| {
-                    "postgresql://postgres:password@localhost:5432/framecast_test".to_string() // pragma: allowlist secret
+                    "postgresql://postgres:password@localhost:5432/framecast_test".to_string()
+                    // pragma: allowlist secret
                 }),
             jwt_secret: env::var("TEST_JWT_SECRET")
                 .unwrap_or_else(|_| "test_secret_key_for_testing_only".to_string()),
@@ -385,3 +386,4 @@ mod tests {
 }
 
 pub mod email_mock;
+pub mod localstack_client;
