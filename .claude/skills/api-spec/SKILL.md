@@ -20,23 +20,27 @@ The formal specification is attached to the project. Key files:
 ## Entity Quick Reference
 
 ### User
+
 ```
 id, email!, name?, avatar_url?, tier {starter|creator},
 credits, ephemeral_storage_bytes, upgraded_at?, created_at, updated_at
 ```
 
 ### Team
+
 ```
 id, name, slug!, credits, ephemeral_storage_bytes, settings, created_at, updated_at
 ```
 
 ### Membership
+
 ```
 id, team_id FK, user_id FK, role {owner|admin|member|viewer}, created_at
 UNIQUE(team_id, user_id)
 ```
 
 ### Job
+
 ```
 id, owner URN, triggered_by FK→User, project_id? FK→Project,
 status {queued|processing|completed|failed|canceled},
@@ -46,13 +50,15 @@ idempotency_key?, started_at?, completed_at?, created_at, updated_at
 ```
 
 ### Project
+
 ```
-id, team_id FK, created_by FK→User, name, 
+id, team_id FK, created_by FK→User, name,
 status {draft|rendering|completed|archived}, spec JSONB,
 created_at, updated_at
 ```
 
 ### AssetFile
+
 ```
 id, owner URN, uploaded_by FK→User, project_id? FK→Project,
 filename, s3_key!, content_type, size_bytes,
@@ -61,8 +67,9 @@ created_at, updated_at
 ```
 
 ### Invitation
+
 ```
-id, team_id FK, invited_by FK→User, email, 
+id, team_id FK, invited_by FK→User, email,
 role {admin|member|viewer}, token!, expires_at,
 accepted_at?, revoked_at?, created_at
 Derived: state ∈ {pending|accepted|expired|revoked}
@@ -79,19 +86,23 @@ Derived: state ∈ {pending|accepted|expired|revoked}
 ## Key Invariants
 
 **User Invariants:**
+
 - **INV-U3**: Starter users have no team memberships
 - **INV-U5**: User credits ≥ 0
 
 **Team Invariants:**
+
 - **INV-T1**: Every team has ≥1 member
 - **INV-T2**: Every team has ≥1 owner
 - **INV-T6**: Team credits ≥ 0
 
 **Membership:**
+
 - **INV-M2**: Role ∈ {owner, admin, member, viewer}
 - **INV-M4**: Only creator users can have memberships
 
 **Job:**
+
 - **INV-J1**: Status ∈ {queued, processing, completed, failed, canceled}
 - **INV-J6**: Failed/canceled jobs must have failure_type
 - **INV-J8**: credits_refunded ≤ credits_charged
@@ -99,6 +110,7 @@ Derived: state ∈ {pending|accepted|expired|revoked}
 - **INV-J12**: Max 1 active job per project
 
 **Cardinality Constraints:**
+
 - **CARD-2**: Max 10 owned teams per user
 - **CARD-3**: Max 50 team memberships per user
 - **CARD-4**: Max 50 pending invitations per team
@@ -106,6 +118,7 @@ Derived: state ∈ {pending|accepted|expired|revoked}
 - **CARD-6**: Max 1 concurrent job per starter user
 
 **Rate Limits:**
+
 - Starter: 60 RPM, Creator: 300 RPM
 - Invitation rate: 20 per day per team
 
@@ -124,15 +137,17 @@ Derived: state ∈ {pending|accepted|expired|revoked}
 ## State Machines
 
 ### Job.status
+
 ```
 queued → processing → completed
-           ↓            
+           ↓
          failed
-           
+
 queued/processing → canceled (user action)
 ```
 
 ### Project.status
+
 ```
 draft → rendering → completed → archived
   ↑        ↓                       ↓
@@ -140,6 +155,7 @@ draft → rendering → completed → archived
 ```
 
 ### Invitation (derived)
+
 ```
 pending → accepted (user accepts)
         → expired (expires_at reached)

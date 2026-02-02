@@ -4,24 +4,25 @@ Job cleanup script for Framecast
 Removes old job records and associated files based on configurable retention policies
 """
 
+import argparse
 import asyncio
-import asyncpg
-import json
 import os
 import sys
-import boto3
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
-import argparse
+from typing import Dict, List
+
+import asyncpg
+import boto3
 
 # Environment configuration
-DATABASE_URL = os.getenv('DATABASE_URL')
-AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
-S3_BUCKET_OUTPUTS = os.getenv('S3_BUCKET_OUTPUTS')
+DATABASE_URL = os.getenv("DATABASE_URL")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET_OUTPUTS = os.getenv("S3_BUCKET_OUTPUTS")
 
 if not DATABASE_URL:
     print("❌ DATABASE_URL environment variable is required")
     sys.exit(1)
+
 
 class JobCleanupService:
     def __init__(self, database_url: str, dry_run: bool = False):
@@ -38,7 +39,7 @@ class JobCleanupService:
 
             # Initialize S3 client if bucket is configured
             if S3_BUCKET_OUTPUTS:
-                self.s3_client = boto3.client('s3', region_name=AWS_REGION)
+                self.s3_client = boto3.client("s3", region_name=AWS_REGION)
                 print("✅ Connected to S3")
         except Exception as e:
             print(f"❌ Failed to connect: {e}")
@@ -118,18 +119,18 @@ class JobCleanupService:
             return keys
 
         # Look for common S3 key patterns in output
-        if 'video_url' in output:
-            url = output['video_url']
-            if 's3://' in url:
+        if "video_url" in output:
+            url = output["video_url"]
+            if "s3://" in url:
                 # Extract key from s3:// URL
-                key = url.replace(f's3://{S3_BUCKET_OUTPUTS}/', '')
+                key = url.replace(f"s3://{S3_BUCKET_OUTPUTS}/", "")
                 keys.append(key)
 
         # Look for asset keys
-        if 'assets' in output:
-            for asset in output.get('assets', []):
-                if 's3_key' in asset:
-                    keys.append(asset['s3_key'])
+        if "assets" in output:
+            for asset in output.get("assets", []):
+                if "s3_key" in asset:
+                    keys.append(asset["s3_key"])
 
         return keys
 
@@ -141,8 +142,8 @@ class JobCleanupService:
 
         s3_keys = []
         for job in jobs:
-            if job.get('output'):
-                keys = self.get_s3_keys_from_output(job['output'])
+            if job.get("output"):
+                keys = self.get_s3_keys_from_output(job["output"])
                 s3_keys.extend(keys)
 
         if not s3_keys:
@@ -162,23 +163,19 @@ class JobCleanupService:
         batch_size = 1000  # S3 delete limit
 
         for i in range(0, len(s3_keys), batch_size):
-            batch = s3_keys[i:i + batch_size]
+            batch = s3_keys[i : i + batch_size]
 
-            delete_objects = {
-                'Objects': [{'Key': key} for key in batch],
-                'Quiet': True
-            }
+            delete_objects = {"Objects": [{"Key": key} for key in batch], "Quiet": True}
 
             try:
                 response = self.s3_client.delete_objects(
-                    Bucket=S3_BUCKET_OUTPUTS,
-                    Delete=delete_objects
+                    Bucket=S3_BUCKET_OUTPUTS, Delete=delete_objects
                 )
 
-                batch_deleted = len(response.get('Deleted', []))
+                batch_deleted = len(response.get("Deleted", []))
                 deleted_count += batch_deleted
 
-                errors = response.get('Errors', [])
+                errors = response.get("Errors", [])
                 for error in errors:
                     print(f"    ⚠️ Failed to delete {error['Key']}: {error['Message']}")
 
@@ -207,7 +204,9 @@ class JobCleanupService:
 
     async def cleanup_old_jobs(self, days_old: int, max_jobs: int = None):
         """Main cleanup routine"""
-        print(f"🧹 {'DRY RUN: ' if self.dry_run else ''}Cleaning up jobs older than {days_old} days...")
+        print(
+            f"🧹 {'DRY RUN: ' if self.dry_run else ''}Cleaning up jobs older than {days_old} days..."
+        )
 
         # Get old jobs
         old_jobs = await self.get_old_jobs(days_old)
@@ -224,8 +223,11 @@ class JobCleanupService:
             print(f"  📊 Found {len(old_jobs)} old jobs to clean up")
 
         # Calculate statistics
-        total_size = sum(job.get('output_size_bytes', 0) for job in old_jobs)
-        total_credits = sum(job.get('credits_charged', 0) - job.get('credits_refunded', 0) for job in old_jobs)
+        total_size = sum(job.get("output_size_bytes", 0) for job in old_jobs)
+        total_credits = sum(
+            job.get("credits_charged", 0) - job.get("credits_refunded", 0)
+            for job in old_jobs
+        )
 
         print(f"  💰 Total net credits: {total_credits}")
         print(f"  📦 Total storage size: {total_size / 1024 / 1024:.2f} MB")
@@ -233,35 +235,32 @@ class JobCleanupService:
         # Group by status for reporting
         by_status = {}
         for job in old_jobs:
-            status = job['status']
+            status = job["status"]
             by_status[status] = by_status.get(status, 0) + 1
 
         for status, count in by_status.items():
             print(f"  📈 {status}: {count} jobs")
 
-        job_ids = [job['id'] for job in old_jobs]
+        job_ids = [job["id"] for job in old_jobs]
 
         # Clean up in dependency order
-        stats = {
-            'jobs': len(old_jobs),
-            'events': 0,
-            'deliveries': 0,
-            's3_objects': 0
-        }
+        stats = {"jobs": len(old_jobs), "events": 0, "deliveries": 0, "s3_objects": 0}
 
-        print(f"\n{'🔍 Analyzing' if self.dry_run else '🗑️ Cleaning up'} associated data:")
+        print(
+            f"\n{'🔍 Analyzing' if self.dry_run else '🗑️ Cleaning up'} associated data:"
+        )
 
         # 1. Clean up job events
-        stats['events'] = await self.cleanup_job_events(job_ids)
+        stats["events"] = await self.cleanup_job_events(job_ids)
 
         # 2. Clean up webhook deliveries
-        stats['deliveries'] = await self.cleanup_webhook_deliveries(job_ids)
+        stats["deliveries"] = await self.cleanup_webhook_deliveries(job_ids)
 
         # 3. Clean up S3 objects
-        stats['s3_objects'] = await self.cleanup_s3_objects(old_jobs)
+        stats["s3_objects"] = await self.cleanup_s3_objects(old_jobs)
 
         # 4. Delete job records (this will cascade to remaining FK relationships)
-        stats['jobs'] = await self.delete_jobs(job_ids)
+        stats["jobs"] = await self.delete_jobs(job_ids)
 
         print(f"\n{'📋 Summary (DRY RUN)' if self.dry_run else '✅ Cleanup Summary'}:")
         print(f"  Jobs: {stats['jobs']}")
@@ -270,15 +269,24 @@ class JobCleanupService:
         print(f"  S3 objects: {stats['s3_objects']}")
         print(f"  Storage freed: {total_size / 1024 / 1024:.2f} MB")
 
+
 async def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description='Clean up old Framecast job data')
-    parser.add_argument('--days', type=int, default=30,
-                      help='Delete jobs older than this many days (default: 30)')
-    parser.add_argument('--max-jobs', type=int,
-                      help='Maximum number of jobs to process in one run')
-    parser.add_argument('--dry-run', action='store_true',
-                      help='Show what would be deleted without actually deleting')
+    parser = argparse.ArgumentParser(description="Clean up old Framecast job data")
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=30,
+        help="Delete jobs older than this many days (default: 30)",
+    )
+    parser.add_argument(
+        "--max-jobs", type=int, help="Maximum number of jobs to process in one run"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be deleted without actually deleting",
+    )
 
     args = parser.parse_args()
 
@@ -294,5 +302,6 @@ async def main():
     finally:
         await cleanup_service.disconnect()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())

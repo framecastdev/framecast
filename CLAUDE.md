@@ -10,6 +10,7 @@ Storyboard-to-video generation API. Converts YAML/JSON specs → videos via Comf
 These rules are NON-NEGOTIABLE. Violations require immediate correction.
 
 ### Rule 1: Just is the ONLY Entry Point
+
 **YOU MUST** use Just targets for ALL tasks. NEVER run commands directly.
 
 ```bash
@@ -28,22 +29,27 @@ uv run pytest        # WRONG
 If a Just target doesn't exist: **CREATE IT FIRST**, then run `just <task>`.
 
 ### Rule 2: Tests Before Code
+
 **YOU MUST** brainstorm test cases BEFORE writing implementation code.
 Cover: happy path, edge cases, error conditions, invariants.
 
 ### Rule 3: No .unwrap() in Production
+
 **NEVER** use `.unwrap()` or `.expect()` in production Rust code.
 Use `?` operator or proper error handling.
 
 ### Rule 4: Config via Environment Only
+
 **NEVER** hardcode credentials, URLs, or configuration.
 All config comes from environment variables.
 
 ### Rule 5: Stateless Processes
+
 **NEVER** store state in memory between requests.
 All persistent data goes to database or S3.
 
 ### Rule 6: Leverage Third-Party Libraries First
+
 **YOU MUST** leverage third-party libraries before implementing custom solutions. NEVER reinvent the wheel.
 
 ```rust
@@ -58,6 +64,7 @@ fn parse_json_manually(input: &str) -> Result<MyJson, Error> { ... }
 Only implement custom solutions if you cannot find a third-party library that properly addresses the problem.
 
 ### Rule 7: Assess Library Quality
+
 **YOU MUST** assess third-party library quality before adoption. Check:
 
 - GitHub stars (>500 preferred)
@@ -67,6 +74,7 @@ Only implement custom solutions if you cannot find a third-party library that pr
 - Community adoption and ecosystem fit
 
 ### Rule 8: Follow Industry Best Practices
+
 **YOU MUST** follow Rust and general software engineering industry standard best practices:
 
 - SOLID principles
@@ -77,6 +85,7 @@ Only implement custom solutions if you cannot find a third-party library that pr
 - Security best practices (OWASP guidelines)
 
 ### Rule 9: Break Problems into Phases
+
 **YOU MUST** break problems into phases, tasks, and branches:
 
 ```bash
@@ -93,6 +102,7 @@ Phase: Job Management System
 - Branch: Git branch per task/fix
 
 ### Rule 10: Feature Branch Workflow
+
 **YOU MUST** always work on feature/fix branches. NEVER commit directly to main.
 
 ```bash
@@ -110,6 +120,7 @@ git commit -m "some changes"
 ```
 
 **Workflow:**
+
 1. Create feature/fix branch
 2. Implement/fix
 3. Test thoroughly (`just test`, `just check`)
@@ -118,7 +129,9 @@ git commit -m "some changes"
 6. Merge to main via PR (when ready for deployment)
 
 ### Compliance Check
+
 Before executing ANY command, ask yourself:
+
 - Is there a Just target for this? → Use it
 - Am I about to run cargo/npm/pytest directly? → STOP, use Just
 - Does the Just target exist? → If not, create it first
@@ -141,12 +154,14 @@ Before executing ANY command, ask yourself:
 
 This project has a complete formal specification (see `docs/spec/` directory) and comprehensive development guidelines, but the code infrastructure is not yet established.
 
-### Before You Start:
+### Before You Start
+
 - [ ] Run project scaffold creation (see Setup Checklist)
 - [ ] Verify all build tools are available
 - [ ] Set up local environment configuration
 
-### Quick Check:
+### Quick Check
+
 ```bash
 # These commands should work after setup:
 just setup        # Install dependencies
@@ -176,18 +191,21 @@ just build        # Build release artifacts
 Since this is a greenfield project, you'll need to create the core infrastructure:
 
 ### Phase 1: Core Build Infrastructure
+
 - [ ] Create `Justfile` with all referenced commands
 - [ ] Create root `Cargo.toml` workspace configuration
 - [ ] Create `crates/` directory with individual crates
 - [ ] Create `.env.example` configuration template
 
 ### Phase 2: Testing & Infrastructure
+
 - [ ] Create `tests/e2e/` with `pyproject.toml` for Python tests
 - [ ] Create `migrations/` directory for database schema
 - [ ] Create `infra/opentofu/` for infrastructure as code
 - [ ] Create `scripts/` for admin tasks
 
 ### Phase 3: Development Environment
+
 - [ ] Verify `just setup` installs all dependencies
 - [ ] Verify `just dev` starts local services
 - [ ] Verify `just test` runs all test suites
@@ -228,6 +246,7 @@ All dependencies explicitly declared. Never rely on system-wide packages.
 | OpenTofu | `versions.tf` | `.terraform.lock.hcl` ✓ committed |
 
 **Dependency Rules:**
+
 - Lockfiles MUST be committed (reproducible builds)
 - Prefer popular, well-maintained libraries (>500 GitHub stars)
 - Before adopting: check last release date, maintainer activity, CVEs
@@ -246,6 +265,7 @@ DATABASE_URL="postgres://localhost:5432/framecast"
 ```
 
 **Config Categories:**
+
 ```bash
 # Backing Services (credentials/URLs)
 DATABASE_URL=               # Supabase PostgreSQL
@@ -308,6 +328,7 @@ Three distinct stages. Never mix them.
 ```
 
 **Rules:**
+
 - Build: `just build` creates immutable artifacts (Lambda ZIP, Docker images)
 - Release: Artifact + config = deployable unit with unique ID (git SHA)
 - Run: Execute in target environment
@@ -330,6 +351,7 @@ static CACHE: Mutex<HashMap<String, Data>> = ...;  // Lost on restart
 ```
 
 **Rules:**
+
 - Lambda functions are inherently stateless — embrace this
 - Session data → Supabase
 - File uploads → S3 (never local filesystem)
@@ -371,6 +393,7 @@ Scale horizontally by running more processes, not bigger machines.
 ```
 
 **Rules:**
+
 - Lambda scales automatically (concurrency limit in config)
 - RunPod workers scale via endpoint replicas
 - Database connections pooled (PgBouncer via Supabase)
@@ -381,11 +404,13 @@ Scale horizontally by running more processes, not bigger machines.
 Processes start fast and shut down gracefully.
 
 **Startup:**
+
 - Lambda cold start < 500ms (Rust helps here)
 - No heavy initialization in handler path
 - Lazy-load expensive resources
 
 **Shutdown:**
+
 - Handle SIGTERM gracefully
 - Finish in-flight requests
 - Release database connections
@@ -395,7 +420,7 @@ Processes start fast and shut down gracefully.
 // Graceful shutdown pattern
 async fn main() {
     let shutdown = signal::ctrl_c();
-    
+
     tokio::select! {
         _ = server.serve() => {},
         _ = shutdown => {
@@ -417,6 +442,7 @@ Minimize gaps between development and production.
 | Tools | SQLite dev, Postgres prod | Postgres everywhere |
 
 **Our Parity:**
+
 - LocalStack mimics AWS S3 locally
 - Same PostgreSQL (Supabase) in dev and prod
 - Same Inngest for job orchestration
@@ -424,6 +450,7 @@ Minimize gaps between development and production.
 - `just dev` starts production-equivalent stack
 
 **Rules:**
+
 - **Never** use SQLite for dev if prod is Postgres
 - **Never** mock S3 with filesystem
 - `just dev` == prod (minus scale)
@@ -445,6 +472,7 @@ let mut file = File::create("/var/log/app.log")?;
 ```
 
 **Rules:**
+
 - All logs to stdout/stderr (Lambda captures automatically)
 - Structured JSON format (machine-parseable)
 - Include correlation IDs (request_id, job_id)
@@ -467,6 +495,7 @@ psql -c "UPDATE users SET tier='creator'..."
 ```
 
 **Rules:**
+
 - Admin scripts live in repo (same codebase)
 - Run with same config as app processes
 - Migrations are versioned and reversible
@@ -488,6 +517,7 @@ just <task>     # Always the entry point
 ### P2: Tests Before Code
 
 Brainstorm test cases BEFORE implementation. Cover:
+
 - Happy path
 - Edge cases (boundaries, empty, max)
 - Error conditions
@@ -575,6 +605,7 @@ framecast/
 ## Local Development Quick Start
 
 ### First Time Setup
+
 ```bash
 # 1. Install required tools
 just setup                    # Installs Rust, uv, OpenTofu, LocalStack
@@ -588,6 +619,7 @@ just dev                     # LocalStack, Inngest, mock services
 ```
 
 ### Development Workflow
+
 ```bash
 # Start development session
 just dev                     # Terminal 1: Services
@@ -601,6 +633,7 @@ git add . && git commit -m "feat: your change"
 ```
 
 ### Common Commands
+
 - `just test-e2e-mocked` - Fast E2E tests (CI-friendly)
 - `just test-e2e-real` - Full E2E tests with real RunPod
 - `just migrate` - Apply database migrations
@@ -615,12 +648,16 @@ git add . && git commit -m "feat: your change"
 During development, you have access to reference experimental projects with **proven solutions** and working code patterns. These contain valuable implementations that have been tested and can guide you through difficult problems.
 
 ### Access Information
+
 **Location:** Ubuntu host via SSH
+
 - `~/workspace/splice-experimental-1`
 - `~/workspace/splice-experimental-2`
 
 ### When to Use Reference Projects
+
 **YOU SHOULD** consult these projects whenever you encounter:
+
 - Implementation blockers or technical challenges
 - Unclear patterns for Rust + Lambda integration
 - Database schema or migration questions
@@ -632,6 +669,7 @@ During development, you have access to reference experimental projects with **pr
 - Error handling strategies
 
 ### Reference Project Workflow
+
 1. **Before implementing complex features**: Check if similar functionality exists
 2. **When stuck on technical problems**: Look for proven solutions
 3. **When designing patterns**: Review existing approaches that worked
@@ -646,6 +684,7 @@ find . -name "*.rs" | xargs grep -l "job.*process"
 ```
 
 ### Important Notes
+
 - These are **experimental projects** — extract patterns, not entire implementations
 - Always adapt code to match current project structure and rules
 - Verify any copied patterns follow the 10 Critical Rules
@@ -661,6 +700,7 @@ find . -name "*.rs" | xargs grep -l "job.*process"
 The `docs/spec/` directory contains the formal API specification (v0.0.1-SNAPSHOT). Key files for implementation:
 
 ### Core Reference Files
+
 - `docs/spec/00_Index.md` - Specification overview and changelog
 - `docs/spec/04_Entities.md` - Database entities, field definitions
 - `docs/spec/05_Relationships_States.md` - State machines, entity relationships
@@ -669,13 +709,16 @@ The `docs/spec/` directory contains the formal API specification (v0.0.1-SNAPSHO
 - `docs/spec/08_Permissions.md` - Role-based access control matrix
 
 ### Implementation Guidance
+
 - Read `04_Entities.md` before creating any database schema
 - Check `06_Invariants.md` for all validation rules
 - Reference `07_Operations.md` for endpoint requirements
 - Use `08_Permissions.md` for authorization logic
 
 ### Spec Versioning
+
 Current version: v0.0.1-SNAPSHOT (2025-01-30)
+
 - Breaking changes require version bump
 - Implementation must match spec version exactly
 
@@ -686,6 +729,7 @@ Current version: v0.0.1-SNAPSHOT (2025-01-30)
 **User Tiers**: Visitor → Starter → Creator
 
 **URN Ownership**:
+
 - `framecast:user:usr_X` - Personal (Starter or Creator)
 - `framecast:team:tm_X` - Team-shared (Creator only)
 - `framecast:tm_X:usr_Y` - User's work within team (Creator only)
@@ -732,11 +776,13 @@ docs: update API spec for v0.0.1-SNAPSHOT
 ## When Implementing Features
 
 ### Prerequisites
+
 1. Ensure all setup checklist items are completed
 2. Read relevant spec files (located in `docs/spec/` directory)
 3. Load appropriate Claude skills (see Skills section)
 
 ### Implementation Workflow
+
 1. **Plan & Research**
    - Read spec files: `docs/spec/04_Entities.md`, `docs/spec/06_Invariants.md`, `docs/spec/07_Operations.md`
    - Review similar implementations in existing crates
@@ -776,8 +822,10 @@ The `.claude/skills/` directory contains domain expertise modules. Use the Skill
 | `runpod-infra` | Infrastructure work | Docker images, model downloads, GPU workload management |
 | `observability` | Logging, debugging | Structured logging, metrics, health checks |
 
-### Usage Example:
+### Usage Example
+
 When implementing a new API endpoint:
+
 1. Use `api-spec` skill to understand operation requirements
 2. Use `rust-patterns` skill for handler implementation
 3. Use `python-e2e` skill to create comprehensive tests
@@ -788,6 +836,7 @@ When implementing a new API endpoint:
 ## Spec Reference
 
 Key files (attached to project):
+
 - `04_Entities.md` - Entity definitions
 - `05_Relationships_States.md` - State machines
 - `06_Invariants.md` - Business rules

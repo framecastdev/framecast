@@ -41,6 +41,7 @@ Starter ∩ Creator = ∅
 ### 2.3 Transition Definitions
 
 #### T1: Signup
+
 ```
 T1: Visitor → Starter
 
@@ -55,6 +56,7 @@ action:     CREATE User {
 ```
 
 #### T2: Self-Upgrade
+
 ```
 T2: Starter → Creator
 
@@ -84,6 +86,7 @@ action:     BEGIN TRANSACTION
 ```
 
 #### T3: Invite Accept (New User)
+
 ```
 T3: Visitor → Creator
 
@@ -130,6 +133,7 @@ action:     BEGIN TRANSACTION
 ```
 
 #### T4: Invite Accept (Starter User)
+
 ```
 T4: Starter → Creator
 
@@ -170,6 +174,7 @@ action:     BEGIN TRANSACTION
 ```
 
 #### T5: Invite Accept (Creator User)
+
 ```
 T5: Creator → Creator
 

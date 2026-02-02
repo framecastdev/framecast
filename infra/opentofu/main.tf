@@ -175,7 +175,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "outputs" {
     status = "Enabled"
 
     expiration {
-      days = 90  # Keep outputs for 90 days
+      days = 90 # Keep outputs for 90 days
     }
 
     noncurrent_version_expiration {
@@ -213,7 +213,7 @@ resource "aws_s3_bucket_cors_configuration" "assets" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
-    allowed_origins = ["*"]  # Configure for your domain in production
+    allowed_origins = ["*"] # Configure for your domain in production
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }
@@ -276,8 +276,8 @@ resource "aws_db_instance" "main" {
 
   # Backup configuration
   backup_retention_period = var.environment == "prod" ? 30 : 7
-  backup_window          = "03:00-04:00"
-  maintenance_window     = "sun:04:00-sun:05:00"
+  backup_window           = "03:00-04:00"
+  maintenance_window      = "sun:04:00-sun:05:00"
 
   # Monitoring
   monitoring_interval = var.environment == "prod" ? 60 : 0
@@ -342,10 +342,10 @@ resource "aws_security_group" "rds" {
   description = "Security group for RDS database"
 
   ingress {
-    description = "PostgreSQL from Lambda"
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
+    description     = "PostgreSQL from Lambda"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
     security_groups = [aws_security_group.lambda.id]
   }
 

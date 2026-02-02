@@ -5,6 +5,7 @@ This directory contains operational scripts for the Framecast API following 12-F
 ## Scripts Overview
 
 ### `seed.py` - Database Seeding
+
 Seeds the database with test data for development.
 
 ```bash
@@ -14,6 +15,7 @@ python scripts/seed.py --clear  # Clear existing test data first
 ```
 
 **Creates:**
+
 - Test users (starter and creator tiers)
 - Teams with proper memberships
 - Sample projects and jobs
@@ -21,6 +23,7 @@ python scripts/seed.py --clear  # Clear existing test data first
 - System assets (music, SFX, transitions)
 
 ### `cleanup_jobs.py` - Job Cleanup
+
 Removes old job records and associated files based on retention policies.
 
 ```bash
@@ -31,6 +34,7 @@ python scripts/cleanup_jobs.py --days 90 --max-jobs 1000
 ```
 
 **Features:**
+
 - Configurable retention period (minimum 7 days)
 - Dry-run mode for safety
 - S3 object cleanup
@@ -38,6 +42,7 @@ python scripts/cleanup_jobs.py --days 90 --max-jobs 1000
 - Comprehensive statistics
 
 ### `export_user_data.py` - GDPR Data Export
+
 Exports all user data in structured JSON format for GDPR compliance.
 
 ```bash
@@ -48,6 +53,7 @@ python scripts/export_user_data.py usr_12345  # By user ID
 ```
 
 **Exports:**
+
 - User profile and settings
 - Team memberships and ownership
 - Projects, jobs, and assets
@@ -55,6 +61,7 @@ python scripts/export_user_data.py usr_12345  # By user ID
 - Invitation history
 
 ### `generate_api_key.py` - API Key Generation
+
 Creates new API keys for admin use with proper URN validation.
 
 ```bash
@@ -66,12 +73,14 @@ python scripts/generate_api_key.py --list-teams --user alice@test.framecast.dev
 ```
 
 **Features:**
+
 - URN-based ownership validation
 - Team key generation for creator users
 - Configurable scopes and expiration
 - Secure key generation with proper hashing
 
 ### `health_check.py` - Service Health Monitoring
+
 Checks the health of all backing services.
 
 ```bash
@@ -82,6 +91,7 @@ python scripts/health_check.py --exit-code  # For monitoring scripts
 ```
 
 **Checks:**
+
 - PostgreSQL database connectivity and migrations
 - LocalStack S3 buckets and access
 - Inngest service health
@@ -90,12 +100,14 @@ python scripts/health_check.py --exit-code  # For monitoring scripts
 ## Dependencies
 
 All scripts require:
+
 - Python 3.8+
 - `asyncpg` - PostgreSQL async driver
 - `aiohttp` - HTTP client for service checks
 - `boto3` - AWS SDK for S3 operations
 
 Install with:
+
 ```bash
 pip install asyncpg aiohttp boto3
 # or use uv (recommended):
@@ -123,6 +135,7 @@ INNGEST_ENDPOINT=http://localhost:8288
 ## Usage Patterns
 
 ### Development Workflow
+
 ```bash
 # Start environment
 just dev
@@ -138,6 +151,7 @@ just test-e2e-mocked
 ```
 
 ### Maintenance Tasks
+
 ```bash
 # Weekly cleanup (dry-run first)
 python scripts/cleanup_jobs.py --days 30 --dry-run
@@ -151,6 +165,7 @@ python scripts/generate_api_key.py "Production API" --user admin@framecast.com -
 ```
 
 ### Monitoring
+
 ```bash
 # Basic health check
 just health-check
@@ -169,6 +184,7 @@ python scripts/health_check.py --json --exit-code
 ## Error Handling
 
 All scripts include comprehensive error handling:
+
 - Database connection failures
 - Service unavailability
 - Invalid parameters

@@ -8,6 +8,7 @@ description: Logging, metrics, tracing, and debug endpoints. Use when implementi
 ## Philosophy
 
 When something goes wrong, we must be able to:
+
 1. **Trace** the exact path through all services
 2. **Inspect** state at any point in time
 3. **Understand** why something failed without guessing
@@ -53,18 +54,18 @@ use tracing::{info, instrument, Span};
 )]
 pub async fn cancel_job(ctx: &AppContext, user: &User, job_id: Uuid) -> Result<Job> {
     info!("Attempting to cancel job");
-    
+
     let job = ctx.job_repo.find(job_id).await?;
     Span::current().record("job_status", &job.status.as_str());
-    
+
     if job.is_terminal() {
         info!(current_status = %job.status, "Job already terminal");
         return Err(JobError::AlreadyTerminal(job.status));
     }
-    
+
     let canceled = ctx.job_service.cancel(job).await?;
     info!(credits_refunded = canceled.credits_refunded, "Job canceled");
-    
+
     Ok(canceled)
 }
 ```
@@ -109,9 +110,9 @@ pub async fn ready(State(ctx): State<AppContext>) -> Result<impl IntoResponse> {
         ctx.inngest.ping(),
         ctx.s3.head_bucket(),
     );
-    
+
     let all_ok = db.is_ok() && inngest.is_ok() && s3.is_ok();
-    
+
     Ok(Json(json!({
         "status": if all_ok { "ok" } else { "degraded" },
         "checks": {

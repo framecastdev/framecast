@@ -22,6 +22,7 @@ OpenTofu configuration for AWS infrastructure following 12-Factor principles.
 Environment-specific variables are in `environments/` directory.
 
 Sensitive variables (API keys, passwords) should be set via:
+
 - Environment variables (local development)
 - CI/CD secrets (production deployments)
 - AWS Systems Manager Parameter Store
@@ -98,11 +99,13 @@ The configuration supports two database options:
 ### Option 1: Supabase (Recommended)
 
 Set these variables:
+
 - `supabase_url`
 - `supabase_anon_key`
 - `supabase_service_role_key`
 
 Benefits:
+
 - Managed service with built-in auth
 - Real-time subscriptions
 - Automatic backups
@@ -113,6 +116,7 @@ Benefits:
 If Supabase variables are not set, RDS will be provisioned automatically.
 
 Benefits:
+
 - Full control over database
 - VPC isolation
 - Custom backup schedules
@@ -129,6 +133,7 @@ Benefits:
 ## Monitoring
 
 Production environment includes:
+
 - CloudWatch alarms for Lambda errors
 - CloudWatch alarms for API Gateway 5xx errors
 - Enhanced RDS monitoring

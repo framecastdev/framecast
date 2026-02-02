@@ -117,35 +117,40 @@ partial charges for cancellations, and no refunds for completed jobs.
 ### Detailed Rules
 
 **System Errors (failure_type = 'system'):**
-  - Infrastructure failures, service outages, internal errors
-  - User is not at fault
-  - Full refund: 100% of credits_charged returned
-  - Example: GPU crashed, storage unavailable, rendering service down
+
+- Infrastructure failures, service outages, internal errors
+- User is not at fault
+- Full refund: 100% of credits_charged returned
+- Example: GPU crashed, storage unavailable, rendering service down
 
 **Timeout (failure_type = 'timeout'):**
-  - Job exceeded maximum processing time
-  - Usually indicates system issue (not user's spec)
-  - Full refund: 100% of credits_charged returned
-  - Max processing time: 30 minutes per job (configurable)
+
+- Job exceeded maximum processing time
+- Usually indicates system issue (not user's spec)
+- Full refund: 100% of credits_charged returned
+- Max processing time: 30 minutes per job (configurable)
 
 **Validation Errors (failure_type = 'validation'):**
-  - Spec issues detected during generation (not caught in pre-validation)
-  - Examples: Asset became unavailable, reference integrity broken mid-job
-  - Partial refund based on progress
-  - Formula: refund = charged × (1 - progress%)
-  - Example: Job failed at 40% → 60% refund
+
+- Spec issues detected during generation (not caught in pre-validation)
+- Examples: Asset became unavailable, reference integrity broken mid-job
+- Partial refund based on progress
+- Formula: refund = charged × (1 - progress%)
+- Example: Job failed at 40% → 60% refund
 
 **User Cancellation (failure_type = 'canceled'):**
-  - User explicitly canceled the job
-  - Partial refund based on progress, minus 10% cancellation fee
-  - Formula: refund = charged × (1 - progress%) × 0.9
-  - Example: Canceled at 30% → 63% refund (70% × 0.9)
-  - Minimum charge: 10% of estimated (cancellation fee)
+
+- User explicitly canceled the job
+- Partial refund based on progress, minus 10% cancellation fee
+- Formula: refund = charged × (1 - progress%) × 0.9
+- Example: Canceled at 30% → 63% refund (70% × 0.9)
+- Minimum charge: 10% of estimated (cancellation fee)
 
 **Completed Jobs:**
-  - No refunds for completed jobs regardless of output quality
-  - User received the generated video
-  - Quality disputes handled via support (manual review)
+
+- No refunds for completed jobs regardless of output quality
+- User received the generated video
+- Quality disputes handled via support (manual review)
 
 ### Refund Processing
 

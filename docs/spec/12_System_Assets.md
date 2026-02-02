@@ -22,12 +22,14 @@ asset_{category}_{name}
 ```
 
 **Examples:**
+
 - `asset_sfx_whoosh`
 - `asset_ambient_crowd`
 - `asset_music_triumphant`
 - `asset_transition_fade`
 
 This is the canonical identifier used in:
+
 - The `SystemAsset.id` field (primary key)
 - Spec `asset_id` references (e.g., `AudioRef.asset_id`)
 - API responses
@@ -41,10 +43,12 @@ framecast:system:{category}:{asset_name}
 ```
 
 **Examples:**
+
 - `framecast:system:sfx:whoosh` â†’ resolves to `asset_sfx_whoosh`
 - `framecast:system:ambient:crowd` â†’ resolves to `asset_ambient_crowd`
 
 **Conversion Rules:**
+
 ```
 URN to ID:  framecast:system:{cat}:{name} â†’ asset_{cat}_{name}
 ID to URN:  asset_{cat}_{name} â†’ framecast:system:{cat}:{name}

@@ -4,21 +4,23 @@ User data export script for GDPR compliance
 Exports all user data in a structured JSON format
 """
 
+import argparse
 import asyncio
-import asyncpg
 import json
 import os
 import sys
 from datetime import datetime
-from typing import Dict, Any, List
-import argparse
+from typing import Any, Dict
+
+import asyncpg
 
 # Environment configuration
-DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
     print("❌ DATABASE_URL environment variable is required")
     sys.exit(1)
+
 
 class UserDataExporter:
     def __init__(self, database_url: str):
@@ -45,6 +47,7 @@ class UserDataExporter:
         # Try by UUID first
         try:
             import uuid
+
             uuid.UUID(identifier)
             query = "SELECT * FROM users WHERE id = $1"
             user = await self.conn.fetchrow(query, identifier)
@@ -62,98 +65,120 @@ class UserDataExporter:
     async def export_user_data(self, user_id: str) -> Dict[str, Any]:
         """Export all data for a user"""
         user_data = {
-            'export_timestamp': datetime.utcnow().isoformat(),
-            'user_id': user_id,
-            'user': None,
-            'teams_owned': [],
-            'teams_member': [],
-            'projects_created': [],
-            'jobs_triggered': [],
-            'api_keys': [],
-            'asset_files_uploaded': [],
-            'invitations_sent': [],
-            'invitations_received': []
+            "export_timestamp": datetime.utcnow().isoformat(),
+            "user_id": user_id,
+            "user": None,
+            "teams_owned": [],
+            "teams_member": [],
+            "projects_created": [],
+            "jobs_triggered": [],
+            "api_keys": [],
+            "asset_files_uploaded": [],
+            "invitations_sent": [],
+            "invitations_received": [],
         }
 
         # Get user basic info
         user = await self.conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
         if user:
-            user_data['user'] = dict(user)
+            user_data["user"] = dict(user)
 
         # Get teams where user is owner
-        teams_owned = await self.conn.fetch("""
+        teams_owned = await self.conn.fetch(
+            """
             SELECT t.*, m.role, m.created_at as membership_created_at
             FROM teams t
             JOIN memberships m ON t.id = m.team_id
             WHERE m.user_id = $1 AND m.role = 'owner'
             ORDER BY t.created_at
-        """, user_id)
-        user_data['teams_owned'] = [dict(row) for row in teams_owned]
+        """,
+            user_id,
+        )
+        user_data["teams_owned"] = [dict(row) for row in teams_owned]
 
         # Get teams where user is member (non-owner)
-        teams_member = await self.conn.fetch("""
+        teams_member = await self.conn.fetch(
+            """
             SELECT t.*, m.role, m.created_at as membership_created_at
             FROM teams t
             JOIN memberships m ON t.id = m.team_id
             WHERE m.user_id = $1 AND m.role != 'owner'
             ORDER BY t.created_at
-        """, user_id)
-        user_data['teams_member'] = [dict(row) for row in teams_member]
+        """,
+            user_id,
+        )
+        user_data["teams_member"] = [dict(row) for row in teams_member]
 
         # Get projects created by user
-        projects = await self.conn.fetch("""
+        projects = await self.conn.fetch(
+            """
             SELECT p.*, t.name as team_name, t.slug as team_slug
             FROM projects p
             JOIN teams t ON p.team_id = t.id
             WHERE p.created_by = $1
             ORDER BY p.created_at
-        """, user_id)
-        user_data['projects_created'] = [dict(row) for row in projects]
+        """,
+            user_id,
+        )
+        user_data["projects_created"] = [dict(row) for row in projects]
 
         # Get jobs triggered by user
-        jobs = await self.conn.fetch("""
+        jobs = await self.conn.fetch(
+            """
             SELECT j.*, p.name as project_name
             FROM jobs j
             LEFT JOIN projects p ON j.project_id = p.id
             WHERE j.triggered_by = $1
             ORDER BY j.created_at DESC
-        """, user_id)
-        user_data['jobs_triggered'] = [dict(row) for row in jobs]
+        """,
+            user_id,
+        )
+        user_data["jobs_triggered"] = [dict(row) for row in jobs]
 
         # Get API keys owned by user
-        api_keys = await self.conn.fetch("""
+        api_keys = await self.conn.fetch(
+            """
             SELECT id, owner, name, key_prefix, scopes, last_used_at,
                    expires_at, revoked_at, created_at
             FROM api_keys
             WHERE user_id = $1
             ORDER BY created_at
-        """, user_id)
-        user_data['api_keys'] = [dict(row) for row in api_keys]
+        """,
+            user_id,
+        )
+        user_data["api_keys"] = [dict(row) for row in api_keys]
 
         # Get asset files uploaded by user
-        assets = await self.conn.fetch("""
+        assets = await self.conn.fetch(
+            """
             SELECT af.*, p.name as project_name
             FROM asset_files af
             LEFT JOIN projects p ON af.project_id = p.id
             WHERE af.uploaded_by = $1
             ORDER BY af.created_at
-        """, user_id)
-        user_data['asset_files_uploaded'] = [dict(row) for row in assets]
+        """,
+            user_id,
+        )
+        user_data["asset_files_uploaded"] = [dict(row) for row in assets]
 
         # Get invitations sent by user
-        invitations_sent = await self.conn.fetch("""
+        invitations_sent = await self.conn.fetch(
+            """
             SELECT i.*, t.name as team_name, t.slug as team_slug
             FROM invitations i
             JOIN teams t ON i.team_id = t.id
             WHERE i.invited_by = $1
             ORDER BY i.created_at
-        """, user_id)
-        user_data['invitations_sent'] = [dict(row) for row in invitations_sent]
+        """,
+            user_id,
+        )
+        user_data["invitations_sent"] = [dict(row) for row in invitations_sent]
 
         # Get invitations received by user (by email)
         if user:
-            user_email = user['email']
-            invitations_received = await self.conn.fetch("""
+            user_email = user["email"]
+            invitations_received = await self.conn.fetch(
+                """
                 SELECT i.*, t.name as team_name, t.slug as team_slug,
                        u.name as invited_by_name, u.email as invited_by_email
                 FROM invitations i
@@ -161,8 +186,12 @@ class UserDataExporter:
                 JOIN users u ON i.invited_by = u.id
                 WHERE i.email = $1
                 ORDER BY i.created_at
-            """, user_email)
-            user_data['invitations_received'] = [dict(row) for row in invitations_received]
+            """,
+                user_email,
+            )
+            user_data["invitations_received"] = [
+                dict(row) for row in invitations_received
+            ]
 
         return user_data
 
@@ -172,8 +201,8 @@ class UserDataExporter:
 
         # Get user and validate
         user = await self.get_user_by_id_or_email(user_identifier)
-        user_id = user['id']
-        user_email = user['email']
+        user_id = user["id"]
+        user_email = user["email"]
 
         print(f"✅ Found user: {user['name']} ({user_email})")
 
@@ -182,12 +211,12 @@ class UserDataExporter:
 
         # Determine output file
         if not output_file:
-            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-            safe_email = user_email.replace('@', '_at_').replace('.', '_')
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            safe_email = user_email.replace("@", "_at_").replace(".", "_")
             output_file = f"user_export_{safe_email}_{timestamp}.json"
 
         # Write to file
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             json.dump(user_data, f, indent=2, default=str)
 
         print(f"✅ User data exported to: {output_file}")
@@ -205,11 +234,12 @@ class UserDataExporter:
 
         return output_file
 
+
 async def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description='Export user data for GDPR compliance')
-    parser.add_argument('user', help='User ID (UUID) or email address')
-    parser.add_argument('--output', '-o', help='Output file path (optional)')
+    parser = argparse.ArgumentParser(description="Export user data for GDPR compliance")
+    parser.add_argument("user", help="User ID (UUID) or email address")
+    parser.add_argument("--output", "-o", help="Output file path (optional)")
 
     args = parser.parse_args()
 
@@ -221,5 +251,6 @@ async def main():
     finally:
         await exporter.disconnect()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())

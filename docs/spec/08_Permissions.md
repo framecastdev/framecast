@@ -38,6 +38,7 @@
 | `GET /v1/status` | ✓ | ✓ |
 
 **v4.1 Additions:**
+
 - `POST /v1/teams`: Creators can create new teams
 - `POST /v1/jobs/:id/clone`: Starters can clone own jobs; Creators can clone accessible jobs
 
@@ -118,6 +119,7 @@ Scope: * (wildcard)
 ```
 
 **v4.1 Updates:**
+
 - `jobs:write` now includes `POST /v1/jobs/:id/clone` in addition to existing operations
 - `team:admin` scope expanded to include `POST /v1/teams` (team creation)
 
@@ -131,6 +133,7 @@ Scope: * (wildcard)
 | Creator | All scopes |
 
 **Notes:**
+
 - Starters cannot create API keys with `team:read` or `team:admin` scopes
 - Creators can create API keys with any scope (subject to membership role permissions)
 - The `jobs:write` scope now includes job cloning operations for both tiers (with tier-specific access constraints)

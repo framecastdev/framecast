@@ -102,29 +102,29 @@ resource "aws_iam_role_policy" "lambda_custom" {
 resource "aws_lambda_function" "api" {
   filename         = "../../target/lambda/api/bootstrap.zip"
   function_name    = "${local.name_prefix}-api"
-  role            = aws_iam_role.lambda_execution.arn
-  handler         = "bootstrap"
-  runtime         = local.lambda_runtime
-  timeout         = local.lambda_timeout
-  memory_size     = local.lambda_memory
+  role             = aws_iam_role.lambda_execution.arn
+  handler          = "bootstrap"
+  runtime          = local.lambda_runtime
+  timeout          = local.lambda_timeout
+  memory_size      = local.lambda_memory
   source_code_hash = fileexists("../../target/lambda/api/bootstrap.zip") ? filebase64sha256("../../target/lambda/api/bootstrap.zip") : null
 
   environment {
     variables = {
       ENVIRONMENT               = var.environment
-      RUST_LOG                 = var.environment == "prod" ? "info" : "debug"
-      AWS_REGION               = data.aws_region.current.name
-      S3_BUCKET_OUTPUTS        = aws_s3_bucket.outputs.id
-      S3_BUCKET_ASSETS         = aws_s3_bucket.assets.id
-      DATABASE_URL             = local.use_rds ? "postgresql://postgres:${random_password.db_password[0].result}@${aws_db_instance.main[0].endpoint}:5432/framecast" : var.supabase_url
-      SUPABASE_URL             = var.supabase_url
-      SUPABASE_ANON_KEY        = var.supabase_anon_key
+      RUST_LOG                  = var.environment == "prod" ? "info" : "debug"
+      AWS_REGION                = data.aws_region.current.name
+      S3_BUCKET_OUTPUTS         = aws_s3_bucket.outputs.id
+      S3_BUCKET_ASSETS          = aws_s3_bucket.assets.id
+      DATABASE_URL              = local.use_rds ? "postgresql://postgres:${random_password.db_password[0].result}@${aws_db_instance.main[0].endpoint}:5432/framecast" : var.supabase_url
+      SUPABASE_URL              = var.supabase_url
+      SUPABASE_ANON_KEY         = var.supabase_anon_key
       SUPABASE_SERVICE_ROLE_KEY = var.supabase_service_role_key
-      ANTHROPIC_API_KEY        = var.anthropic_api_key
-      INNGEST_EVENT_KEY        = var.inngest_event_key
-      INNGEST_SIGNING_KEY      = var.inngest_signing_key
-      RUNPOD_API_KEY           = var.runpod_api_key
-      RUNPOD_ENDPOINT_ID       = var.runpod_endpoint_id
+      ANTHROPIC_API_KEY         = var.anthropic_api_key
+      INNGEST_EVENT_KEY         = var.inngest_event_key
+      INNGEST_SIGNING_KEY       = var.inngest_signing_key
+      RUNPOD_API_KEY            = var.runpod_api_key
+      RUNPOD_ENDPOINT_ID        = var.runpod_endpoint_id
     }
   }
 
@@ -230,8 +230,8 @@ resource "aws_api_gateway_integration" "proxy" {
   http_method = aws_api_gateway_method.proxy.http_method
 
   integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.api.invoke_arn
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.api.invoke_arn
 }
 
 # Root method (for health checks)
@@ -249,8 +249,8 @@ resource "aws_api_gateway_integration" "root" {
   http_method = aws_api_gateway_method.root.http_method
 
   integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.api.invoke_arn
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.api.invoke_arn
 }
 
 # CORS configuration

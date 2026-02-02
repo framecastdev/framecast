@@ -121,6 +121,7 @@ Any dialogue speaker must be a defined symbol with a voice asset configured.
 ```
 
 All audio asset IDs must either reference a valid system asset (by ID) or a user-uploaded asset that is:
+
 - Audio content type
 - In 'ready' status
 
@@ -132,6 +133,7 @@ All audio asset IDs must either reference a valid system asset (by ID) or a user
 ```
 
 All image asset IDs must reference a user-uploaded asset that is:
+
 - Image content type
 - In 'ready' status
 

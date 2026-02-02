@@ -45,6 +45,7 @@ When the pending invitation limit is reached, additional invitations cannot be s
 | Max team memberships per user | 50 | Total teams user belongs to |
 
 **Notes:**
+
 - "Owned teams" counts teams where `user.role = 'owner'`
 - User can be member/admin/viewer of unlimited additional teams (up to membership limit)
 - Limits can be increased for enterprise accounts (out of scope for v1)
@@ -84,6 +85,7 @@ When a rate limit is exceeded, the API returns HTTP 429 (Too Many Requests):
 **HTTP Status:** 429 Too Many Requests
 
 **Response Headers:**
+
 - `X-RateLimit-Reset`: Timestamp when limit resets
 - `X-RateLimit-RetryAfter`: Seconds to wait before retry (also in response body)
 - `Retry-After`: Standard HTTP header with retry delay in seconds

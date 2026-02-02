@@ -10,13 +10,9 @@ Supports two modes:
 """
 
 import asyncio
-import json
-import os
 import tempfile
-from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
-from uuid import uuid4
+from typing import Any, AsyncGenerator, Dict, List
 
 import httpx
 import pytest
@@ -24,6 +20,7 @@ import respx
 from faker import Faker
 from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings
+
 
 # Test environment configuration
 class TestConfig(BaseSettings):
@@ -53,10 +50,7 @@ class TestConfig(BaseSettings):
     aws_region: str = "us-east-1"
     s3_endpoint_url: str = "http://localhost:4566"  # LocalStack
 
-    model_config = ConfigDict(
-        env_prefix="TEST_",
-        env_file=".env.test"
-    )
+    model_config = ConfigDict(env_prefix="TEST_", env_file=".env.test")
 
 
 # User personas for testing
@@ -83,11 +77,13 @@ class UserPersona(BaseModel):
             "aud": "authenticated",
             "role": "authenticated",
             "framecast_tier": self.tier,
-            "exp": 9999999999  # Far future expiry
+            "exp": 9999999999,  # Far future expiry
         }
 
         # Simple mock JWT (not cryptographically valid, for testing only)
-        header = base64.b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode()).decode()
+        header = base64.b64encode(
+            json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
+        ).decode()
         payload_encoded = base64.b64encode(json.dumps(payload).encode()).decode()
         signature = "mock-signature"
 
@@ -95,7 +91,7 @@ class UserPersona(BaseModel):
 
 
 # Standard user personas for testing
-@pytest.fixture
+@pytest.fixture()
 def visitor_user() -> UserPersona:
     """A visitor user (not authenticated)."""
     fake = Faker()
@@ -107,7 +103,7 @@ def visitor_user() -> UserPersona:
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def starter_user() -> UserPersona:
     """A starter tier user with some credits."""
     fake = Faker()
@@ -117,11 +113,11 @@ def starter_user() -> UserPersona:
         name=fake.name(),
         tier="starter",
         credits=1000,  # 10 dollars worth
-        api_keys=["ak_starter_test_key"]
+        api_keys=["ak_starter_test_key"],
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def creator_user() -> UserPersona:
     """A creator tier user with team memberships."""
     fake = Faker()
@@ -133,11 +129,11 @@ def creator_user() -> UserPersona:
         credits=5000,  # 50 dollars worth
         team_memberships=["tm_test_team_1"],
         owned_teams=["tm_test_team_owned"],
-        api_keys=["ak_creator_test_key"]
+        api_keys=["ak_creator_test_key"],
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def team_owner() -> UserPersona:
     """A creator user who owns multiple teams."""
     fake = Faker()
@@ -148,11 +144,11 @@ def team_owner() -> UserPersona:
         tier="creator",
         credits=10000,  # 100 dollars worth
         owned_teams=["tm_team_1", "tm_team_2"],
-        api_keys=["ak_team_owner_key"]
+        api_keys=["ak_team_owner_key"],
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def team_member() -> UserPersona:
     """A creator user who is a member of teams but doesn't own any."""
     fake = Faker()
@@ -163,7 +159,7 @@ def team_member() -> UserPersona:
         tier="creator",
         credits=2000,  # 20 dollars worth
         team_memberships=["tm_team_1", "tm_team_2"],
-        api_keys=["ak_team_member_key"]
+        api_keys=["ak_team_member_key"],
     )
 
 
@@ -183,31 +179,32 @@ def event_loop():
 
 
 # HTTP client for API testing
-@pytest.fixture
-async def http_client(test_config: TestConfig) -> AsyncGenerator[httpx.AsyncClient, None]:
+@pytest.fixture()
+async def http_client(
+    test_config: TestConfig,
+) -> AsyncGenerator[httpx.AsyncClient, None]:
     """HTTP client for making API requests."""
     async with httpx.AsyncClient(
         base_url=test_config.api_base_url,
         timeout=30.0,
-        headers={"User-Agent": "Framecast-E2E-Tests/0.0.1-SNAPSHOT"}
+        headers={"User-Agent": "Framecast-E2E-Tests/0.0.1-SNAPSHOT"},
     ) as client:
         yield client
 
 
-@pytest.fixture
+@pytest.fixture()
 async def authenticated_client(
-    http_client: httpx.AsyncClient,
-    starter_user: UserPersona
+    http_client: httpx.AsyncClient, starter_user: UserPersona
 ) -> httpx.AsyncClient:
     """HTTP client with starter user authentication."""
-    http_client.headers.update({
-        "Authorization": f"Bearer {starter_user.to_auth_token()}"
-    })
+    http_client.headers.update(
+        {"Authorization": f"Bearer {starter_user.to_auth_token()}"}
+    )
     return http_client
 
 
 # Mock service infrastructure
-@pytest.fixture
+@pytest.fixture()
 def mock_runpod(test_config: TestConfig):
     """Mock RunPod API for video generation testing."""
     if test_config.test_mode != "mocked":
@@ -216,18 +213,18 @@ def mock_runpod(test_config: TestConfig):
 
     with respx.mock:
         # Mock job submission
-        respx.post(f"https://api.runpod.ai/v2/{test_config.runpod_endpoint_id}/run").mock(
+        respx.post(
+            f"https://api.runpod.ai/v2/{test_config.runpod_endpoint_id}/run"
+        ).mock(
             return_value=httpx.Response(
-                200,
-                json={
-                    "id": "mock-job-id",
-                    "status": "IN_QUEUE"
-                }
+                200, json={"id": "mock-job-id", "status": "IN_QUEUE"}
             )
         )
 
         # Mock job status polling
-        respx.get(f"https://api.runpod.ai/v2/{test_config.runpod_endpoint_id}/status/mock-job-id").mock(
+        respx.get(
+            f"https://api.runpod.ai/v2/{test_config.runpod_endpoint_id}/status/mock-job-id"
+        ).mock(
             return_value=httpx.Response(
                 200,
                 json={
@@ -238,17 +235,17 @@ def mock_runpod(test_config: TestConfig):
                         "metadata": {
                             "duration": 30.5,
                             "resolution": "1920x1080",
-                            "format": "mp4"
-                        }
-                    }
-                }
+                            "format": "mp4",
+                        },
+                    },
+                },
             )
         )
 
         yield
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_anthropic(test_config: TestConfig):
     """Mock Anthropic Claude API for AI interactions."""
     if test_config.test_mode != "mocked":
@@ -266,23 +263,20 @@ def mock_anthropic(test_config: TestConfig):
                     "content": [
                         {
                             "type": "text",
-                            "text": "This is a mock response from Claude for testing purposes."
+                            "text": "This is a mock response from Claude for testing purposes.",
                         }
                     ],
                     "model": "claude-3-sonnet-20240229",
                     "stop_reason": "end_turn",
                     "stop_sequence": None,
-                    "usage": {
-                        "input_tokens": 10,
-                        "output_tokens": 15
-                    }
-                }
+                    "usage": {"input_tokens": 10, "output_tokens": 15},
+                },
             )
         )
         yield
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_inngest(test_config: TestConfig):
     """Mock Inngest event API for job orchestration."""
     if test_config.test_mode != "mocked":
@@ -296,7 +290,7 @@ def mock_inngest(test_config: TestConfig):
         yield
 
 
-@pytest.fixture
+@pytest.fixture()
 async def mock_s3(test_config: TestConfig):
     """Mock S3 operations using LocalStack."""
     if test_config.test_mode != "mocked":
@@ -308,36 +302,37 @@ async def mock_s3(test_config: TestConfig):
     with respx.mock:
         # Mock presigned URL generation
         respx.get(f"{test_config.s3_endpoint_url}/{test_config.s3_bucket_assets}").mock(
-            return_value=httpx.Response(200, json={"presigned_url": "https://mock-s3-url"})
+            return_value=httpx.Response(
+                200, json={"presigned_url": "https://mock-s3-url"}
+            )
         )
 
         # Mock file uploads
-        respx.put("https://mock-s3-url").mock(
-            return_value=httpx.Response(200)
-        )
+        respx.put("https://mock-s3-url").mock(return_value=httpx.Response(200))
 
         yield
 
 
 # Database utilities
-@pytest.fixture
+@pytest.fixture()
 async def clean_database(test_config: TestConfig):
     """Ensure clean database state for testing."""
     # This will be implemented when we have database layer
     # For now, it's a placeholder
-    yield
+    return
     # Cleanup after test
 
 
 # Temporary file management
-@pytest.fixture
+@pytest.fixture()
 def temp_asset_file():
     """Create a temporary test asset file."""
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
         # Create a simple test image
         from PIL import Image
-        img = Image.new('RGB', (100, 100), color='red')
-        img.save(f, format='JPEG')
+
+        img = Image.new("RGB", (100, 100), color="red")
+        img.save(f, format="JPEG")
         f.flush()
 
         yield Path(f.name)
@@ -357,27 +352,22 @@ class TestDataFactory:
 
         scenes = []
         for i in range(scene_count):
-            scenes.append({
-                "id": f"scene_{i}",
-                "prompt": fake.sentence(),
-                "duration": 5.0,
-                "assets": [],
-                "style": "cinematic"
-            })
+            scenes.append(
+                {
+                    "id": f"scene_{i}",
+                    "prompt": fake.sentence(),
+                    "duration": 5.0,
+                    "assets": [],
+                    "style": "cinematic",
+                }
+            )
 
         return {
             "title": fake.sentence(nb_words=3),
             "description": fake.text(),
             "scenes": scenes,
-            "settings": {
-                "resolution": "1920x1080",
-                "fps": 30,
-                "format": "mp4"
-            },
-            "metadata": {
-                "client_version": "e2e-tests",
-                "test_run": True
-            }
+            "settings": {"resolution": "1920x1080", "fps": 30, "format": "mp4"},
+            "metadata": {"client_version": "e2e-tests", "test_run": True},
         }
 
     @staticmethod
@@ -387,14 +377,11 @@ class TestDataFactory:
         return {
             "name": fake.company(),
             "description": fake.text(max_nb_chars=200),
-            "settings": {
-                "default_resolution": "1920x1080",
-                "webhook_url": fake.url()
-            }
+            "settings": {"default_resolution": "1920x1080", "webhook_url": fake.url()},
         }
 
 
-@pytest.fixture
+@pytest.fixture()
 def test_data_factory() -> TestDataFactory:
     """Factory for generating test data."""
     return TestDataFactory()
@@ -414,7 +401,7 @@ async def setup_test_environment(test_config: TestConfig):
 
     yield
 
-    print(f"\n🧹 Cleaning up test environment")
+    print("\n🧹 Cleaning up test environment")
 
 
 # Utility functions for tests
@@ -425,7 +412,9 @@ def assert_valid_urn(urn: str, expected_type: str = None) -> None:
     assert parts[0] == "framecast", f"URN must start with 'framecast': {urn}"
 
     if expected_type:
-        assert parts[1] == expected_type, f"Expected URN type {expected_type}, got {parts[1]}"
+        assert (
+            parts[1] == expected_type
+        ), f"Expected URN type {expected_type}, got {parts[1]}"
 
 
 def assert_job_status_valid(status: str) -> None:

@@ -8,6 +8,7 @@ description: Python E2E testing patterns. Use when writing, debugging, or unders
 ## Philosophy
 
 E2E tests verify the **entire system** from an external client perspective. Written in Python because:
+
 - Industry standard for test automation
 - Rich ecosystem (pytest, httpx, respx)
 - Faster iteration than compiled tests
@@ -108,18 +109,18 @@ class FramecastClient:
             headers={"Authorization": f"Bearer {token}"} if token else {},
             timeout=30.0,
         )
-    
+
     async def __aenter__(self) -> Self:
         return self
-    
+
     async def __aexit__(self, *args: object) -> None:
         await self._client.aclose()
-    
+
     async def create_job(self, spec: dict) -> Job:
         response = await self._client.post("/v1/generate", json={"spec": spec})
         response.raise_for_status()
         return Job.model_validate(response.json())
-    
+
     async def get_job(self, job_id: str) -> Job:
         response = await self._client.get(f"/v1/jobs/{job_id}")
         response.raise_for_status()
@@ -147,13 +148,13 @@ async def poll_until(
     description: str = "condition",
 ) -> T:
     deadline = asyncio.get_event_loop().time() + timeout.total_seconds()
-    
+
     while asyncio.get_event_loop().time() < deadline:
         result = await check()
         if result is not None:
             return result
         await asyncio.sleep(interval.total_seconds())
-    
+
     raise TimeoutError(f"Timeout waiting for {description}")
 ```
 
@@ -198,27 +199,27 @@ class TestVideoGeneration:
         self, client, mock_anthropic, mock_runpod, sample_spec
     ) -> None:
         mock_runpod.set_completion_delay(seconds=2)
-        
+
         job = await client.create_job(sample_spec)
         assert job.status == "queued"
-        
+
         completed = await poll_until(
             lambda: self._check_terminal(client, job.id),
             timeout=timedelta(seconds=30),
         )
         assert completed.status == "completed"
-    
+
     @pytest.mark.real_runpod
     @pytest.mark.timeout(300)
     async def test_generate_real(self, client, sample_spec) -> None:
         job = await client.create_job(sample_spec)
-        
+
         completed = await poll_until(
             lambda: self._check_terminal(client, job.id),
             timeout=timedelta(minutes=5),
         )
         assert completed.status == "completed"
-    
+
     async def _check_terminal(self, client, job_id):
         job = await client.get_job(job_id)
         return job if job.status in ("completed", "failed", "canceled") else None
@@ -227,12 +228,14 @@ class TestVideoGeneration:
 ## Two Test Modes
 
 ### Mocked (`just test-e2e-mocked`)
+
 - Uses `respx` to mock Anthropic/RunPod
 - Real LocalStack for S3
 - Local Inngest
 - Fast, deterministic, CI-friendly
 
 ### Real RunPod (`just test-e2e-real`)
+
 - Real RunPod execution
 - Requires Cloudflare Tunnel (`just tunnel`)
 - Slow, costs money

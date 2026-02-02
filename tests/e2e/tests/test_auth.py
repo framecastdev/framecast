@@ -13,17 +13,17 @@ This module establishes the E2E testing patterns for the entire application.
 """
 
 import pytest
-from httpx import AsyncClient
 from conftest import (
-    UserPersona,
     TestConfig,
-    assert_valid_urn,
-    assert_user_tier_valid,
+    UserPersona,
     assert_credits_non_negative,
+    assert_user_tier_valid,
+    assert_valid_urn,
 )
+from httpx import AsyncClient
 
 
-@pytest.mark.auth
+@pytest.mark.auth()
 class TestAccountRegistration:
     """US-001: Account registration with email verification."""
 
@@ -42,7 +42,9 @@ class TestAccountRegistration:
         }
 
         # Attempt registration
-        response = await http_client.post("/api/v1/auth/register", json=registration_data)
+        response = await http_client.post(
+            "/api/v1/auth/register", json=registration_data
+        )
 
         # Should return 201 Created for successful registration
         assert response.status_code == 201
@@ -80,7 +82,9 @@ class TestAccountRegistration:
             "terms_accepted": True,
         }
 
-        response = await http_client.post("/api/v1/auth/register", json=registration_data)
+        response = await http_client.post(
+            "/api/v1/auth/register", json=registration_data
+        )
 
         # Should return 409 Conflict
         assert response.status_code == 409
@@ -106,7 +110,9 @@ class TestAccountRegistration:
                 "terms_accepted": True,
             }
 
-            response = await http_client.post("/api/v1/auth/register", json=registration_data)
+            response = await http_client.post(
+                "/api/v1/auth/register", json=registration_data
+            )
 
             # Should return 400 Bad Request for validation error
             assert response.status_code == 400
@@ -134,7 +140,9 @@ class TestAccountRegistration:
                 "terms_accepted": True,
             }
 
-            response = await http_client.post("/api/v1/auth/register", json=registration_data)
+            response = await http_client.post(
+                "/api/v1/auth/register", json=registration_data
+            )
 
             # Should return 400 Bad Request
             assert response.status_code == 400
@@ -155,7 +163,9 @@ class TestAccountRegistration:
             "terms_accepted": False,  # Not accepted
         }
 
-        response = await http_client.post("/api/v1/auth/register", json=registration_data)
+        response = await http_client.post(
+            "/api/v1/auth/register", json=registration_data
+        )
 
         # Should return 400 Bad Request
         assert response.status_code == 400
@@ -164,7 +174,7 @@ class TestAccountRegistration:
         assert "terms" in error["message"].lower()
 
 
-@pytest.mark.auth
+@pytest.mark.auth()
 class TestEmailVerification:
     """US-002: Email verification link handling and expiration."""
 
@@ -177,8 +187,7 @@ class TestEmailVerification:
         verification_token = "valid_verification_token_123"
 
         response = await http_client.post(
-            f"/api/v1/auth/verify-email",
-            json={"token": verification_token}
+            "/api/v1/auth/verify-email", json={"token": verification_token}
         )
 
         # Should return 200 OK
@@ -196,8 +205,7 @@ class TestEmailVerification:
         invalid_token = "invalid_or_expired_token"
 
         response = await http_client.post(
-            "/api/v1/auth/verify-email",
-            json={"token": invalid_token}
+            "/api/v1/auth/verify-email", json={"token": invalid_token}
         )
 
         # Should return 400 Bad Request
@@ -213,8 +221,7 @@ class TestEmailVerification:
         expired_token = "expired_verification_token"
 
         response = await http_client.post(
-            "/api/v1/auth/verify-email",
-            json={"token": expired_token}
+            "/api/v1/auth/verify-email", json={"token": expired_token}
         )
 
         # Should return 410 Gone for expired token
@@ -223,7 +230,7 @@ class TestEmailVerification:
         assert "expired" in error["message"].lower()
 
 
-@pytest.mark.auth
+@pytest.mark.auth()
 class TestUserLogin:
     """US-003: Login with email/password authentication."""
 
@@ -310,7 +317,7 @@ class TestUserLogin:
         assert "verification" in error["message"].lower()
 
 
-@pytest.mark.auth
+@pytest.mark.auth()
 class TestPasswordReset:
     """US-004: Password reset flow with secure token handling."""
 
@@ -322,7 +329,9 @@ class TestPasswordReset:
         """Test password reset request."""
         reset_data = {"email": starter_user.email}
 
-        response = await http_client.post("/api/v1/auth/reset-password", json=reset_data)
+        response = await http_client.post(
+            "/api/v1/auth/reset-password", json=reset_data
+        )
 
         # Should return 200 OK even for non-existent emails (security)
         assert response.status_code == 200
@@ -360,7 +369,7 @@ class TestPasswordReset:
         assert error["code"] == "VALIDATION_ERROR"
 
 
-@pytest.mark.auth
+@pytest.mark.auth()
 class TestSessionManagement:
     """US-009: Session management and JWT token validation."""
 
@@ -433,8 +442,8 @@ class TestSessionManagement:
         assert response.status_code == 401
 
 
-@pytest.mark.auth
-@pytest.mark.security
+@pytest.mark.auth()
+@pytest.mark.security()
 class TestRateLimiting:
     """US-007: Rate limiting on authentication endpoints."""
 
@@ -484,7 +493,9 @@ class TestRateLimiting:
             "terms_accepted": True,
         }
 
-        response = await http_client.post("/api/v1/auth/register", json=final_registration)
+        response = await http_client.post(
+            "/api/v1/auth/register", json=final_registration
+        )
 
         # Should return 429 Too Many Requests
         assert response.status_code == 429
@@ -492,8 +503,8 @@ class TestRateLimiting:
         assert error["code"] == "RATE_LIMIT_EXCEEDED"
 
 
-@pytest.mark.auth
-@pytest.mark.integration
+@pytest.mark.auth()
+@pytest.mark.integration()
 class TestOAuthIntegration:
     """US-005: OAuth login integration (Google, GitHub)."""
 
@@ -523,7 +534,9 @@ class TestOAuthIntegration:
             "state": "secure_random_state",
         }
 
-        response = await http_client.get("/api/v1/auth/oauth/google/callback", params=callback_params)
+        response = await http_client.get(
+            "/api/v1/auth/oauth/google/callback", params=callback_params
+        )
 
         # Should return 200 OK with JWT token
         assert response.status_code == 200
@@ -542,7 +555,9 @@ class TestOAuthIntegration:
             "state": "secure_random_state",
         }
 
-        response = await http_client.get("/api/v1/auth/oauth/google/callback", params=callback_params)
+        response = await http_client.get(
+            "/api/v1/auth/oauth/google/callback", params=callback_params
+        )
 
         # Should return 400 Bad Request
         assert response.status_code == 400

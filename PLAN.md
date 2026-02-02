@@ -1,19 +1,24 @@
 # Framecast Project Infrastructure Setup Plan
 
 ## Current Status
+
 - ✅ Complete formal specification in `spec/` directory
 - ✅ Comprehensive development guidelines (CLAUDE.md with 10 Critical Rules)
 - ❌ Core implementation infrastructure missing (greenfield setup required)
 
 ## Objective
+
 Set up the complete project infrastructure to enable development according to the 12-factor methodology and Critical Rules.
 
 ## Reference Resources Available
+
 **🚨 CRITICAL:** Reference experimental projects with proven solutions available via SSH:
+
 - `~/workspace/splice-experimental-1`
 - `~/workspace/splice-experimental-2`
 
 These contain battle-tested patterns for:
+
 - Rust + Lambda integration
 - Database schemas and migrations
 - Testing patterns (unit, integration, E2E)
@@ -27,6 +32,7 @@ These contain battle-tested patterns for:
 ## Implementation Plan
 
 ### Phase 1: Core Build Infrastructure
+
 **Goal:** Establish basic project structure and build system
 
 1. **✅ Create PLAN.md in project root directory**
@@ -128,13 +134,16 @@ These contain battle-tested patterns for:
     - Admin processes as code
 
 ## Critical Files to Reference
+
 - `spec/04_Entities.md` - Database schema requirements
 - `spec/06_Invariants.md` - Business rules to enforce
 - `spec/07_Operations.md` - API endpoint specifications
 - `spec/08_Permissions.md` - Authorization matrix
 
 ## Success Criteria
+
 After completion, these commands must work:
+
 ```bash
 just setup        # Install dependencies ✓
 just dev          # Start local environment ✓
@@ -145,12 +154,14 @@ just build        # Build artifacts ✓
 ```
 
 ## Risk Mitigation
+
 - **Technical blockers:** Consult reference experimental projects immediately
 - **Pattern uncertainty:** Review working implementations in experimental projects
 - **Integration issues:** Check proven ComfyUI/RunPod patterns in references
 - **Rule violations:** Run compliance check after each phase
 
 ## Next Steps After Infrastructure Setup
+
 1. Implement core domain entities (User, Team, Job, etc.)
 2. Create API endpoints following spec/07_Operations.md
 3. Set up authentication and authorization
@@ -158,6 +169,7 @@ just build        # Build artifacts ✓
 5. Deploy to AWS infrastructure
 
 ## Progress Tracking
+
 - [ ] Phase 1: Core Build Infrastructure (Steps 1-5)
 - [ ] Phase 2: Testing & Infrastructure (Steps 6-9)
 - [ ] Phase 3: Development Environment (Steps 10-13)

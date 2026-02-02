@@ -300,6 +300,7 @@ interface EstimateResponse {
 The following features are explicitly deferred from v1. Features listed here may be re-evaluated for inclusion in future versions based on user feedback and platform maturity.
 
 **Notable Changes in v0.4.1:**
+
 - ~~Team Creation~~ Ã¢â‚¬â€ Now supported via `POST /v1/teams` (see Section 8.2)
 - ~~Credit Refunds~~ Ã¢â‚¬â€ Now supported with Runway-style automatic refunds (see Section 12.6)
 - **Ownership Transfer** Ã¢â‚¬â€ Remains deferred; manual support process continues in v1

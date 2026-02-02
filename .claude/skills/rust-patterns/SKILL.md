@@ -29,13 +29,13 @@ use thiserror::Error;
 pub enum JobError {
     #[error("Job not found: {0}")]
     NotFound(Uuid),
-    
+
     #[error("Job already in terminal state: {0}")]
     AlreadyTerminal(JobStatus),
-    
+
     #[error("Insufficient credits: required {required}, available {available}")]
     InsufficientCredits { required: i32, available: i32 },
-    
+
     #[error(transparent)]
     Database(#[from] sqlx::Error),
 }
@@ -60,7 +60,7 @@ impl IntoResponse for ApiError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "...".into())
             }
         };
-        
+
         (status, Json(json!({ "error": { "code": code, "message": message } }))).into_response()
     }
 }
@@ -80,7 +80,7 @@ impl JobRepository {
         sqlx::query_as!(
             Job,
             r#"
-            SELECT id, owner, status as "status: JobStatus", 
+            SELECT id, owner, status as "status: JobStatus",
                    credits_charged, created_at
             FROM jobs WHERE id = $1
             "#,
@@ -89,7 +89,7 @@ impl JobRepository {
         .fetch_optional(&self.pool)
         .await
     }
-    
+
     pub async fn create(&self, job: &NewJob) -> Result<Job, sqlx::Error> {
         sqlx::query_as!(
             Job,
@@ -116,12 +116,12 @@ pub async fn cancel_job_with_refund(
     refund_amount: i32,
 ) -> Result<Job, JobError> {
     let mut tx = self.pool.begin().await?;
-    
+
     // Update job
     let job = sqlx::query_as!(...)
         .fetch_one(&mut *tx)
         .await?;
-    
+
     // Update credits
     sqlx::query!(
         "UPDATE users SET credits = credits + $1 WHERE id = $2",
@@ -129,7 +129,7 @@ pub async fn cancel_job_with_refund(
     )
     .execute(&mut *tx)
     .await?;
-    
+
     tx.commit().await?;
     Ok(job)
 }
@@ -165,13 +165,13 @@ pub async fn create_job(
 ) -> Result<Json<JobResponse>, ApiError> {
     // Validate
     req.validate()?;
-    
+
     // Check permissions
     ctx.auth.check_can_create_job(&user, &req.owner)?;
-    
+
     // Execute
     let job = ctx.job_service.create(&user, req).await?;
-    
+
     Ok(Json(JobResponse::from(job)))
 }
 ```
@@ -194,9 +194,9 @@ mod tests {
     async fn create_job_charges_credits() {
         let ctx = TestContext::new().await;
         let user = ctx.create_user_with_credits(100).await;
-        
+
         let job = ctx.job_service.create(&user, valid_spec()).await.unwrap();
-        
+
         let updated = ctx.user_repo.find(user.id).await.unwrap();
         assert!(updated.credits < 100);
     }

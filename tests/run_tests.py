@@ -12,11 +12,12 @@ Usage:
     python tests/run_tests.py --performance      # Run performance tests only
 """
 
+import argparse
+import os
 import subprocess
 import sys
-import os
-import argparse
 from typing import List
+
 
 class FramecastTestRunner:
     """Comprehensive test runner for Framecast"""
@@ -34,61 +35,78 @@ class FramecastTestRunner:
     def install_test_dependencies(self) -> int:
         """Install test dependencies"""
         print("📦 Installing test dependencies...")
-        return self.run_command([
-            sys.executable, '-m', 'pip', 'install',
-            '-r', 'tests/requirements.txt'
-        ])
+        return self.run_command(
+            [sys.executable, "-m", "pip", "install", "-r", "tests/requirements.txt"]
+        )
 
     def run_migration_tests(self) -> int:
         """Run database migration tests"""
         print("🗃️ Running database migration tests...")
-        return self.run_command([
-            'python', '-m', 'pytest',
-            'tests/migrations/',
-            '-v',
-            '--tb=short',
-            '-m', 'not slow'
-        ])
+        return self.run_command(
+            [
+                "python",
+                "-m",
+                "pytest",
+                "tests/migrations/",
+                "-v",
+                "--tb=short",
+                "-m",
+                "not slow",
+            ]
+        )
 
     def run_admin_script_tests(self) -> int:
         """Run admin script tests"""
         print("⚙️ Running admin script tests...")
-        return self.run_command([
-            'python', '-m', 'pytest',
-            'tests/admin_scripts/',
-            '-v',
-            '--tb=short',
-            '-m', 'not slow'
-        ])
+        return self.run_command(
+            [
+                "python",
+                "-m",
+                "pytest",
+                "tests/admin_scripts/",
+                "-v",
+                "--tb=short",
+                "-m",
+                "not slow",
+            ]
+        )
 
     def run_integration_tests(self) -> int:
         """Run integration tests"""
         print("🔗 Running integration tests...")
-        return self.run_command([
-            'python', '-m', 'pytest',
-            'tests/',
-            '-v',
-            '--tb=short',
-            '-m', 'integration'
-        ])
+        return self.run_command(
+            [
+                "python",
+                "-m",
+                "pytest",
+                "tests/",
+                "-v",
+                "--tb=short",
+                "-m",
+                "integration",
+            ]
+        )
 
     def run_performance_tests(self) -> int:
         """Run performance tests"""
         print("🚀 Running performance tests...")
-        return self.run_command([
-            'python', '-m', 'pytest',
-            'tests/',
-            '-v',
-            '--tb=short',
-            '-m', 'performance'
-        ])
+        return self.run_command(
+            [
+                "python",
+                "-m",
+                "pytest",
+                "tests/",
+                "-v",
+                "--tb=short",
+                "-m",
+                "performance",
+            ]
+        )
 
     def run_unit_tests(self) -> int:
         """Run Rust unit tests"""
         print("🦀 Running Rust unit tests...")
-        return self.run_command([
-            'cargo', 'test', '--workspace'
-        ])
+        return self.run_command(["cargo", "test", "--workspace"])
 
     def run_all_tests(self) -> int:
         """Run comprehensive test suite"""
@@ -112,7 +130,7 @@ class FramecastTestRunner:
         for name, test_func in test_categories:
             print(f"\n{'='*50}")
             print(f"Running {name}")
-            print('='*50)
+            print("=" * 50)
 
             result = test_func()
             test_results.append((name, result))
@@ -125,7 +143,7 @@ class FramecastTestRunner:
         # Summary
         print(f"\n{'='*50}")
         print("TEST SUMMARY")
-        print('='*50)
+        print("=" * 50)
 
         failed_tests = []
         for name, result in test_results:
@@ -148,13 +166,17 @@ class FramecastTestRunner:
         print("📊 Generating test coverage report...")
 
         # Python test coverage
-        python_coverage = self.run_command([
-            'python', '-m', 'pytest',
-            'tests/',
-            '--cov=scripts',
-            '--cov-report=html:coverage_html',
-            '--cov-report=term-missing'
-        ])
+        python_coverage = self.run_command(
+            [
+                "python",
+                "-m",
+                "pytest",
+                "tests/",
+                "--cov=scripts",
+                "--cov-report=html:coverage_html",
+                "--cov-report=term-missing",
+            ]
+        )
 
         # Rust test coverage (if available)
         rust_coverage = 0  # Would use cargo-tarpaulin if available
@@ -164,16 +186,27 @@ class FramecastTestRunner:
 
         return python_coverage
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Run Framecast tests')
-    parser.add_argument('--all', action='store_true', help='Run all tests')
-    parser.add_argument('--unit', action='store_true', help='Run unit tests only')
-    parser.add_argument('--integration', action='store_true', help='Run integration tests')
-    parser.add_argument('--migrations', action='store_true', help='Run migration tests')
-    parser.add_argument('--admin-scripts', action='store_true', help='Run admin script tests')
-    parser.add_argument('--performance', action='store_true', help='Run performance tests')
-    parser.add_argument('--coverage', action='store_true', help='Generate coverage report')
-    parser.add_argument('--install-deps', action='store_true', help='Install test dependencies')
+    parser = argparse.ArgumentParser(description="Run Framecast tests")
+    parser.add_argument("--all", action="store_true", help="Run all tests")
+    parser.add_argument("--unit", action="store_true", help="Run unit tests only")
+    parser.add_argument(
+        "--integration", action="store_true", help="Run integration tests"
+    )
+    parser.add_argument("--migrations", action="store_true", help="Run migration tests")
+    parser.add_argument(
+        "--admin-scripts", action="store_true", help="Run admin script tests"
+    )
+    parser.add_argument(
+        "--performance", action="store_true", help="Run performance tests"
+    )
+    parser.add_argument(
+        "--coverage", action="store_true", help="Generate coverage report"
+    )
+    parser.add_argument(
+        "--install-deps", action="store_true", help="Install test dependencies"
+    )
 
     args = parser.parse_args()
 
@@ -199,5 +232,6 @@ def main():
         # Default: run basic test suite
         return runner.run_all_tests()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     sys.exit(main())

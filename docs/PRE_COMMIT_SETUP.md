@@ -23,26 +23,31 @@ pre-commit run --all-files
 ## Hook Categories
 
 ### 🎨 **Code Quality & Formatting**
+
 - **Rust**: `rustfmt` (formatting), `clippy` (linting)
 - **Python**: `black` (formatting), `isort` (imports), `flake8` (linting), `ruff` (fast linting)
 - **General**: Trailing whitespace, end-of-file, line endings
 
 ### 🔒 **Security Scanning**
+
 - **Secret Detection**: `detect-secrets` (API keys, tokens)
 - **Security Linting**: `bandit` (Python), `semgrep` (multi-language)
 - **Credential Detection**: AWS keys, private keys, passwords
 
 ### 📊 **Infrastructure as Code**
+
 - **Terraform/OpenTofu**: Formatting, validation, linting with `tflint`
 - **YAML/JSON**: Syntax validation
 - **SQL**: Formatting and linting with `sqlfluff`
 
 ### 📝 **Documentation**
+
 - **Markdown**: Linting with `markdownlint`
 - **Link Checking**: Validate external/internal links
 - **API Spec**: Custom validation for consistency
 
 ### ✅ **Git & Project Standards**
+
 - **Conventional Commits**: Enforce commit message format
 - **Merge Conflicts**: Detect unresolved conflicts
 - **Large Files**: Prevent accidental large file commits
@@ -95,6 +100,7 @@ We enforce [Conventional Commits](https://www.conventionalcommits.org/):
 **Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `ci`, `build`, `revert`
 
 **Examples**:
+
 ```bash
 git commit -m "feat: add user authentication endpoint"
 git commit -m "fix: resolve database connection timeout"
@@ -105,15 +111,18 @@ git commit -m "test: add integration tests for job processing"
 ## Custom Validations
 
 ### Migration File Naming
+
 - **Pattern**: `YYYYMMDDHHMMSS_description.sql`
 - **Example**: `20240130120000_add_user_table.sql`
 
 ### Environment Variables
+
 - Detects hardcoded credentials and URLs
 - Enforces environment variable usage
 - Allows test/example patterns
 
 ### API Specification
+
 - Validates internal links in docs/spec/
 - Checks for TODO/FIXME in specifications
 - Ensures consistent heading format
@@ -121,6 +130,7 @@ git commit -m "test: add integration tests for job processing"
 ## IDE Integration
 
 ### VS Code
+
 Install the `Pre-commit` extension and add to `.vscode/settings.json`:
 
 ```json
@@ -136,6 +146,7 @@ Install the `Pre-commit` extension and add to `.vscode/settings.json`:
 ```
 
 ### vim/neovim
+
 Add to your config:
 
 ```vim
@@ -148,6 +159,7 @@ autocmd BufWritePre *.py :silent !black %
 ### Common Issues
 
 **Hook installation failed:**
+
 ```bash
 # Update pre-commit
 pip install --upgrade pre-commit
@@ -158,6 +170,7 @@ pre-commit install --install-hooks
 ```
 
 **Secret detected:**
+
 ```bash
 # Add to .secrets.baseline if it's a false positive
 detect-secrets scan --baseline .secrets.baseline
@@ -167,6 +180,7 @@ password = "fake_password"  # pragma: allowlist secret
 ```
 
 **Rust tools not found:**
+
 ```bash
 # Ensure Rust tools are installed
 rustup component add rustfmt clippy
@@ -176,6 +190,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 ```
 
 **Python formatting conflicts:**
+
 ```bash
 # Ensure consistent configuration
 pip install black isort flake8 ruff
@@ -186,12 +201,14 @@ pip install black isort flake8 ruff
 ### Performance Optimization
 
 **Faster Python linting:**
+
 ```bash
 # Use ruff instead of flake8 for faster linting
 # Already configured in .pre-commit-config.yaml
 ```
 
 **Skip slow hooks in development:**
+
 ```bash
 # Skip security scans for quick commits
 SKIP=bandit,semgrep git commit -m "quick fix"

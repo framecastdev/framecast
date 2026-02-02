@@ -4,27 +4,28 @@ Migration file naming validation script
 Ensures migration files follow the proper naming convention
 """
 
-import sys
-import re
 import os
-from pathlib import Path
+import re
+import sys
+
 
 def validate_migration_naming(file_paths):
     """Validate migration file naming convention"""
     errors = []
 
     # Expected pattern: YYYYMMDDHHMMSS_description.sql
-    pattern = r'^\d{14}_[a-z0-9_]+\.sql$'
+    pattern = r"^\d{14}_[a-z0-9_]+\.sql$"
 
     for file_path in file_paths:
         filename = os.path.basename(file_path)
 
         if not re.match(pattern, filename):
             errors.append(f"Invalid migration filename: {filename}")
-            errors.append(f"  Expected format: YYYYMMDDHHMMSS_description.sql")
-            errors.append(f"  Example: 20240130120000_add_user_table.sql")
+            errors.append("  Expected format: YYYYMMDDHHMMSS_description.sql")
+            errors.append("  Example: 20240130120000_add_user_table.sql")
 
     return errors
+
 
 def main():
     if len(sys.argv) < 2:
@@ -42,5 +43,6 @@ def main():
     print("✅ Migration naming validation passed")
     return 0
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     sys.exit(main())

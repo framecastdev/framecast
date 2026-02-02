@@ -7,6 +7,7 @@ This comprehensive test suite validates all components with brainstormed test ca
 ## Test Strategy Overview
 
 All test cases were brainstormed BEFORE implementation in `TEST_STRATEGY.md`, following Rule 2:
+
 - **Happy Path Tests**: Normal operation scenarios
 - **Edge Cases**: Boundary conditions and unusual inputs
 - **Error Conditions**: Failure scenarios and error handling
@@ -17,9 +18,11 @@ All test cases were brainstormed BEFORE implementation in `TEST_STRATEGY.md`, fo
 ## Test Categories
 
 ### 1. Database Migration Tests (`tests/migrations/`)
+
 Validates database schema creation, business rules, and data integrity.
 
 **Key Test Cases:**
+
 - `HAPPY-01`: Clean migration from scratch
 - `HAPPY-02`: Migration status tracking
 - `HAPPY-03`: Business logic triggers
@@ -28,9 +31,11 @@ Validates database schema creation, business rules, and data integrity.
 - `INV-01-04`: All business rule constraints (user credits, team ownership, job limits, URN validation)
 
 ### 2. Admin Script Tests (`tests/admin_scripts/`)
+
 Validates operational scripts for seeding, cleanup, export, and monitoring.
 
 **Key Test Cases:**
+
 - **Seeding**: Complete test data creation, clear/re-seed, existing data handling
 - **Cleanup**: Job retention policies, S3 object removal, dry-run mode
 - **Export**: GDPR compliance, large datasets, user identification
@@ -38,17 +43,21 @@ Validates operational scripts for seeding, cleanup, export, and monitoring.
 - **Health**: Service monitoring, mixed states, failure detection
 
 ### 3. Integration Tests
+
 End-to-end workflows validating component interactions.
 
 ### 4. Performance Tests
+
 Resource usage, timing, and scalability validation.
 
 ### 5. Security Tests
+
 Authentication, authorization, and data protection validation.
 
 ## Running Tests
 
 ### Quick Test Execution
+
 ```bash
 # Run all tests
 python tests/run_tests.py --all
@@ -66,6 +75,7 @@ python tests/run_tests.py --coverage
 ```
 
 ### Using Just Commands
+
 ```bash
 # Install test dependencies
 just test-install-deps
@@ -80,6 +90,7 @@ just test-integration
 ```
 
 ### Manual pytest Execution
+
 ```bash
 # Install test dependencies
 pip install -r tests/requirements.txt
@@ -99,6 +110,7 @@ pytest tests/ -m "performance" -v       # Performance tests only
 ## Test Configuration
 
 ### Environment Variables
+
 Tests use isolated test databases and mock services:
 
 ```bash
@@ -115,6 +127,7 @@ S3_BUCKET_ASSETS=test-framecast-assets
 ```
 
 ### Test Database Management
+
 - Each test gets isolated database created/destroyed automatically
 - Migration tests start with clean database and run actual migrations
 - Admin script tests include full migration setup
@@ -123,18 +136,21 @@ S3_BUCKET_ASSETS=test-framecast-assets
 ## Test Implementation Details
 
 ### Database Migration Testing
+
 - **Isolated Databases**: Each test creates temporary database
 - **Real Migrations**: Uses actual sqlx migration files
 - **Constraint Validation**: Tests business rules enforcement
 - **Performance Measurement**: Migration timing validation
 
 ### Admin Script Testing
+
 - **Mocked Dependencies**: S3, external APIs mocked where appropriate
 - **Real Database Operations**: Uses actual database for integration testing
 - **Safety Testing**: Validates dry-run modes and confirmation prompts
 - **Error Simulation**: Tests network failures, permission errors
 
 ### Test Data Management
+
 - **Fixtures**: Reusable test data setup/teardown
 - **Factories**: Dynamic test data generation
 - **Isolation**: No test interdependencies
@@ -152,6 +168,7 @@ Tests use pytest markers for categorization:
 ## Coverage Requirements
 
 Target coverage levels:
+
 - **Database Migrations**: 100% (all SQL statements tested)
 - **Admin Scripts**: 90%+ (all major functions and error paths)
 - **Integration Workflows**: 80%+ (all user-facing scenarios)
@@ -185,6 +202,7 @@ When adding new components, follow Rule 2:
 ## Continuous Integration
 
 Tests integrate with CI/CD pipeline:
+
 - **Pre-commit**: Fast test subset
 - **Pull Request**: Full test suite
 - **Deploy**: Performance regression testing
@@ -195,6 +213,7 @@ Tests integrate with CI/CD pipeline:
 ### Common Issues
 
 **Database Connection Errors:**
+
 ```bash
 # Ensure PostgreSQL running
 docker compose -f docker-compose.local.yml up -d postgres
@@ -204,6 +223,7 @@ psql postgresql://postgres:dev-password-framecast@localhost:5432/postgres
 ```
 
 **Missing Dependencies:**
+
 ```bash
 # Install test requirements
 pip install -r tests/requirements.txt
@@ -213,6 +233,7 @@ python tests/run_tests.py --install-deps
 ```
 
 **Slow Tests:**
+
 ```bash
 # Skip slow tests during development
 pytest tests/ -m "not slow" -v
@@ -222,6 +243,7 @@ pytest tests/ -m "slow" -v
 ```
 
 **Memory Issues with Large Tests:**
+
 ```bash
 # Run tests with memory profiling
 pytest tests/ --profile-mem

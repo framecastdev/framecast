@@ -84,7 +84,7 @@ install-pre-commit:
             brew install pipx; \
         else \
             python3 -m pip install --user pipx; \
-            python3 -m pipx ensurepath; \
+            pipx ensurepath; \
         fi \
     fi
     pipx install pre-commit

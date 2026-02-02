@@ -187,9 +187,7 @@ repos:
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
-        args: [
-          '--types=feat,fix,docs,style,refactor,test,chore,perf,ci,build,revert'
-        ]
+        args: ['feat', 'fix', 'docs', 'style', 'refactor', 'test', 'chore', 'perf', 'ci', 'build', 'revert']
 
   # ============================================================================
   # PERFORMANCE AND BEST PRACTICES
@@ -251,7 +249,7 @@ repos:
 
 # Global configuration
 default_install_hook_types: [pre-commit, pre-push, commit-msg]
-default_stages: [commit]
+default_stages: [pre-commit]
 
 # Exclude patterns
 exclude: |

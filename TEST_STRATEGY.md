@@ -8,6 +8,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ## 1. DATABASE MIGRATIONS TEST CASES
 
 ### Happy Path Tests
+
 - **HAPPY-01**: Clean database migration from scratch
   - Given: Empty PostgreSQL database
   - When: Run migrations in sequence
@@ -25,6 +26,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Triggers fire and enforce rules correctly
 
 ### Edge Cases
+
 - **EDGE-01**: Migration on database with existing data
   - Given: Database with some existing tables/data
   - When: Run migrations
@@ -46,6 +48,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Second session waits or fails safely
 
 ### Error Conditions
+
 - **ERROR-01**: Invalid SQL syntax in migration
   - Given: Migration with syntax error
   - When: Attempt to run migration
@@ -67,6 +70,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Migration fails with constraint details
 
 ### Invariant Tests
+
 - **INV-01**: User credit constraints always enforced
   - Test: User.credits ≥ 0 cannot be violated
   - Test: Team.credits ≥ 0 cannot be violated
@@ -90,6 +94,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ## 2. INFRASTRUCTURE (OpenTofu) TEST CASES
 
 ### Happy Path Tests
+
 - **INFRA-HAPPY-01**: Complete infrastructure deployment
   - Given: Clean AWS account/region
   - When: Deploy with valid configuration
@@ -106,6 +111,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Lambda function created and accessible via API Gateway
 
 ### Edge Cases
+
 - **INFRA-EDGE-01**: Resource name conflicts
   - Given: Infrastructure with existing resource names
   - When: Deploy to same region
@@ -122,6 +128,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Region-specific resources created correctly
 
 ### Error Conditions
+
 - **INFRA-ERROR-01**: Invalid AWS credentials
   - Given: Expired/invalid credentials
   - When: Attempt deployment
@@ -143,6 +150,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Syntax validation fails before execution
 
 ### Invariant Tests
+
 - **INFRA-INV-01**: Security best practices enforced
   - Test: S3 buckets have public access blocked
   - Test: IAM roles follow least-privilege principle
@@ -165,6 +173,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ### A. Database Seeding Script
 
 #### Happy Path Tests
+
 - **SEED-HAPPY-01**: Complete test data creation
   - Given: Clean database with migrations applied
   - When: Run seeding script
@@ -176,6 +185,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Removes old test data and creates fresh dataset
 
 #### Edge Cases
+
 - **SEED-EDGE-01**: Seed with existing production data
   - Given: Database with real production data
   - When: Run seeding script
@@ -187,6 +197,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Can detect partial state and complete successfully
 
 #### Error Conditions
+
 - **SEED-ERROR-01**: Database constraint violations
   - Given: Seeding script tries to violate business rules
   - When: Script execution
@@ -198,6 +209,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Fails gracefully with connection error
 
 #### Invariant Tests
+
 - **SEED-INV-01**: All seeded data follows business rules
   - Test: Created users/teams follow tier restrictions
   - Test: Job statuses are valid
@@ -206,6 +218,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ### B. Job Cleanup Script
 
 #### Happy Path Tests
+
 - **CLEANUP-HAPPY-01**: Old job cleanup with S3 objects
   - Given: Database with old completed jobs and S3 objects
   - When: Run cleanup script with appropriate retention
@@ -217,6 +230,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Reports what would be deleted without making changes
 
 #### Edge Cases
+
 - **CLEANUP-EDGE-01**: Large dataset cleanup
   - Given: Thousands of old jobs to clean up
   - When: Run cleanup script
@@ -228,6 +242,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Only removes appropriate jobs based on status and age
 
 #### Error Conditions
+
 - **CLEANUP-ERROR-01**: S3 permission errors during cleanup
   - Given: Insufficient S3 permissions
   - When: Attempt to delete objects
@@ -241,6 +256,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ### C. User Data Export Script
 
 #### Happy Path Tests
+
 - **EXPORT-HAPPY-01**: Complete user data export
   - Given: User with full activity history
   - When: Export user data
@@ -252,6 +268,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Successfully identifies user and exports data
 
 #### Edge Cases
+
 - **EXPORT-EDGE-01**: User with no activity
   - Given: Newly created user with minimal data
   - When: Export user data
@@ -263,6 +280,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Handles large datasets without memory issues
 
 #### Error Conditions
+
 - **EXPORT-ERROR-01**: Non-existent user
   - Given: Invalid user identifier
   - When: Attempt export
@@ -276,6 +294,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ### D. API Key Generation Script
 
 #### Happy Path Tests
+
 - **APIKEY-HAPPY-01**: Generate personal API key
   - Given: Valid user email
   - When: Generate API key for user URN
@@ -287,6 +306,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Creates team API key with proper ownership validation
 
 #### Edge Cases
+
 - **APIKEY-EDGE-01**: Multiple API keys per user
   - Given: User with existing API keys
   - When: Generate additional API key
@@ -298,6 +318,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Creates key with correct expiration date
 
 #### Error Conditions
+
 - **APIKEY-ERROR-01**: Invalid URN ownership
   - Given: Starter user requesting team URN
   - When: Attempt to generate API key
@@ -311,6 +332,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ### E. Health Check Script
 
 #### Happy Path Tests
+
 - **HEALTH-HAPPY-01**: All services healthy
   - Given: All backing services running correctly
   - When: Run health check
@@ -322,6 +344,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Outputs structured JSON with all service details
 
 #### Edge Cases
+
 - **HEALTH-EDGE-01**: Mixed service states
   - Given: Some services healthy, others degraded
   - When: Run health check
@@ -333,6 +356,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Detects recovery and reports current healthy state
 
 #### Error Conditions
+
 - **HEALTH-ERROR-01**: All services down
   - Given: No backing services available
   - When: Run health check
@@ -348,6 +372,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ## 4. INTEGRATION TEST SCENARIOS
 
 ### End-to-End Workflow Tests
+
 - **E2E-01**: Complete development setup
   - Setup fresh environment → Run migrations → Seed data → Health check
   - All steps complete successfully with proper data relationships
@@ -361,6 +386,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Complete infrastructure lifecycle without orphaned resources
 
 ### Cross-Component Integration
+
 - **INT-01**: Migration + Seeding integration
   - Fresh migrations → Immediate seeding → Data validates correctly
   - No constraint violations or relationship issues
@@ -374,6 +400,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ## 5. PERFORMANCE & LOAD TEST SCENARIOS
 
 ### Database Performance
+
 - **PERF-DB-01**: Large dataset migrations
   - Test migration performance with 100k+ records
   - Verify migration completes within reasonable timeframes
@@ -383,6 +410,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Verify invariants maintained under load
 
 ### Script Performance
+
 - **PERF-SCRIPT-01**: Bulk operations
   - Test cleanup script with 50k+ jobs
   - Verify memory usage stays bounded
@@ -396,6 +424,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ## 6. SECURITY TEST SCENARIOS
 
 ### Authentication & Authorization
+
 - **SEC-01**: API key validation
   - Test invalid/expired/revoked API keys rejected
   - Test scope enforcement works correctly
@@ -405,6 +434,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Test privilege escalation attempts fail
 
 ### Data Protection
+
 - **SEC-03**: SQL injection prevention
   - Test admin scripts resist SQL injection
   - Verify parameterized queries used throughout
@@ -418,24 +448,28 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ## TESTING IMPLEMENTATION PLAN
 
 ### Phase 1: Core Test Infrastructure
+
 1. Set up pytest framework for admin scripts
 2. Create database test fixtures
 3. Implement migration testing framework
 4. Set up infrastructure testing with Terratest
 
 ### Phase 2: Component Tests
+
 1. Implement all database migration tests
 2. Implement all admin script tests
 3. Implement infrastructure validation tests
 4. Add performance benchmarks
 
 ### Phase 3: Integration Tests
+
 1. End-to-end workflow tests
 2. Cross-component integration tests
 3. Load testing scenarios
 4. Security testing implementation
 
 ### Phase 4: CI/CD Integration
+
 1. Automated test execution
 2. Test reporting and coverage
 3. Performance regression detection
