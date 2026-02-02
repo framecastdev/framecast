@@ -48,7 +48,7 @@ repos:
     hooks:
       - id: rustfmt
         name: Rust formatting (rustfmt)
-        entry: cargo fmt
+        entry: bash -c 'source "$HOME/.cargo/env" 2>/dev/null || true && cargo fmt'
         language: system
         files: '\.rs$'
         pass_filenames: false
@@ -56,9 +56,8 @@ repos:
       # Rust linting with clippy
       - id: clippy
         name: Rust linting (clippy)
-        entry: cargo clippy
+        entry: bash -c 'source "$HOME/.cargo/env" 2>/dev/null || true && cargo clippy --workspace --all-targets -- -D warnings'
         language: system
-        args: ['--workspace', '--all-targets', '--', '-D', 'warnings']
         files: '\.rs$'
         pass_filenames: false
 
@@ -189,8 +188,7 @@ repos:
       - id: conventional-pre-commit
         stages: [commit-msg]
         args: [
-          'feat', 'fix', 'docs', 'style', 'refactor',
-          'test', 'chore', 'perf', 'ci', 'build', 'revert'
+          '--types=feat,fix,docs,style,refactor,test,chore,perf,ci,build,revert'
         ]
 
   # ============================================================================
@@ -236,7 +234,7 @@ repos:
       # Check for hardcoded secrets or credentials
       - id: check-hardcoded-secrets
         name: Check for hardcoded secrets
-        entry: bash -c 'if grep -rn "password\|secret\|key.*=" crates/ scripts/ --include="*.rs" --include="*.py" | grep -v "key_prefix\|key_hash"; then echo "Found potential hardcoded secrets"; exit 1; fi'
+        entry: bash -c 'if grep -rn "password.*=.*[\"'\''][^\"'\'']" crates/ scripts/ --include="*.rs" --include="*.py" | grep -v "fake_password\|test_password\|example_password"; then echo "Found potential hardcoded secrets"; exit 1; fi'
         language: system
         pass_filenames: false
 

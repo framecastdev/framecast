@@ -78,7 +78,16 @@ install-python-deps:
 # Install pre-commit hooks
 install-pre-commit:
     @echo "🪝 Installing pre-commit..."
-    pip3 install pre-commit
+    @if ! command -v pipx >/dev/null 2>&1; then \
+        echo "Installing pipx first..."; \
+        if [[ "$OSTYPE" == "darwin"* ]]; then \
+            brew install pipx; \
+        else \
+            python3 -m pip install --user pipx; \
+            python3 -m pipx ensurepath; \
+        fi \
+    fi
+    pipx install pre-commit
     @echo "✅ Pre-commit installed"
 
 # ============================================================================

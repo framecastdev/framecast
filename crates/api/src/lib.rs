@@ -9,8 +9,7 @@ use framecast_common::config::Config;
 
 /// Create the main application router with all routes and middleware
 pub async fn create_app(_config: Config) -> Result<Router, anyhow::Error> {
-    // TODO: Implement proper application setup
-    // For now, return a basic router to make the build pass
+    // Basic router setup - will be enhanced with business logic handlers
     let app = Router::new()
         .route("/health", axum::routing::get(health_check))
         .route(

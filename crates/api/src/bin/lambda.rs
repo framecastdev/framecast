@@ -14,8 +14,7 @@ async fn main() -> Result<(), Error> {
 
     info!("Starting Framecast API Lambda function");
 
-    // For now, just start with a basic implementation
-    // TODO: Implement proper Lambda integration once the API is more complete
+    // Basic Lambda handler - will be enhanced when API routes are implemented
     run(service_fn(
         |_event: LambdaEvent<serde_json::Value>| async move {
             info!("Received Lambda event");
