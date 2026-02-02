@@ -138,7 +138,7 @@ impl TestApp {
         let name = format!("Test Team {}", &team_id.to_string()[0..8]);
         let slug = format!(
             "test-team-{}",
-            team_id.simple().to_string()[0..8].to_string()
+            &team_id.simple().to_string()[0..8]
         );
 
         let mut team = Team::new(name, Some(slug))?;

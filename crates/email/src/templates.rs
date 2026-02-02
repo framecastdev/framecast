@@ -72,7 +72,10 @@ impl TeamInvitationTemplate {
 
         // Add custom message if provided
         if let Some(ref custom_msg) = self.custom_message {
-            body_text.push_str(&format!("Message from {}:\n\"{}\"\n\n", self.inviter_name, custom_msg));
+            body_text.push_str(&format!(
+                "Message from {}:\n\"{}\"\n\n",
+                self.inviter_name, custom_msg
+            ));
         }
 
         body_text.push_str(&format!(
@@ -183,13 +186,15 @@ impl TeamInvitationTemplate {
         metadata.insert("role".to_string(), self.role.clone());
         metadata.insert("template_version".to_string(), "1.0".to_string());
 
-        Ok(EmailMessage::new(recipient_email, from_email, subject, body_text)
-            .with_html(body_html)
-            .with_metadata("email_type".to_string(), "team_invitation".to_string())
-            .with_metadata("team_id".to_string(), self.team_id.to_string())
-            .with_metadata("invitation_id".to_string(), self.invitation_id.to_string())
-            .with_metadata("role".to_string(), self.role.clone())
-            .with_metadata("template_version".to_string(), "1.0".to_string()))
+        Ok(
+            EmailMessage::new(recipient_email, from_email, subject, body_text)
+                .with_html(body_html)
+                .with_metadata("email_type".to_string(), "team_invitation".to_string())
+                .with_metadata("team_id".to_string(), self.team_id.to_string())
+                .with_metadata("invitation_id".to_string(), self.invitation_id.to_string())
+                .with_metadata("role".to_string(), self.role.clone())
+                .with_metadata("template_version".to_string(), "1.0".to_string()),
+        )
     }
 }
 
@@ -224,7 +229,10 @@ impl PasswordResetTemplate {
         recipient_email: String,
         from_email: String,
     ) -> Result<EmailMessage, EmailError> {
-        let reset_url = format!("https://framecast.app/auth/reset-password?token={}", self.reset_token);
+        let reset_url = format!(
+            "https://framecast.app/auth/reset-password?token={}", // pragma: allowlist secret
+            self.reset_token  // pragma: allowlist secret
+        );
 
         let greeting = match &self.user_name {
             Some(name) => format!("Hi {},", name),
@@ -291,10 +299,12 @@ impl PasswordResetTemplate {
         metadata.insert("email_type".to_string(), "password_reset".to_string());
         metadata.insert("template_version".to_string(), "1.0".to_string());
 
-        Ok(EmailMessage::new(recipient_email, from_email, subject, body_text)
-            .with_html(body_html)
-            .with_metadata("email_type".to_string(), "password_reset".to_string())
-            .with_metadata("template_version".to_string(), "1.0".to_string()))
+        Ok(
+            EmailMessage::new(recipient_email, from_email, subject, body_text)
+                .with_html(body_html)
+                .with_metadata("email_type".to_string(), "password_reset".to_string())
+                .with_metadata("template_version".to_string(), "1.0".to_string()),
+        )
     }
 }
 
@@ -338,9 +348,15 @@ mod tests {
         assert!(html.contains("John Doe"));
         assert!(html.contains("Welcome to our awesome team!"));
 
-        assert_eq!(message.metadata.get("email_type"), Some(&"team_invitation".to_string()));
+        assert_eq!(
+            message.metadata.get("email_type"),
+            Some(&"team_invitation".to_string())
+        );
         assert_eq!(message.metadata.get("team_id"), Some(&team_id.to_string()));
-        assert_eq!(message.metadata.get("invitation_id"), Some(&invitation_id.to_string()));
+        assert_eq!(
+            message.metadata.get("invitation_id"),
+            Some(&invitation_id.to_string())
+        );
     }
 
     #[test]
@@ -367,6 +383,9 @@ mod tests {
         assert!(html.contains("Jane Smith"));
         assert!(html.contains("reset_token_123"));
 
-        assert_eq!(message.metadata.get("email_type"), Some(&"password_reset".to_string()));
+        assert_eq!(
+            message.metadata.get("email_type"),
+            Some(&"password_reset".to_string())
+        );
     }
 }

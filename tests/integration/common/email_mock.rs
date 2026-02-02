@@ -350,7 +350,7 @@ pub mod test_utils {
                     self.team.id,
                     created_invitation.id,
                     &self.invitee_email,
-                    &self.inviter.user.name.as_deref().unwrap_or("Unknown"),
+                    self.inviter.user.name.as_deref().unwrap_or("Unknown"),
                     &format!("{:?}", role).to_lowercase(),
                 )
                 .await?;

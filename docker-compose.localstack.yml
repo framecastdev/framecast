@@ -1,8 +1,6 @@
 # LocalStack Docker Compose Configuration
 # Provides local AWS services for testing including SES email service
 
-version: '3.8'
-
 services:
   localstack:
     container_name: framecast-localstack

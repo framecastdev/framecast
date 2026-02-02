@@ -9,10 +9,7 @@
 
 use std::time::Duration;
 
-use framecast_email::{
-    EmailConfig, EmailMessage, EmailService, EmailServiceFactory,
-};
-use tokio::time::sleep;
+use framecast_email::{EmailConfig, EmailMessage, EmailServiceFactory};
 use uuid::Uuid;
 
 /// Test configuration for LocalStack SES
@@ -60,7 +57,8 @@ async fn test_localstack_ses_service_creation() {
     }
 
     let config = create_localstack_email_config();
-    let email_service = EmailServiceFactory::create(config).await
+    let email_service = EmailServiceFactory::create(config)
+        .await
         .expect("Failed to create email service");
 
     assert_eq!(email_service.service_name(), "aws-ses");
@@ -69,7 +67,10 @@ async fn test_localstack_ses_service_creation() {
     // Test health check
     match email_service.health_check().await {
         Ok(()) => println!("✅ SES health check passed"),
-        Err(e) => println!("⚠️ SES health check warning: {} (expected in LocalStack)", e),
+        Err(e) => println!(
+            "⚠️ SES health check warning: {} (expected in LocalStack)",
+            e
+        ),
     }
 }
 
@@ -84,7 +85,8 @@ async fn test_localstack_ses_send_basic_email() {
     }
 
     let config = create_localstack_email_config();
-    let email_service = EmailServiceFactory::create(config).await
+    let email_service = EmailServiceFactory::create(config)
+        .await
         .expect("Failed to create email service");
 
     let message = EmailMessage::new(
@@ -93,11 +95,15 @@ async fn test_localstack_ses_send_basic_email() {
         "Test Email from LocalStack SES".to_string(),
         "This is a test email sent through LocalStack SES.".to_string(),
     )
-    .with_html("<p>This is a test email sent through <strong>LocalStack SES</strong>.</p>".to_string())
+    .with_html(
+        "<p>This is a test email sent through <strong>LocalStack SES</strong>.</p>".to_string(),
+    )
     .with_reply_to("noreply@framecast.app".to_string())
     .with_metadata("test_id".to_string(), "basic_email_test".to_string());
 
-    let receipt = email_service.send_email(message).await
+    let receipt = email_service
+        .send_email(message)
+        .await
         .expect("Failed to send email");
 
     println!("📧 Email sent successfully!");
@@ -123,7 +129,8 @@ async fn test_localstack_ses_team_invitation_workflow() {
     }
 
     let config = create_localstack_email_config();
-    let email_service = EmailServiceFactory::create(config).await
+    let email_service = EmailServiceFactory::create(config)
+        .await
         .expect("Failed to create email service");
 
     // ============================================================================
@@ -171,14 +178,29 @@ async fn test_localstack_ses_team_invitation_workflow() {
     println!("\n🔍 Step 2: Verifying email metadata and tracking...");
 
     // Check metadata
-    assert_eq!(receipt.metadata.get("email_type"), Some(&"team_invitation".to_string()));
+    assert_eq!(
+        receipt.metadata.get("email_type"),
+        Some(&"team_invitation".to_string())
+    );
     assert_eq!(receipt.metadata.get("team_id"), Some(&team_id.to_string()));
-    assert_eq!(receipt.metadata.get("invitation_id"), Some(&invitation_id.to_string()));
+    assert_eq!(
+        receipt.metadata.get("invitation_id"),
+        Some(&invitation_id.to_string())
+    );
 
     println!("✅ Email metadata verification passed!");
-    println!("   📊 Email type: {}", receipt.metadata.get("email_type").unwrap());
-    println!("   🏢 Team ID: {}", receipt.metadata.get("team_id").unwrap());
-    println!("   🆔 Invitation ID: {}", receipt.metadata.get("invitation_id").unwrap());
+    println!(
+        "   📊 Email type: {}",
+        receipt.metadata.get("email_type").unwrap()
+    );
+    println!(
+        "   🏢 Team ID: {}",
+        receipt.metadata.get("team_id").unwrap()
+    );
+    println!(
+        "   🆔 Invitation ID: {}",
+        receipt.metadata.get("invitation_id").unwrap()
+    );
 
     // ============================================================================
     // Step 3: Test multiple invitation scenario
@@ -211,7 +233,10 @@ async fn test_localstack_ses_team_invitation_workflow() {
         assert_eq!(receipt.provider, "aws-ses");
         assert_eq!(receipt.metadata.get("role"), Some(&role.to_string()));
 
-        println!("   ✅ Invitation sent to {} ({})", email, receipt.message_id);
+        println!(
+            "   ✅ Invitation sent to {} ({})",
+            email, receipt.message_id
+        );
     }
 
     println!("✅ Multiple invitations test completed successfully!");
@@ -224,7 +249,10 @@ async fn test_localstack_ses_team_invitation_workflow() {
     // Test health check
     match email_service.health_check().await {
         Ok(()) => println!("✅ Email service health check passed"),
-        Err(e) => println!("⚠️ Health check warning: {} (may be expected in LocalStack)", e),
+        Err(e) => println!(
+            "⚠️ Health check warning: {} (may be expected in LocalStack)",
+            e
+        ),
     }
 
     // Verify service configuration
@@ -264,7 +292,8 @@ async fn test_localstack_ses_error_handling() {
     }
 
     let config = create_localstack_email_config();
-    let email_service = EmailServiceFactory::create(config).await
+    let email_service = EmailServiceFactory::create(config)
+        .await
         .expect("Failed to create email service");
 
     // ============================================================================
@@ -300,10 +329,15 @@ async fn test_localstack_ses_error_handling() {
     );
 
     // This should still work with SES but create empty content
-    let receipt = email_service.send_email(empty_message).await
+    let receipt = email_service
+        .send_email(empty_message)
+        .await
         .expect("Should handle empty content gracefully");
 
-    println!("✅ Empty content handled gracefully: {}", receipt.message_id);
+    println!(
+        "✅ Empty content handled gracefully: {}",
+        receipt.message_id
+    );
 
     // ============================================================================
     // Test 3: Large email content
@@ -318,10 +352,15 @@ async fn test_localstack_ses_error_handling() {
         large_body,
     );
 
-    let receipt = email_service.send_email(large_message).await
+    let receipt = email_service
+        .send_email(large_message)
+        .await
         .expect("Should handle large content");
 
-    println!("✅ Large email content handled successfully: {}", receipt.message_id);
+    println!(
+        "✅ Large email content handled successfully: {}",
+        receipt.message_id
+    );
 
     println!("\n✅ Error handling tests completed successfully!");
 }
@@ -333,7 +372,8 @@ async fn test_disabled_email_service() {
     let mut config = create_localstack_email_config();
     config.enabled = false;
 
-    let email_service = EmailServiceFactory::create(config).await
+    let email_service = EmailServiceFactory::create(config)
+        .await
         .expect("Failed to create disabled email service");
 
     let message = EmailMessage::new(
@@ -343,7 +383,9 @@ async fn test_disabled_email_service() {
         "This should not actually be sent.".to_string(),
     );
 
-    let receipt = email_service.send_email(message).await
+    let receipt = email_service
+        .send_email(message)
+        .await
         .expect("Disabled service should return success without sending");
 
     println!("📧 Disabled service response:");

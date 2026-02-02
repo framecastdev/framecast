@@ -66,7 +66,7 @@ async fn demo_complete_invitation_workflow() {
 
     let invite_request = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/v1/teams/{}/invite", team.id))
+        .uri(format!("/v1/teams/{}/invite", team.id))
         .header(
             "authorization",
             format!("Bearer {}", owner_fixture.jwt_token),
@@ -189,7 +189,7 @@ async fn demo_complete_invitation_workflow() {
     // User clicks the link in email and accepts invitation
     let accept_request = Request::builder()
         .method(Method::PUT)
-        .uri(&format!("/v1/invitations/{}/accept", invitation_id))
+        .uri(format!("/v1/invitations/{}/accept", invitation_id))
         .header("authorization", format!("Bearer {}", invitee_jwt))
         .body(Body::empty())
         .unwrap();
@@ -349,7 +349,7 @@ async fn demo_invitation_workflow_error_scenarios() {
     // Try to accept invitation
     let accept_request = Request::builder()
         .method(Method::PUT)
-        .uri(&format!("/v1/invitations/{}/accept", invitation_id))
+        .uri(format!("/v1/invitations/{}/accept", invitation_id))
         .header("authorization", format!("Bearer {}", starter_jwt))
         .body(Body::empty())
         .unwrap();
@@ -375,7 +375,7 @@ async fn demo_invitation_workflow_error_scenarios() {
 
     let invite1 = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/v1/teams/{}/invite", team.id))
+        .uri(format!("/v1/teams/{}/invite", team.id))
         .header(
             "authorization",
             format!("Bearer {}", owner_fixture.jwt_token),
@@ -390,7 +390,7 @@ async fn demo_invitation_workflow_error_scenarios() {
     // Try to send duplicate invitation
     let invite2 = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/v1/teams/{}/invite", team.id))
+        .uri(format!("/v1/teams/{}/invite", team.id))
         .header(
             "authorization",
             format!("Bearer {}", owner_fixture.jwt_token),

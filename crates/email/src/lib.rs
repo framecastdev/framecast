@@ -55,12 +55,7 @@ pub struct EmailMessage {
 
 impl EmailMessage {
     /// Create a new email message
-    pub fn new(
-        to: String,
-        from: String,
-        subject: String,
-        body_text: String,
-    ) -> Self {
+    pub fn new(to: String, from: String, subject: String, body_text: String) -> Self {
         Self {
             to,
             from,
@@ -122,14 +117,13 @@ impl EmailConfig {
     pub fn from_env() -> Result<Self, EmailError> {
         dotenvy::dotenv().ok();
 
-        let provider = std::env::var("EMAIL_PROVIDER")
-            .unwrap_or_else(|_| "mock".to_string());
+        let provider = std::env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "mock".to_string());
 
         let aws_region = std::env::var("AWS_REGION").ok();
         let aws_endpoint_url = std::env::var("AWS_ENDPOINT_URL").ok();
 
-        let default_from = std::env::var("FROM_EMAIL")
-            .unwrap_or_else(|_| "invitations@framecast.app".to_string());
+        let default_from =
+            std::env::var("FROM_EMAIL").unwrap_or_else(|_| "invitations@framecast.app".to_string());
 
         let default_reply_to = std::env::var("REPLY_TO_EMAIL").ok();
 
@@ -224,7 +218,10 @@ mod tests {
         assert_eq!(message.body_text, "Test body");
         assert_eq!(message.body_html, Some("<p>Test body</p>".to_string()));
         assert_eq!(message.reply_to, Some("reply@example.com".to_string()));
-        assert_eq!(message.metadata.get("invitation_id"), Some(&"123".to_string()));
+        assert_eq!(
+            message.metadata.get("invitation_id"),
+            Some(&"123".to_string())
+        );
     }
 
     #[test]
@@ -237,6 +234,6 @@ mod tests {
         let config = EmailConfig::from_env().unwrap();
         assert_eq!(config.provider, "mock");
         assert_eq!(config.default_from, "invitations@framecast.app");
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
     }
 }

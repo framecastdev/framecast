@@ -19,13 +19,14 @@ use crate::{EmailConfig, EmailError, EmailMessage, EmailReceipt, EmailService};
 pub struct SesEmailService {
     client: SesClient,
     config: EmailConfig,
-    region: String,
 }
 
 impl SesEmailService {
     /// Create a new SES email service
     pub async fn new(config: EmailConfig) -> Result<Self, EmailError> {
-        let region = config.aws_region.clone()
+        let region = config
+            .aws_region
+            .clone()
             .unwrap_or_else(|| "us-east-1".to_string());
 
         let aws_config = match config.aws_endpoint_url.as_ref() {
@@ -61,17 +62,16 @@ impl SesEmailService {
 
         // Test connection
         if let Err(e) = client.get_send_quota().send().await {
-            tracing::warn!("Failed to connect to SES (may be expected in LocalStack): {}", e);
+            tracing::warn!(
+                "Failed to connect to SES (may be expected in LocalStack): {}",
+                e
+            );
             // Don't fail here as LocalStack might not have SES fully configured yet
         } else {
             tracing::info!("Successfully connected to AWS SES");
         }
 
-        Ok(Self {
-            client,
-            config,
-            region,
-        })
+        Ok(Self { client, config })
     }
 
     /// Convert email message to SES format
@@ -103,19 +103,14 @@ impl SesEmailService {
 
         let body = body_builder.build();
 
-        let ses_message = Message::builder()
-            .subject(subject)
-            .body(body)
-            .build();
+        let ses_message = Message::builder().subject(subject).body(body).build();
 
         Ok(ses_message)
     }
 
     /// Build destination from email address
     fn build_destination(&self, to: &str) -> Result<Destination, EmailError> {
-        let destination = Destination::builder()
-            .to_addresses(to)
-            .build();
+        let destination = Destination::builder().to_addresses(to).build();
 
         Ok(destination)
     }
@@ -138,13 +133,16 @@ impl EmailService for SesEmailService {
 
         // Validate email address
         if !message.to.contains('@') || !message.from.contains('@') {
-            return Err(EmailError::Validation("Invalid email address format".to_string()));
+            return Err(EmailError::Validation(
+                "Invalid email address format".to_string(),
+            ));
         }
 
         let ses_message = self.build_ses_message(&message)?;
         let destination = self.build_destination(&message.to)?;
 
-        let mut send_builder = self.client
+        let mut send_builder = self
+            .client
             .send_email()
             .source(&message.from)
             .destination(destination)
@@ -155,12 +153,17 @@ impl EmailService for SesEmailService {
             send_builder = send_builder.reply_to_addresses(reply_to);
         }
 
-        let result = send_builder.send().await
+        let result = send_builder
+            .send()
+            .await
             .map_err(|e| EmailError::AwsSes(format!("Failed to send email: {}", e)))?;
 
         let message_id = result.message_id().to_string();
 
-        tracing::info!("Email sent successfully via SES, message ID: {}", message_id);
+        tracing::info!(
+            "Email sent successfully via SES, message ID: {}",
+            message_id
+        );
 
         Ok(EmailReceipt {
             message_id,
@@ -181,7 +184,9 @@ impl EmailService for SesEmailService {
     ) -> Result<EmailReceipt, EmailError> {
         tracing::info!(
             "Sending team invitation email to {} for team {} ({})",
-            recipient_email, team_name, team_id
+            recipient_email,
+            team_name,
+            team_id
         );
 
         let invitation_url = format!(
@@ -313,7 +318,6 @@ mod tests {
 
         let service = result.unwrap();
         assert_eq!(service.service_name(), "aws-ses");
-        assert_eq!(service.region, "us-east-1");
     }
 
     #[test]

@@ -137,10 +137,12 @@ impl MockEmailService {
         self.get_emails_for_recipient(email)
             .into_iter()
             .filter(|e| {
-                e.message.metadata.get("email_type")
+                e.message
+                    .metadata
+                    .get("email_type")
                     .map(|t| t == "team_invitation")
-                    .unwrap_or(false) ||
-                e.message.subject.to_lowercase().contains("invitation")
+                    .unwrap_or(false)
+                    || e.message.subject.to_lowercase().contains("invitation")
             })
             .max_by_key(|e| e.captured_at)
     }
@@ -220,10 +222,13 @@ impl EmailService for MockEmailService {
             .lock()
             .unwrap()
             .entry(message.to)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(captured);
 
-        tracing::info!("Email captured successfully, message ID: {}", receipt.message_id);
+        tracing::info!(
+            "Email captured successfully, message ID: {}",
+            receipt.message_id
+        );
 
         Ok(receipt)
     }
@@ -239,7 +244,9 @@ impl EmailService for MockEmailService {
     ) -> Result<EmailReceipt, EmailError> {
         tracing::info!(
             "Mock service sending team invitation to {} for team {} ({})",
-            recipient_email, team_name, team_id
+            recipient_email,
+            team_name,
+            team_id
         );
 
         let invitation_url = format!(
@@ -359,12 +366,17 @@ mod tests {
 
         assert_eq!(receipt.provider, "mock");
 
-        let captured = service.get_latest_invitation_email("invitee@example.com").unwrap();
+        let captured = service
+            .get_latest_invitation_email("invitee@example.com")
+            .unwrap();
         assert_eq!(captured.extract_invitation_id(), Some(invitation_id));
         assert_eq!(captured.extract_team_id(), Some(team_id));
 
         assert!(service.was_invitation_sent_to("invitee@example.com"));
-        assert_eq!(service.get_invitation_id_for_email("invitee@example.com"), Some(invitation_id));
+        assert_eq!(
+            service.get_invitation_id_for_email("invitee@example.com"),
+            Some(invitation_id)
+        );
     }
 
     #[test]
@@ -391,7 +403,10 @@ mod tests {
 
         let extracted_id = captured.extract_invitation_id();
         assert!(extracted_id.is_some());
-        assert_eq!(extracted_id.unwrap().to_string(), "550e8400-e29b-41d4-a716-446655440000"); // pragma: allowlist secret
+        assert_eq!(
+            extracted_id.unwrap().to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        ); // pragma: allowlist secret
     }
 
     #[tokio::test]
