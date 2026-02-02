@@ -268,6 +268,31 @@ impl MembershipRepository {
         Ok(row)
     }
 
+    /// Update a member's role
+    pub async fn update_role(
+        &self,
+        team_id: Uuid,
+        user_id: Uuid,
+        new_role: MembershipRole,
+    ) -> Result<Membership> {
+        let updated_membership = sqlx::query_as!(
+            Membership,
+            r#"
+            UPDATE memberships
+            SET role = $3
+            WHERE team_id = $1 AND user_id = $2
+            RETURNING id, team_id, user_id, role as "role: MembershipRole", created_at
+            "#,
+            team_id,
+            user_id,
+            new_role as MembershipRole
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(updated_membership)
+    }
+
     /// Find membership by team and user
     pub async fn find(&self, team_id: Uuid, user_id: Uuid) -> Result<Option<Membership>> {
         let membership = sqlx::query_as!(
@@ -522,6 +547,142 @@ impl TeamRepository {
 }
 
 // =============================================================================
+// Invitation Repository
+// =============================================================================
+
+#[derive(Clone)]
+pub struct InvitationRepository {
+    pool: PgPool,
+}
+
+impl InvitationRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Find invitation by ID
+    pub async fn get_by_id(&self, invitation_id: Uuid) -> Result<Option<Invitation>> {
+        let row = sqlx::query_as!(
+            Invitation,
+            r#"
+            SELECT id, team_id, invited_by, email, role as "role: MembershipRole",
+                   token, expires_at, accepted_at, revoked_at, created_at
+            FROM invitations
+            WHERE id = $1
+            "#,
+            invitation_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row)
+    }
+
+    /// Find invitation by team and email
+    pub async fn get_by_team_and_email(
+        &self,
+        team_id: Uuid,
+        email: &str,
+    ) -> Result<Option<Invitation>> {
+        let row = sqlx::query_as!(
+            Invitation,
+            r#"
+            SELECT id, team_id, invited_by, email, role as "role: MembershipRole",
+                   token, expires_at, accepted_at, revoked_at, created_at
+            FROM invitations
+            WHERE team_id = $1 AND email = $2
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
+            team_id,
+            email
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row)
+    }
+
+    /// Create a new invitation
+    pub async fn create(&self, invitation: &Invitation) -> Result<Invitation> {
+        let created_invitation = sqlx::query_as!(
+            Invitation,
+            r#"
+            INSERT INTO invitations (id, team_id, invited_by, email, role, token, expires_at, accepted_at, revoked_at, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id, team_id, invited_by, email, role as "role: MembershipRole",
+                      token, expires_at, accepted_at, revoked_at, created_at
+            "#,
+            invitation.id,
+            invitation.team_id,
+            invitation.invited_by,
+            invitation.email,
+            invitation.role.clone() as MembershipRole,
+            invitation.token,
+            invitation.expires_at,
+            invitation.accepted_at,
+            invitation.revoked_at,
+            invitation.created_at
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(created_invitation)
+    }
+
+    /// Count pending invitations for a team
+    pub async fn count_pending_for_team(&self, team_id: Uuid) -> Result<i64> {
+        let count = sqlx::query!(
+            r#"
+            SELECT COUNT(*) as count
+            FROM invitations
+            WHERE team_id = $1
+              AND accepted_at IS NULL
+              AND revoked_at IS NULL
+              AND expires_at > NOW()
+            "#,
+            team_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(count.count.unwrap_or(0))
+    }
+
+    /// Mark invitation as accepted
+    pub async fn mark_accepted(&self, invitation_id: Uuid) -> Result<()> {
+        sqlx::query!(
+            r#"
+            UPDATE invitations
+            SET accepted_at = NOW()
+            WHERE id = $1
+            "#,
+            invitation_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Revoke invitation
+    pub async fn revoke(&self, invitation_id: Uuid) -> Result<()> {
+        sqlx::query!(
+            r#"
+            UPDATE invitations
+            SET revoked_at = NOW()
+            WHERE id = $1
+            "#,
+            invitation_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+// =============================================================================
 // Job Repository (Placeholder)
 // =============================================================================
 
@@ -711,6 +872,7 @@ pub struct Repositories {
     pub users: UserRepository,
     pub teams: TeamRepository,
     pub memberships: MembershipRepository,
+    pub invitations: InvitationRepository,
     pub jobs: JobRepository,
     pub api_keys: ApiKeyRepository,
 }
@@ -721,6 +883,7 @@ impl Repositories {
             users: UserRepository::new(pool.clone()),
             teams: TeamRepository::new(pool.clone()),
             memberships: MembershipRepository::new(pool.clone()),
+            invitations: InvitationRepository::new(pool.clone()),
             jobs: JobRepository::new(pool.clone()),
             api_keys: ApiKeyRepository::new(pool),
         }
