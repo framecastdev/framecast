@@ -216,6 +216,48 @@ test-e2e-real:
     @echo "⚠️ This requires valid API credentials in .env"
     cd tests/e2e && uv run pytest tests/ --tb=short
 
+# Run integration tests with LocalStack SES
+test-integration-ses:
+    @echo "📧 Running integration tests with LocalStack SES..."
+    @echo "🚀 Starting LocalStack if needed..."
+    @docker-compose -f docker-compose.localstack.yml up -d localstack
+    @echo "⏳ Waiting for LocalStack to be ready..."
+    @sleep 10
+    @echo "🧪 Running SES integration tests..."
+    cargo test --package framecast-integration-tests email_ses_e2e_test -- --nocapture
+    @echo "✅ SES integration tests completed!"
+
+# Start LocalStack services for testing
+localstack-start:
+    @echo "🚀 Starting LocalStack services..."
+    docker-compose -f docker-compose.localstack.yml up -d
+    @echo "⏳ Waiting for services to initialize..."
+    @sleep 15
+    @echo "✅ LocalStack services are ready!"
+    @echo "📊 Access points:"
+    @echo "  LocalStack: http://localhost:4566"
+    @echo "  MailHog UI: http://localhost:8025"
+    @echo "  Test DB:   localhost:5433"
+
+# Stop LocalStack services
+localstack-stop:
+    @echo "🛑 Stopping LocalStack services..."
+    docker-compose -f docker-compose.localstack.yml down
+    @echo "✅ LocalStack services stopped!"
+
+# Restart LocalStack services
+localstack-restart: localstack-stop localstack-start
+
+# View LocalStack service logs
+localstack-logs:
+    @echo "📋 Viewing LocalStack logs..."
+    docker-compose -f docker-compose.localstack.yml logs -f localstack
+
+# Check LocalStack health
+localstack-health:
+    @echo "🏥 Checking LocalStack health..."
+    @curl -s http://localhost:4566/_localstack/health | jq '.' || echo "LocalStack not responding"
+
 # Run specific E2E test suites
 test-e2e suite *args="":
     @echo "🎯 Running E2E test suite: {{suite}}"

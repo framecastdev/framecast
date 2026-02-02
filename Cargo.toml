@@ -3,6 +3,7 @@ members = [
     "crates/api",
     "crates/domain",
     "crates/db",
+    "crates/email",
     "crates/inngest",
     "crates/comfyui",
     "crates/common",
@@ -81,7 +82,11 @@ wiremock = "0.6"
 tempfile = "3.8"
 test-log = "0.2"
 
+# === Async Traits ===
+async-trait = "0.1"
+
 # === Shared Crates ===
 framecast-common = { path = "crates/common" }
 framecast-domain = { path = "crates/domain" }
 framecast-db = { path = "crates/db" }
+framecast-email = { path = "crates/email" }

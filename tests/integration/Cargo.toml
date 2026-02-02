@@ -15,6 +15,10 @@ path = "invitation_workflow_demo.rs"
 name = "invitation_workflow_test"
 path = "invitation_workflow_test.rs"
 
+[[test]]
+name = "email_ses_e2e_test"
+path = "email_ses_e2e_test.rs"
+
 [dependencies]
 # === Core Dependencies ===
 tokio = { workspace = true }
@@ -42,6 +46,7 @@ test-log = { workspace = true }
 framecast-api = { path = "../../crates/api" }
 framecast-domain = { workspace = true }
 framecast-db = { workspace = true }
+framecast-email = { workspace = true }
 framecast-common = { workspace = true }
 
 # === Authentication Testing ===

@@ -22,6 +22,7 @@ pub struct MockEmail {
     pub invitation_code: Option<String>,
 }
 
+#[allow(dead_code)]
 impl MockEmail {
     /// Extract invitation ID from email content
     pub fn extract_invitation_id(&mut self) -> Option<Uuid> {
@@ -105,6 +106,7 @@ pub struct MockEmailService {
     webhook_delivery_enabled: bool,
 }
 
+#[allow(dead_code)]
 impl MockEmailService {
     /// Create a new mock email service
     pub fn new() -> Self {

@@ -1,0 +1,40 @@
+[package]
+name = "framecast-email"
+version = "0.0.1-SNAPSHOT"
+edition = "2021"
+
+[dependencies]
+# === Core Dependencies ===
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# === AWS SDK ===
+aws-config = "1.1"
+aws-sdk-ses = "1.1"
+aws-credential-types = "1.1"
+
+# === HTTP Client ===
+reqwest = { workspace = true }
+
+# === Validation ===
+validator = "0.18"
+regex = { workspace = true }
+
+# === Environment ===
+dotenvy = { workspace = true }
+
+# === Logging ===
+tracing = { workspace = true }
+
+# === Async Traits ===
+async-trait = { workspace = true }
+
+# === Testing ===
+[dev-dependencies]
+tokio-test = { workspace = true }
+test-log = { workspace = true }

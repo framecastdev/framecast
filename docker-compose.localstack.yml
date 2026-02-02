@@ -1,0 +1,84 @@
+# LocalStack Docker Compose Configuration
+# Provides local AWS services for testing including SES email service
+
+version: '3.8'
+
+services:
+  localstack:
+    container_name: framecast-localstack
+    image: localstack/localstack:3.0
+    ports:
+      - "4566:4566"  # LocalStack main endpoint
+      - "4510-4559:4510-4559"  # External service port range
+    environment:
+      # LocalStack configuration
+      - DEBUG=1
+      - SERVICES=s3,ses,iam,lambda,apigateway,logs,events
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LOCALSTACK_HOST=localhost:4566
+
+      # S3 configuration
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test-access-key
+      - AWS_SECRET_ACCESS_KEY=test-secret-key
+
+      # SES configuration
+      - SES_EMAIL_ENDPOINT=http://localhost:4566
+      - SES_SUPPRESS_DELIVERY=false
+
+      # Data persistence
+      - DATA_DIR=/var/lib/localstack/data
+      - PERSISTENCE=1
+
+      # Lambda configuration
+      - LAMBDA_EXECUTOR=docker
+      - LAMBDA_REMOVE_CONTAINERS=true
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "localstack-data:/var/lib/localstack"
+      - "./scripts/localstack-init:/docker-entrypoint-initaws.d"
+    networks:
+      - framecast-local
+
+  # Mock email server for SES testing
+  mailhog:
+    container_name: framecast-mailhog
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    environment:
+      - MH_STORAGE=maildir
+      - MH_MAILDIR_PATH=/maildir
+    volumes:
+      - "mailhog-data:/maildir"
+    networks:
+      - framecast-local
+
+  # Database for integration tests
+  postgres-test:
+    container_name: framecast-postgres-test
+    image: postgres:15-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=framecast_test
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    volumes:
+      - "postgres-test-data:/var/lib/postgresql/data"
+    networks:
+      - framecast-local
+
+networks:
+  framecast-local:
+    driver: bridge
+
+volumes:
+  localstack-data:
+    driver: local
+  mailhog-data:
+    driver: local
+  postgres-test-data:
+    driver: local

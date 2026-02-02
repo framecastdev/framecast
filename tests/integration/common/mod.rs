@@ -42,7 +42,8 @@ impl TestConfig {
             database_url: env::var("TEST_DATABASE_URL")
                 .or_else(|_| env::var("DATABASE_URL"))
                 .unwrap_or_else(|_| {
-                    "postgresql://postgres:password@localhost:5432/framecast_test".to_string() // pragma: allowlist secret
+                    "postgresql://postgres:password@localhost:5432/framecast_test".to_string()
+                    // pragma: allowlist secret
                 }),
             jwt_secret: env::var("TEST_JWT_SECRET")
                 .unwrap_or_else(|_| "test_secret_key_for_testing_only".to_string()),
@@ -60,6 +61,7 @@ pub struct TestApp {
     pub pool: PgPool,
 }
 
+#[allow(dead_code)]
 impl TestApp {
     /// Create a new test application with fresh database connection
     pub async fn new() -> Result<Self> {
@@ -211,6 +213,7 @@ pub struct UserFixture {
     pub jwt_token: String,
 }
 
+#[allow(dead_code)]
 impl UserFixture {
     /// Create a starter user fixture
     pub async fn starter(app: &TestApp) -> Result<Self> {

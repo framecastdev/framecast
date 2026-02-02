@@ -338,6 +338,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-ses"
+version = "1.95.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03ddece5e755ebcae1e8d2ce6f1bfbb6c214c66bfaaa6797ade74df2ec92b222"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-observability",
+ "aws-smithy-query",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-smithy-xml",
+ "aws-types",
+ "fastrand",
+ "http 0.2.12",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-sso"
 version = "1.92.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1598,6 +1622,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "framecast-email"
+version = "0.0.1-SNAPSHOT"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-ses",
+ "chrono",
+ "dotenvy",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "test-log",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "uuid",
+ "validator",
+]
+
+[[package]]
 name = "framecast-inngest"
 version = "0.0.1-SNAPSHOT"
 dependencies = [
@@ -1629,6 +1677,7 @@ dependencies = [
  "framecast-common",
  "framecast-db",
  "framecast-domain",
+ "framecast-email",
  "hyper 1.8.1",
  "jsonwebtoken",
  "regex",
