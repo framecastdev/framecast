@@ -67,6 +67,10 @@ base64 = "0.22"
 aws-config = "1.5"
 aws-sdk-s3 = "1.44"
 
+# === Validation & Time ===
+validator = { version = "0.18", features = ["derive"] }
+time = { version = "0.3", features = ["serde", "macros"] }
+
 # === Testing ===
 tokio-test = "0.4"
 mockall = "0.12"

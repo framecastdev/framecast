@@ -304,10 +304,10 @@ build: build-lambda build-docker
 # Build Lambda deployment packages
 build-lambda:
     @echo "🏗️ Building Lambda functions..."
-    cargo build --release --bin framecast-api
+    cargo build --release --bin lambda
     # Package for Lambda deployment
     mkdir -p target/lambda/framecast-api
-    cp target/release/framecast-api target/lambda/framecast-api/bootstrap
+    cp target/release/lambda target/lambda/framecast-api/bootstrap
     cd target/lambda/framecast-api && zip -r ../framecast-api.zip .
     @echo "📦 Lambda package created: target/lambda/framecast-api.zip"
 

@@ -8,6 +8,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{error, info};
 
 use framecast_common::config::Config;
+use sqlx::PgPool;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -27,8 +28,16 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Configuration loaded successfully");
 
+    // Create database connection pool
+    let pool = PgPool::connect(&config.database_url).await.map_err(|e| {
+        error!("Failed to connect to database: {}", e);
+        anyhow::anyhow!("Database connection failed: {}", e)
+    })?;
+
+    info!("Database connection established");
+
     // Create the application router
-    let app = framecast_api::create_app(config.clone())
+    let app = framecast_api::create_app(config.clone(), pool)
         .await
         .map_err(|e| {
             error!("Failed to create application: {}", e);

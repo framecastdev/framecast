@@ -1,24 +1,35 @@
 {
-  "model": "claude-sonnet-4-20250514",
-  "permissions": {
-    "allow": [
-      "Bash(cargo:*)",
-      "Bash(just:*)",
-      "Bash(uv:*)",
-      "Bash(git:*)",
-      "Bash(rg:*)",
-      "Bash(fd:*)",
-      "Bash(cat:*)",
-      "Bash(ls:*)",
-      "Bash(mkdir:*)",
-      "Bash(rm:*)",
-      "Bash(cp:*)",
-      "Bash(mv:*)",
-      "Bash(terraform:*)",
-      "Bash(docker:*)",
-      "Read",
-      "Write"
+  "project_name": "Framecast API",
+  "hooks": {
+    "pre_commit": {
+      "script": ".claude/hooks/pre-commit.sh",
+      "description": "Run formatting, linting, and tests before commits"
+    },
+    "format_code": {
+      "script": ".claude/hooks/format-code.sh",
+      "description": "Format code using Just targets instead of direct cargo calls"
+    },
+    "quick_check": {
+      "script": ".claude/hooks/quick-check.sh",
+      "description": "Quick formatting and compilation check for development"
+    }
+  },
+  "aliases": {
+    "fmt": ".claude/hooks/format-code.sh",
+    "check": ".claude/hooks/quick-check.sh"
+  },
+  "workflow": {
+    "preferred_commands": [
+      "just fmt",
+      "just test",
+      "just check",
+      "just build"
     ],
-    "deny": []
+    "avoid_direct_calls": [
+      "cargo fmt",
+      "cargo clippy",
+      "cargo test",
+      "cargo build"
+    ]
   }
 }

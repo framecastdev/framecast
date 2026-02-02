@@ -31,6 +31,7 @@ chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
+validator.workspace = true
 
 # HTTP server
 axum.workspace = true
@@ -44,6 +45,9 @@ lambda-web.workspace = true
 
 # Authentication
 jsonwebtoken.workspace = true
+
+# Database
+sqlx.workspace = true
 
 # Logging
 tracing.workspace = true
