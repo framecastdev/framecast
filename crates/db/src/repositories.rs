@@ -3,7 +3,7 @@
 //! This module provides database access layer using the repository pattern.
 //! All repositories use sqlx with PostgreSQL and follow production-ready practices.
 
-use framecast_common::{Error, Result, Urn};
+use framecast_common::{Error, Result};
 use framecast_domain::entities::*;
 use sqlx::PgPool;
 use thiserror::Error;
@@ -109,10 +109,16 @@ impl UserRepository {
                       ephemeral_storage_bytes, upgraded_at,
                       created_at, updated_at
             "#,
-            user.id, user.email, user.name, user.avatar_url,
-            user.tier.clone() as UserTier, user.credits,
-            user.ephemeral_storage_bytes, user.upgraded_at,
-            user.created_at, user.updated_at
+            user.id,
+            user.email,
+            user.name,
+            user.avatar_url,
+            user.tier.clone() as UserTier,
+            user.credits,
+            user.ephemeral_storage_bytes,
+            user.upgraded_at,
+            user.created_at,
+            user.updated_at
         )
         .fetch_one(&self.pool)
         .await
@@ -140,14 +146,16 @@ impl UserRepository {
                       ephemeral_storage_bytes, upgraded_at,
                       created_at, updated_at
             "#,
-            user_id, credits_delta
+            user_id,
+            credits_delta
         )
         .fetch_optional(&self.pool)
         .await?;
 
-        updated.ok_or(RepositoryError::ConstraintViolation(
-            "Credits would become negative".to_string()
-        ).into())
+        updated.ok_or(
+            RepositoryError::ConstraintViolation("Credits would become negative".to_string())
+                .into(),
+        )
     }
 }
 
@@ -174,7 +182,8 @@ impl MembershipRepository {
             FROM memberships
             WHERE team_id = $1 AND user_id = $2
             "#,
-            team_id, user_id
+            team_id,
+            user_id
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -209,8 +218,11 @@ impl MembershipRepository {
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id, team_id, user_id, role as "role: MembershipRole", created_at
             "#,
-            membership.id, membership.team_id, membership.user_id,
-            membership.role.clone() as MembershipRole, membership.created_at
+            membership.id,
+            membership.team_id,
+            membership.user_id,
+            membership.role.clone() as MembershipRole,
+            membership.created_at
         )
         .fetch_one(&self.pool)
         .await
@@ -228,7 +240,8 @@ impl MembershipRepository {
     pub async fn delete(&self, team_id: Uuid, user_id: Uuid) -> Result<()> {
         let result = sqlx::query!(
             "DELETE FROM memberships WHERE team_id = $1 AND user_id = $2",
-            team_id, user_id
+            team_id,
+            user_id
         )
         .execute(&self.pool)
         .await?;
@@ -373,10 +386,16 @@ impl ApiKeyRepository {
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
-            api_key.id, api_key.user_id, api_key.owner, api_key.name,
-            api_key.key_prefix, api_key.key_hash,
+            api_key.id,
+            api_key.user_id,
+            api_key.owner,
+            api_key.name,
+            api_key.key_prefix,
+            api_key.key_hash,
             serde_json::to_value(&api_key.scopes.0)?,
-            api_key.last_used_at, api_key.expires_at, api_key.revoked_at,
+            api_key.last_used_at,
+            api_key.expires_at,
+            api_key.revoked_at,
             api_key.created_at
         )
         .execute(&self.pool)
@@ -449,7 +468,7 @@ mod tests {
     #[ignore] // Requires database setup
     async fn test_user_repository_basic_operations() {
         let pool = setup_test_db().await;
-        let repo = UserRepository::new(pool);
+        let _repo = UserRepository::new(pool);
 
         // Test would go here - create, find, update operations
         // This tests the repository against a real database

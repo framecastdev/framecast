@@ -4,12 +4,12 @@
 //! Each entity includes proper validation, serialization, and business rules.
 
 use chrono::{DateTime, Utc};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::types::Json;
 use std::collections::HashMap;
 use uuid::Uuid;
-use rand::Rng;
 
 use framecast_common::{Error, Result, Urn};
 
@@ -573,10 +573,7 @@ impl ApiKey {
         let hash = hasher.finalize();
 
         // Encode as hex string with salt prepended for storage
-        format!("{}:{}",
-            hex::encode(salt),
-            hex::encode(hash)
-        )
+        format!("{}:{}", hex::encode(salt), hex::encode(hash))
     }
 
     /// Verify an API key against stored hash using constant-time comparison

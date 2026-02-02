@@ -12,4 +12,4 @@ pub mod urn;
 
 pub use config::Config;
 pub use error::{Error, Result};
-pub use urn::Urn;
+pub use urn::{Urn, UrnComponents};
