@@ -271,6 +271,61 @@ impl MembershipRepository {
 }
 
 // =============================================================================
+// Team Repository (simplified)
+// =============================================================================
+
+#[derive(Clone)]
+pub struct TeamRepository {
+    pool: PgPool,
+}
+
+impl TeamRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Get teams for user with roles
+    pub async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<(Team, MembershipRole)>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT t.id, t.name, t.slug, t.credits, t.ephemeral_storage_bytes,
+                   t.settings, t.created_at, t.updated_at,
+                   m.role as "role: MembershipRole"
+            FROM teams t
+            INNER JOIN memberships m ON t.id = m.team_id
+            WHERE m.user_id = $1
+            ORDER BY t.created_at ASC
+            "#,
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let teams = rows
+            .into_iter()
+            .map(|row| {
+                let team = Team {
+                    id: row.id,
+                    name: row.name,
+                    slug: row.slug,
+                    credits: row.credits,
+                    ephemeral_storage_bytes: row.ephemeral_storage_bytes,
+                    settings: sqlx::types::Json(
+                        serde_json::from_value(row.settings)
+                            .unwrap_or_else(|_| std::collections::HashMap::new()),
+                    ),
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                };
+                (team, row.role)
+            })
+            .collect();
+
+        Ok(teams)
+    }
+}
+
+// =============================================================================
 // API Key Repository (simplified)
 // =============================================================================
 
@@ -435,6 +490,7 @@ impl ApiKeyRepository {
 #[derive(Clone)]
 pub struct Repositories {
     pub users: UserRepository,
+    pub teams: TeamRepository,
     pub memberships: MembershipRepository,
     pub api_keys: ApiKeyRepository,
 }
@@ -443,6 +499,7 @@ impl Repositories {
     pub fn new(pool: PgPool) -> Self {
         Self {
             users: UserRepository::new(pool.clone()),
+            teams: TeamRepository::new(pool.clone()),
             memberships: MembershipRepository::new(pool.clone()),
             api_keys: ApiKeyRepository::new(pool),
         }
