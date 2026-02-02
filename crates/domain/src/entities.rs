@@ -839,7 +839,11 @@ impl Job {
 
         self.status = JobStatus::Failed;
         self.error = Some(Json(error));
-        self.failure_type = Some(failure_type);
+        self.failure_type = Some(failure_type.clone());
+
+        // Apply refund based on failure type and progress
+        self.apply_refund(failure_type);
+
         self.completed_at = Some(Utc::now());
         self.updated_at = Utc::now();
         Ok(())
@@ -853,6 +857,10 @@ impl Job {
 
         self.status = JobStatus::Canceled;
         self.failure_type = Some(JobFailureType::Canceled);
+
+        // Apply refund with 10% cancellation fee
+        self.apply_refund(JobFailureType::Canceled);
+
         self.completed_at = Some(Utc::now());
         self.updated_at = Utc::now();
         Ok(())
@@ -861,6 +869,76 @@ impl Job {
     /// Get owner URN
     pub fn owner_urn(&self) -> Result<Urn> {
         self.owner.parse()
+    }
+
+    /// Calculate refund amount based on failure type and progress
+    pub fn calculate_refund(&self, failure_type: JobFailureType) -> i32 {
+        let progress_percent = self.get_progress_percent();
+
+        match failure_type {
+            // Full refund for system errors and timeouts
+            JobFailureType::System | JobFailureType::Timeout => self.credits_charged,
+
+            // Partial refund based on remaining work for validation errors
+            JobFailureType::Validation => {
+                let remaining_work = 1.0 - (progress_percent / 100.0);
+                (self.credits_charged as f64 * remaining_work) as i32
+            }
+
+            // Partial refund with 10% cancellation fee
+            JobFailureType::Canceled => {
+                let remaining_work = 1.0 - (progress_percent / 100.0);
+                (self.credits_charged as f64 * remaining_work * 0.9) as i32
+            }
+        }
+    }
+
+    /// Get progress percentage from progress field
+    pub fn get_progress_percent(&self) -> f64 {
+        self.progress
+            .0
+            .get("percent")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+            .clamp(0.0, 100.0)
+    }
+
+    /// Apply refund to the job based on failure type
+    pub fn apply_refund(&mut self, failure_type: JobFailureType) {
+        self.credits_refunded = self.calculate_refund(failure_type);
+    }
+
+    /// Update progress percentage
+    pub fn update_progress(&mut self, percent: f64) -> Result<()> {
+        if !(0.0..=100.0).contains(&percent) {
+            return Err(Error::Validation(
+                "Progress must be between 0 and 100".to_string(),
+            ));
+        }
+
+        if let Some(progress_obj) = self.progress.0.as_object_mut() {
+            progress_obj.insert(
+                "percent".to_string(),
+                serde_json::Value::Number(
+                    serde_json::Number::from_f64(percent)
+                        .ok_or_else(|| Error::Validation("Invalid progress value".to_string()))?,
+                ),
+            );
+        } else {
+            // Create new progress object
+            let mut progress_map = serde_json::Map::new();
+            progress_map.insert(
+                "percent".to_string(),
+                serde_json::Value::Number(
+                    serde_json::Number::from_f64(percent)
+                        .ok_or_else(|| Error::Validation("Invalid progress value".to_string()))?,
+                ),
+            );
+            self.progress = Json(serde_json::Value::Object(progress_map));
+        }
+
+        self.updated_at = Utc::now();
+        Ok(())
     }
 
     /// Validate invariants per spec
@@ -2104,6 +2182,133 @@ mod tests {
         assert!(JobStatus::Completed.is_terminal());
         assert!(JobStatus::Failed.is_terminal());
         assert!(JobStatus::Canceled.is_terminal());
+    }
+
+    #[test]
+    fn test_job_refund_calculation() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+
+        // Set 40% progress
+        job.update_progress(40.0).unwrap();
+
+        // System error: Full refund
+        let system_refund = job.calculate_refund(JobFailureType::System);
+        assert_eq!(system_refund, 100);
+
+        // Timeout: Full refund
+        let timeout_refund = job.calculate_refund(JobFailureType::Timeout);
+        assert_eq!(timeout_refund, 100);
+
+        // Validation error: Partial refund based on remaining work
+        // 60% remaining = 60 credits refunded
+        let validation_refund = job.calculate_refund(JobFailureType::Validation);
+        assert_eq!(validation_refund, 60);
+
+        // Cancellation: Partial refund with 10% fee
+        // 60% remaining × 0.9 = 54 credits refunded
+        let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+        assert_eq!(cancel_refund, 54);
+    }
+
+    #[test]
+    fn test_job_progress_methods() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+
+        // Initially 0% progress
+        assert_eq!(job.get_progress_percent(), 0.0);
+
+        // Update progress
+        job.update_progress(25.5).unwrap();
+        assert_eq!(job.get_progress_percent(), 25.5);
+
+        // Progress bounds validation
+        assert!(job.update_progress(-1.0).is_err());
+        assert!(job.update_progress(101.0).is_err());
+
+        // Progress clamped to bounds in getter
+        job.progress = Json(json!({"percent": 150.0}));
+        assert_eq!(job.get_progress_percent(), 100.0);
+
+        job.progress = Json(json!({"percent": -50.0}));
+        assert_eq!(job.get_progress_percent(), 0.0);
+    }
+
+    #[test]
+    fn test_job_fail_with_automatic_refund() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+
+        // Start the job
+        job.start().unwrap();
+        assert_eq!(job.status, JobStatus::Processing);
+
+        // Set some progress
+        job.update_progress(30.0).unwrap();
+
+        // Fail with system error
+        job.fail(json!({"error": "GPU crashed"}), JobFailureType::System)
+            .unwrap();
+
+        assert_eq!(job.status, JobStatus::Failed);
+        assert_eq!(job.failure_type, Some(JobFailureType::System));
+        assert_eq!(job.credits_refunded, 100); // Full refund for system error
+        assert!(job.completed_at.is_some());
+    }
+
+    #[test]
+    fn test_job_cancel_with_automatic_refund() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+
+        // Start the job
+        job.start().unwrap();
+        assert_eq!(job.status, JobStatus::Processing);
+
+        // Set some progress (20%)
+        job.update_progress(20.0).unwrap();
+
+        // Cancel the job
+        job.cancel().unwrap();
+
+        assert_eq!(job.status, JobStatus::Canceled);
+        assert_eq!(job.failure_type, Some(JobFailureType::Canceled));
+
+        // 80% remaining work × 0.9 (10% cancellation fee) = 72 credits refunded
+        assert_eq!(job.credits_refunded, 72);
+        assert!(job.completed_at.is_some());
+    }
+
+    #[test]
+    fn test_job_refund_edge_cases() {
+        let user_id = Uuid::new_v4();
+        let user_owner = Urn::user(user_id);
+        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+
+        // 0% progress - full refund minus fee for cancellation
+        job.update_progress(0.0).unwrap();
+        let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+        assert_eq!(cancel_refund, 90); // 100% × 0.9
+
+        // 100% progress - no refund for any failure type except system/timeout
+        job.update_progress(100.0).unwrap();
+
+        assert_eq!(job.calculate_refund(JobFailureType::System), 100); // Still full
+        assert_eq!(job.calculate_refund(JobFailureType::Timeout), 100); // Still full
+        assert_eq!(job.calculate_refund(JobFailureType::Validation), 0); // No remaining work
+        assert_eq!(job.calculate_refund(JobFailureType::Canceled), 0); // No remaining work
+
+        // Test with no credits charged
+        let user_owner2 = Urn::user(user_id);
+        let mut free_job = Job::new(user_owner2, user_id, None, json!({}), 0, None).unwrap();
+        free_job.update_progress(50.0).unwrap();
+        assert_eq!(free_job.calculate_refund(JobFailureType::System), 0);
+        assert_eq!(free_job.calculate_refund(JobFailureType::Canceled), 0);
     }
 
     #[test]
