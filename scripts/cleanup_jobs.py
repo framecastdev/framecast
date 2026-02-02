@@ -9,7 +9,6 @@ import asyncio
 import os
 import sys
 from datetime import datetime, timedelta
-from typing import Dict, List
 
 import asyncpg
 import boto3
@@ -51,7 +50,7 @@ class JobCleanupService:
             await self.conn.close()
             print("✅ Disconnected from database")
 
-    async def get_old_jobs(self, days_old: int) -> List[Dict]:
+    async def get_old_jobs(self, days_old: int) -> list[dict]:
         """Get jobs older than specified days"""
         cutoff_date = datetime.utcnow() - timedelta(days=days_old)
 
@@ -70,7 +69,7 @@ class JobCleanupService:
         rows = await self.conn.fetch(query, cutoff_date)
         return [dict(row) for row in rows]
 
-    async def cleanup_job_events(self, job_ids: List[str]) -> int:
+    async def cleanup_job_events(self, job_ids: list[str]) -> int:
         """Clean up job events for given jobs"""
         if not job_ids:
             return 0
@@ -91,7 +90,7 @@ class JobCleanupService:
         print(f"  🗑️ Deleted {deleted_count} job events")
         return deleted_count
 
-    async def cleanup_webhook_deliveries(self, job_ids: List[str]) -> int:
+    async def cleanup_webhook_deliveries(self, job_ids: list[str]) -> int:
         """Clean up webhook deliveries for given jobs"""
         if not job_ids:
             return 0
@@ -112,7 +111,7 @@ class JobCleanupService:
         print(f"  🗑️ Deleted {deleted_count} webhook deliveries")
         return deleted_count
 
-    def get_s3_keys_from_output(self, output: Dict) -> List[str]:
+    def get_s3_keys_from_output(self, output: dict) -> list[str]:
         """Extract S3 keys from job output"""
         keys = []
         if not output:
@@ -134,7 +133,7 @@ class JobCleanupService:
 
         return keys
 
-    async def cleanup_s3_objects(self, jobs: List[Dict]) -> int:
+    async def cleanup_s3_objects(self, jobs: list[dict]) -> int:
         """Clean up S3 objects for jobs"""
         if not self.s3_client or not S3_BUCKET_OUTPUTS:
             print("  ⚠️ S3 cleanup skipped (not configured)")
@@ -185,7 +184,7 @@ class JobCleanupService:
         print(f"  🗑️ Deleted {deleted_count} S3 objects")
         return deleted_count
 
-    async def delete_jobs(self, job_ids: List[str]) -> int:
+    async def delete_jobs(self, job_ids: list[str]) -> int:
         """Delete job records"""
         if not job_ids:
             return 0

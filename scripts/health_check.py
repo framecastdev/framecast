@@ -64,9 +64,9 @@ class HealthChecker:
             self.results["services"]["database"] = {
                 "status": "healthy",
                 "migrations_applied": migration_count,
-                "connection_url": DATABASE_URL.split("@")[1]
-                if "@" in DATABASE_URL
-                else "configured",
+                "connection_url": (
+                    DATABASE_URL.split("@")[1] if "@" in DATABASE_URL else "configured"
+                ),
             }
             return True
 
@@ -168,14 +168,13 @@ class HealthChecker:
                             "health_data": health_data,
                         }
                         return True
-                    else:
-                        print(f"  ❌ Inngest health check failed: {response.status}")
+                    print(f"  ❌ Inngest health check failed: {response.status}")
 
-                        self.results["services"]["inngest"] = {
-                            "status": "error",
-                            "message": f"Health endpoint returned {response.status}",
-                        }
-                        return False
+                    self.results["services"]["inngest"] = {
+                        "status": "error",
+                        "message": f"Health endpoint returned {response.status}",
+                    }
+                    return False
 
         except Exception as e:
             print(f"  ❌ Inngest connection failed: {e}")
@@ -190,12 +189,12 @@ class HealthChecker:
 
         # Anthropic API (just check if endpoint is reachable)
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    "https://api.anthropic.com", timeout=5
-                ) as response:
-                    # Any response (even 401) means the service is reachable
-                    print("  ✅ Anthropic API reachable")
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get("https://api.anthropic.com", timeout=5) as response,
+            ):
+                # Any response (even 401) means the service is reachable
+                print("  ✅ Anthropic API reachable")
         except Exception as e:
             print(f"  ⚠️ Anthropic API unreachable: {e}")
             external_status = False

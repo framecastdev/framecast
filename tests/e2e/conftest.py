@@ -11,8 +11,9 @@ Supports two modes:
 
 import asyncio
 import tempfile
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List
+from typing import Any
 
 import httpx
 import pytest
@@ -62,9 +63,9 @@ class UserPersona(BaseModel):
     name: str
     tier: str  # "visitor", "starter", "creator"
     credits: int = 0
-    team_memberships: List[str] = []
-    owned_teams: List[str] = []
-    api_keys: List[str] = []
+    team_memberships: list[str] = []
+    owned_teams: list[str] = []
+    api_keys: list[str] = []
 
     def to_auth_token(self) -> str:
         """Generate a mock JWT token for this user."""
@@ -91,7 +92,7 @@ class UserPersona(BaseModel):
 
 
 # Standard user personas for testing
-@pytest.fixture()
+@pytest.fixture
 def visitor_user() -> UserPersona:
     """A visitor user (not authenticated)."""
     fake = Faker()
@@ -103,7 +104,7 @@ def visitor_user() -> UserPersona:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def starter_user() -> UserPersona:
     """A starter tier user with some credits."""
     fake = Faker()
@@ -117,7 +118,7 @@ def starter_user() -> UserPersona:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def creator_user() -> UserPersona:
     """A creator tier user with team memberships."""
     fake = Faker()
@@ -133,7 +134,7 @@ def creator_user() -> UserPersona:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def team_owner() -> UserPersona:
     """A creator user who owns multiple teams."""
     fake = Faker()
@@ -148,7 +149,7 @@ def team_owner() -> UserPersona:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def team_member() -> UserPersona:
     """A creator user who is a member of teams but doesn't own any."""
     fake = Faker()
@@ -179,7 +180,7 @@ def event_loop():
 
 
 # HTTP client for API testing
-@pytest.fixture()
+@pytest.fixture
 async def http_client(
     test_config: TestConfig,
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
@@ -192,7 +193,7 @@ async def http_client(
         yield client
 
 
-@pytest.fixture()
+@pytest.fixture
 async def authenticated_client(
     http_client: httpx.AsyncClient, starter_user: UserPersona
 ) -> httpx.AsyncClient:
@@ -204,7 +205,7 @@ async def authenticated_client(
 
 
 # Mock service infrastructure
-@pytest.fixture()
+@pytest.fixture
 def mock_runpod(test_config: TestConfig):
     """Mock RunPod API for video generation testing."""
     if test_config.test_mode != "mocked":
@@ -245,7 +246,7 @@ def mock_runpod(test_config: TestConfig):
         yield
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_anthropic(test_config: TestConfig):
     """Mock Anthropic Claude API for AI interactions."""
     if test_config.test_mode != "mocked":
@@ -276,7 +277,7 @@ def mock_anthropic(test_config: TestConfig):
         yield
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_inngest(test_config: TestConfig):
     """Mock Inngest event API for job orchestration."""
     if test_config.test_mode != "mocked":
@@ -290,7 +291,7 @@ def mock_inngest(test_config: TestConfig):
         yield
 
 
-@pytest.fixture()
+@pytest.fixture
 async def mock_s3(test_config: TestConfig):
     """Mock S3 operations using LocalStack."""
     if test_config.test_mode != "mocked":
@@ -314,7 +315,7 @@ async def mock_s3(test_config: TestConfig):
 
 
 # Database utilities
-@pytest.fixture()
+@pytest.fixture
 async def clean_database(test_config: TestConfig):
     """Ensure clean database state for testing."""
     # This will be implemented when we have database layer
@@ -324,7 +325,7 @@ async def clean_database(test_config: TestConfig):
 
 
 # Temporary file management
-@pytest.fixture()
+@pytest.fixture
 def temp_asset_file():
     """Create a temporary test asset file."""
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
@@ -346,7 +347,7 @@ class TestDataFactory:
     """Factory for generating test data."""
 
     @staticmethod
-    def video_spec(scene_count: int = 3) -> Dict[str, Any]:
+    def video_spec(scene_count: int = 3) -> dict[str, Any]:
         """Generate a valid video specification."""
         fake = Faker()
 
@@ -371,7 +372,7 @@ class TestDataFactory:
         }
 
     @staticmethod
-    def team_data() -> Dict[str, Any]:
+    def team_data() -> dict[str, Any]:
         """Generate valid team creation data."""
         fake = Faker()
         return {
@@ -381,7 +382,7 @@ class TestDataFactory:
         }
 
 
-@pytest.fixture()
+@pytest.fixture
 def test_data_factory() -> TestDataFactory:
     """Factory for generating test data."""
     return TestDataFactory()
@@ -412,9 +413,9 @@ def assert_valid_urn(urn: str, expected_type: str = None) -> None:
     assert parts[0] == "framecast", f"URN must start with 'framecast': {urn}"
 
     if expected_type:
-        assert (
-            parts[1] == expected_type
-        ), f"Expected URN type {expected_type}, got {parts[1]}"
+        assert parts[1] == expected_type, (
+            f"Expected URN type {expected_type}, got {parts[1]}"
+        )
 
 
 def assert_job_status_valid(status: str) -> None:

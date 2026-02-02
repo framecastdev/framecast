@@ -64,50 +64,50 @@ These contain battle-tested patterns for:
 
 ### Phase 2: Testing & Infrastructure
 
-6. **Create tests/e2e/ with Python setup**
+1. **Create tests/e2e/ with Python setup**
    - `pyproject.toml` with pytest, httpx, type hints
    - `conftest.py` with fixtures and mocks
    - Basic test structure following Rule 2 (Tests Before Code)
 
-7. **Create migrations/ directory**
+2. **Create migrations/ directory**
    - Database schema migrations
    - Reference spec/04_Entities.md for entity definitions
    - Ensure all invariants from spec/06_Invariants.md are enforced
 
-8. **Create infra/opentofu/ for IaC**
+3. **Create infra/opentofu/ for IaC**
    - Infrastructure as code setup
    - AWS Lambda, API Gateway, RDS configurations
    - LocalStack for dev/prod parity (Rule 10)
 
-9. **Create scripts/ for admin processes**
+4. **Create scripts/ for admin processes**
    - Database seeding, cleanup, admin tasks
    - Compliance with Rule 12 (Admin processes as code)
 
 ### Phase 3: Development Environment
 
-10. **Implement `just setup` command**
+1. **Implement `just setup` command**
     - Install Rust, uv, OpenTofu, LocalStack
     - Verify all dependencies available
     - Create reproducible setup process
 
-11. **Implement `just dev` command**
+2. **Implement `just dev` command**
     - Start LocalStack, Inngest, mock services
     - Ensure dev/prod parity (Rule 10)
     - Port binding configuration (Rule 7)
 
-12. **Implement `just test` command**
+3. **Implement `just test` command**
     - Run all Rust unit and integration tests
     - Ensure proper error handling (Rule 3: No .unwrap())
     - Test stateless process compliance (Rule 5)
 
-13. **Create first passing test**
+4. **Create first passing test**
     - Validate entire setup works end-to-end
     - Demonstrate all build tools functional
     - Verify environment configuration works
 
 ### Phase 4: Validation & Documentation
 
-14. **Run compliance checks against all 10 Critical Rules**
+1. **Run compliance checks against all 10 Critical Rules**
     - Verify Just is only entry point (Rule 1)
     - Confirm tests before code approach (Rule 2)
     - Check no .unwrap() in production (Rule 3)
@@ -119,7 +119,7 @@ These contain battle-tested patterns for:
     - Validate phase/task breakdown (Rule 9)
     - Check feature branch workflow (Rule 10)
 
-15. **Verify 12-Factor compliance**
+2. **Verify 12-Factor compliance**
     - Single codebase with multiple deploys
     - Explicit dependencies with lockfiles
     - Environment-based configuration

@@ -10,7 +10,6 @@ import os
 import sys
 import uuid
 from datetime import datetime, timedelta
-from typing import List
 
 import asyncpg
 
@@ -79,7 +78,7 @@ class FramecastSeeder:
         except Exception as e:
             print(f"⚠️ Warning: Failed to clear existing data: {e}")
 
-    async def seed_users(self) -> List[str]:
+    async def seed_users(self) -> list[str]:
         """Create test users"""
         users = [
             {
@@ -127,7 +126,7 @@ class FramecastSeeder:
         print(f"✅ Created {len(users)} test users")
         return user_ids
 
-    async def seed_teams(self, user_ids: List[str]) -> List[str]:
+    async def seed_teams(self, user_ids: list[str]) -> list[str]:
         """Create test teams"""
         teams = [
             {
@@ -191,8 +190,8 @@ class FramecastSeeder:
         return team_ids
 
     async def seed_projects(
-        self, team_ids: List[str], user_ids: List[str]
-    ) -> List[str]:
+        self, team_ids: list[str], user_ids: list[str]
+    ) -> list[str]:
         """Create test projects"""
         projects = [
             {
@@ -245,7 +244,7 @@ class FramecastSeeder:
         return project_ids
 
     async def seed_jobs(
-        self, team_ids: List[str], user_ids: List[str], project_ids: List[str]
+        self, team_ids: list[str], user_ids: list[str], project_ids: list[str]
     ):
         """Create test jobs"""
         jobs = [
@@ -307,7 +306,7 @@ class FramecastSeeder:
 
         print(f"✅ Created {len(jobs)} test jobs")
 
-    async def seed_api_keys(self, user_ids: List[str], team_ids: List[str]):
+    async def seed_api_keys(self, user_ids: list[str], team_ids: list[str]):
         """Create test API keys"""
         import hashlib
 

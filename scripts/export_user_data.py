@@ -10,7 +10,7 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 import asyncpg
 
@@ -42,7 +42,7 @@ class UserDataExporter:
             await self.conn.close()
             print("✅ Disconnected from database")
 
-    async def get_user_by_id_or_email(self, identifier: str) -> Dict:
+    async def get_user_by_id_or_email(self, identifier: str) -> dict:
         """Get user by ID or email"""
         # Try by UUID first
         try:
@@ -62,7 +62,7 @@ class UserDataExporter:
 
         return dict(user)
 
-    async def export_user_data(self, user_id: str) -> Dict[str, Any]:
+    async def export_user_data(self, user_id: str) -> dict[str, Any]:
         """Export all data for a user"""
         user_data = {
             "export_timestamp": datetime.utcnow().isoformat(),

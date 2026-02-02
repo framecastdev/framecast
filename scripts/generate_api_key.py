@@ -11,7 +11,6 @@ import json
 import os
 import secrets
 import sys
-from typing import List
 
 import asyncpg
 
@@ -64,7 +63,7 @@ class APIKeyGenerator:
 
         return dict(user)
 
-    async def get_user_teams(self, user_id: str) -> List[dict]:
+    async def get_user_teams(self, user_id: str) -> list[dict]:
         """Get teams where user is owner or admin"""
         query = """
             SELECT t.id, t.name, t.slug, m.role
@@ -112,7 +111,7 @@ class APIKeyGenerator:
         name: str,
         owner_urn: str,
         user_email: str,
-        scopes: List[str] = None,
+        scopes: list[str] = None,
         expires_days: int = None,
     ) -> dict:
         """Create a new API key"""

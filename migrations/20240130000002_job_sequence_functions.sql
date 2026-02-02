@@ -36,9 +36,9 @@ $$ LANGUAGE plpgsql;
 
 -- Trigger to auto-set sequence
 CREATE TRIGGER trigger_job_events_auto_sequence
-    BEFORE INSERT ON job_events
-    FOR EACH ROW
-    EXECUTE FUNCTION auto_set_job_event_sequence();
+BEFORE INSERT ON job_events
+FOR EACH ROW
+EXECUTE FUNCTION auto_set_job_event_sequence();
 
 -- ============================================================================
 -- JOB CONCURRENCY CONSTRAINTS
@@ -108,9 +108,9 @@ $$ LANGUAGE plpgsql;
 
 -- Trigger for job concurrency limits
 CREATE TRIGGER trigger_jobs_check_concurrency_limits
-    BEFORE INSERT OR UPDATE ON jobs
-    FOR EACH ROW
-    EXECUTE FUNCTION check_job_concurrency_limits();
+BEFORE INSERT OR UPDATE ON jobs
+FOR EACH ROW
+EXECUTE FUNCTION check_job_concurrency_limits();
 
 -- ============================================================================
 -- JOB STATUS TRANSITION VALIDATION
@@ -169,9 +169,9 @@ $$ LANGUAGE plpgsql;
 
 -- Trigger for job status transitions
 CREATE TRIGGER trigger_jobs_validate_status_transitions
-    BEFORE UPDATE ON jobs
-    FOR EACH ROW
-    EXECUTE FUNCTION validate_job_status_transitions();
+BEFORE UPDATE ON jobs
+FOR EACH ROW
+EXECUTE FUNCTION validate_job_status_transitions();
 
 -- ============================================================================
 -- PROJECT STATUS AUTOMATION
@@ -219,9 +219,9 @@ $$ LANGUAGE plpgsql;
 
 -- Triggers for project status updates
 CREATE TRIGGER trigger_jobs_update_project_status
-    AFTER INSERT OR UPDATE OR DELETE ON jobs
-    FOR EACH ROW
-    EXECUTE FUNCTION update_project_status_from_jobs();
+AFTER INSERT OR UPDATE OR DELETE ON jobs
+FOR EACH ROW
+EXECUTE FUNCTION update_project_status_from_jobs();
 
 -- ============================================================================
 -- RETENTION POLICIES
@@ -298,9 +298,9 @@ $$ LANGUAGE plpgsql;
 
 -- Trigger for API key owner constraints
 CREATE TRIGGER trigger_api_keys_check_owner_constraints
-    BEFORE INSERT OR UPDATE ON api_keys
-    FOR EACH ROW
-    EXECUTE FUNCTION check_api_key_owner_constraints();
+BEFORE INSERT OR UPDATE ON api_keys
+FOR EACH ROW
+EXECUTE FUNCTION check_api_key_owner_constraints();
 
 -- ============================================================================
 -- UTILITY FUNCTIONS
@@ -309,7 +309,7 @@ CREATE TRIGGER trigger_api_keys_check_owner_constraints
 -- Function to get current job stats for monitoring
 CREATE OR REPLACE FUNCTION get_job_stats()
 RETURNS TABLE (
-    status job_status,
+    status JOB_STATUS,
     count BIGINT
 ) AS $$
 BEGIN
@@ -345,7 +345,9 @@ $$ LANGUAGE plpgsql;
 -- COMMENTS
 -- ============================================================================
 
-COMMENT ON FUNCTION get_next_job_event_sequence(UUID) IS 'Generate next sequence number for job events';
+COMMENT ON FUNCTION get_next_job_event_sequence(
+    UUID
+) IS 'Generate next sequence number for job events';
 COMMENT ON FUNCTION auto_set_job_event_sequence() IS 'Auto-populate sequence field on job event insert';
 COMMENT ON FUNCTION check_job_concurrency_limits() IS 'Enforce job concurrency limits (CARD-5, CARD-6, INV-J12)';
 COMMENT ON FUNCTION validate_job_status_transitions() IS 'Validate and auto-set timestamps for job status changes';
@@ -355,7 +357,9 @@ COMMENT ON FUNCTION cleanup_old_webhook_deliveries() IS 'Remove webhook deliveri
 COMMENT ON FUNCTION is_valid_urn(TEXT) IS 'Validate URN format';
 COMMENT ON FUNCTION check_api_key_owner_constraints() IS 'Enforce API key ownership rules based on user tier';
 COMMENT ON FUNCTION get_job_stats() IS 'Get current job status distribution for monitoring';
-COMMENT ON FUNCTION get_team_stats(UUID) IS 'Get team statistics for dashboard display';
+COMMENT ON FUNCTION get_team_stats(
+    UUID
+) IS 'Get team statistics for dashboard display';
 
 -- ============================================================================
 -- END OF MIGRATION

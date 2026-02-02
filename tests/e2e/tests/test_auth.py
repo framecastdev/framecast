@@ -23,7 +23,7 @@ from conftest import (
 from httpx import AsyncClient
 
 
-@pytest.mark.auth()
+@pytest.mark.auth
 class TestAccountRegistration:
     """US-001: Account registration with email verification."""
 
@@ -174,7 +174,7 @@ class TestAccountRegistration:
         assert "terms" in error["message"].lower()
 
 
-@pytest.mark.auth()
+@pytest.mark.auth
 class TestEmailVerification:
     """US-002: Email verification link handling and expiration."""
 
@@ -230,7 +230,7 @@ class TestEmailVerification:
         assert "expired" in error["message"].lower()
 
 
-@pytest.mark.auth()
+@pytest.mark.auth
 class TestUserLogin:
     """US-003: Login with email/password authentication."""
 
@@ -317,7 +317,7 @@ class TestUserLogin:
         assert "verification" in error["message"].lower()
 
 
-@pytest.mark.auth()
+@pytest.mark.auth
 class TestPasswordReset:
     """US-004: Password reset flow with secure token handling."""
 
@@ -369,7 +369,7 @@ class TestPasswordReset:
         assert error["code"] == "VALIDATION_ERROR"
 
 
-@pytest.mark.auth()
+@pytest.mark.auth
 class TestSessionManagement:
     """US-009: Session management and JWT token validation."""
 
@@ -442,8 +442,8 @@ class TestSessionManagement:
         assert response.status_code == 401
 
 
-@pytest.mark.auth()
-@pytest.mark.security()
+@pytest.mark.auth
+@pytest.mark.security
 class TestRateLimiting:
     """US-007: Rate limiting on authentication endpoints."""
 
@@ -503,8 +503,8 @@ class TestRateLimiting:
         assert error["code"] == "RATE_LIMIT_EXCEEDED"
 
 
-@pytest.mark.auth()
-@pytest.mark.integration()
+@pytest.mark.auth
+@pytest.mark.integration
 class TestOAuthIntegration:
     """US-005: OAuth login integration (Google, GitHub)."""
 

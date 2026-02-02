@@ -67,12 +67,10 @@ async def cleanup_test_databases():
         conn = await asyncpg.connect(base_url)
 
         # Find and drop any test databases that might be left behind
-        test_dbs = await conn.fetch(
-            """
+        test_dbs = await conn.fetch("""
             SELECT datname FROM pg_database
             WHERE datname LIKE 'test_framecast_%'
-        """
-        )
+        """)
 
         for db in test_dbs:
             try:
@@ -85,7 +83,7 @@ async def cleanup_test_databases():
         pass  # Cleanup is best effort
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_environment(monkeypatch):
     """Mock environment variables for testing"""
     test_env = {

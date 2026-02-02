@@ -16,7 +16,6 @@ import argparse
 import os
 import subprocess
 import sys
-from typing import List
 
 
 class FramecastTestRunner:
@@ -26,7 +25,7 @@ class FramecastTestRunner:
         self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         os.chdir(self.project_root)
 
-    def run_command(self, command: List[str]) -> int:
+    def run_command(self, command: list[str]) -> int:
         """Run command and return exit code"""
         print(f"Running: {' '.join(command)}")
         result = subprocess.run(command, cwd=self.project_root)
@@ -128,7 +127,7 @@ class FramecastTestRunner:
         ]
 
         for name, test_func in test_categories:
-            print(f"\n{'='*50}")
+            print(f"\n{'=' * 50}")
             print(f"Running {name}")
             print("=" * 50)
 
@@ -141,7 +140,7 @@ class FramecastTestRunner:
                 print(f"✅ {name} passed")
 
         # Summary
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print("TEST SUMMARY")
         print("=" * 50)
 
@@ -157,9 +156,8 @@ class FramecastTestRunner:
             for test in failed_tests:
                 print(f"  - {test}")
             return 1
-        else:
-            print(f"\n✅ All {len(test_results)} test categories passed!")
-            return 0
+        print(f"\n✅ All {len(test_results)} test categories passed!")
+        return 0
 
     def run_coverage_report(self) -> int:
         """Generate test coverage report"""
@@ -214,23 +212,22 @@ def main():
 
     if args.install_deps:
         return runner.install_test_dependencies()
-    elif args.unit:
+    if args.unit:
         return runner.run_unit_tests()
-    elif args.migrations:
+    if args.migrations:
         return runner.run_migration_tests()
-    elif args.admin_scripts:
+    if args.admin_scripts:
         return runner.run_admin_script_tests()
-    elif args.integration:
+    if args.integration:
         return runner.run_integration_tests()
-    elif args.performance:
+    if args.performance:
         return runner.run_performance_tests()
-    elif args.coverage:
+    if args.coverage:
         return runner.run_coverage_report()
-    elif args.all:
+    if args.all:
         return runner.run_all_tests()
-    else:
-        # Default: run basic test suite
-        return runner.run_all_tests()
+    # Default: run basic test suite
+    return runner.run_all_tests()
 
 
 if __name__ == "__main__":

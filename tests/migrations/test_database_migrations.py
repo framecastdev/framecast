@@ -14,7 +14,7 @@ import asyncio
 import os
 import subprocess
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 import asyncpg
 import pytest
@@ -60,7 +60,7 @@ class MigrationTestFramework:
             await conn.execute(f"DROP DATABASE IF EXISTS {self.test_db_name}")
             await conn.close()
 
-    async def run_migrations(self) -> Dict[str, Any]:
+    async def run_migrations(self) -> dict[str, Any]:
         """Run migrations and return result"""
         try:
             # Use sqlx to run migrations
@@ -84,7 +84,7 @@ class MigrationTestFramework:
         except Exception as e:
             return {"success": False, "error": str(e), "return_code": -1}
 
-    async def get_migration_status(self) -> List[Dict]:
+    async def get_migration_status(self) -> list[dict]:
         """Get current migration status"""
         try:
             migrations = await self.conn.fetch(
@@ -96,12 +96,10 @@ class MigrationTestFramework:
 
     async def get_table_count(self) -> int:
         """Get number of tables in database"""
-        count = await self.conn.fetchval(
-            """
+        count = await self.conn.fetchval("""
             SELECT COUNT(*) FROM information_schema.tables
             WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-        """
-        )
+        """)
         return count
 
     async def check_table_exists(self, table_name: str) -> bool:
@@ -126,7 +124,7 @@ class MigrationTestFramework:
         )
         return count > 0
 
-    async def test_invariant_violation(self, query: str, params: List = None) -> bool:
+    async def test_invariant_violation(self, query: str, params: list = None) -> bool:
         """Test if query violates invariants (should fail)"""
         try:
             if params:
@@ -138,7 +136,7 @@ class MigrationTestFramework:
             return True  # Expected failure
 
 
-@pytest.fixture()
+@pytest.fixture
 async def migration_framework():
     """Pytest fixture for migration testing"""
     framework = MigrationTestFramework()
@@ -150,7 +148,7 @@ async def migration_framework():
 # HAPPY PATH TESTS
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_happy_01_clean_migration_from_scratch(migration_framework):
     """HAPPY-01: Clean database migration from scratch"""
     framework = migration_framework
@@ -184,7 +182,7 @@ async def test_happy_01_clean_migration_from_scratch(migration_framework):
         assert exists, f"Table {table} should exist after migrations"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_happy_02_migration_status_tracking(migration_framework):
     """HAPPY-02: Migration status tracking works correctly"""
     framework = migration_framework
@@ -203,12 +201,12 @@ async def test_happy_02_migration_status_tracking(migration_framework):
 
     # Verify all migrations marked as successful
     for migration in migrations:
-        assert migration[
-            "success"
-        ], f"Migration {migration['version']} should be successful"
+        assert migration["success"], (
+            f"Migration {migration['version']} should be successful"
+        )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_happy_03_business_logic_triggers(migration_framework):
     """HAPPY-03: Business logic triggers function correctly"""
     framework = migration_framework
@@ -218,13 +216,11 @@ async def test_happy_03_business_logic_triggers(migration_framework):
     assert result["success"], "Migrations should succeed"
 
     # Test updated_at trigger works
-    user_id = await framework.conn.fetchval(
-        """
+    user_id = await framework.conn.fetchval("""
         INSERT INTO users (email, name, tier)
         VALUES ('test@example.com', 'Test User', 'starter')
         RETURNING id
-    """
-    )
+    """)
 
     # Get initial timestamp
     initial_timestamp = await framework.conn.fetchval(
@@ -248,7 +244,7 @@ async def test_happy_03_business_logic_triggers(migration_framework):
 # EDGE CASE TESTS
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_edge_01_migration_idempotency(migration_framework):
     """EDGE-01: Migrations are idempotent (can run multiple times)"""
     framework = migration_framework
@@ -270,7 +266,7 @@ async def test_edge_01_migration_idempotency(migration_framework):
 # ERROR CONDITION TESTS
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_error_01_database_connection_failure():
     """ERROR-01: Handle database connection failures gracefully"""
     framework = MigrationTestFramework()
@@ -289,7 +285,7 @@ async def test_error_01_database_connection_failure():
 # INVARIANT TESTS
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inv_01_user_credit_constraints(migration_framework):
     """INV-01: User credit constraints always enforced"""
     framework = migration_framework
@@ -299,16 +295,14 @@ async def test_inv_01_user_credit_constraints(migration_framework):
     assert result["success"], "Migrations should succeed"
 
     # Test: User credits cannot be negative
-    violation = await framework.test_invariant_violation(
-        """
+    violation = await framework.test_invariant_violation("""
         INSERT INTO users (email, name, tier, credits)
         VALUES ('test@example.com', 'Test User', 'starter', -100)
-    """
-    )
+    """)
     assert violation, "Should prevent negative user credits"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inv_02_team_ownership_rules(migration_framework):
     """INV-02: Team ownership rules enforced"""
     framework = migration_framework
@@ -318,21 +312,17 @@ async def test_inv_02_team_ownership_rules(migration_framework):
     assert result["success"], "Migrations should succeed"
 
     # Create test data
-    user_id = await framework.conn.fetchval(
-        """
+    user_id = await framework.conn.fetchval("""
         INSERT INTO users (email, name, tier)
         VALUES ('owner@example.com', 'Owner', 'creator')
         RETURNING id
-    """
-    )
+    """)
 
-    team_id = await framework.conn.fetchval(
-        """
+    team_id = await framework.conn.fetchval("""
         INSERT INTO teams (name, slug)
         VALUES ('Test Team', 'test-team')
         RETURNING id
-    """
-    )
+    """)
 
     membership_id = await framework.conn.fetchval(
         """
@@ -351,7 +341,7 @@ async def test_inv_02_team_ownership_rules(migration_framework):
     assert violation, "Should prevent deletion of last owner"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inv_03_job_concurrency_limits(migration_framework):
     """INV-03: Job concurrency limits enforced"""
     framework = migration_framework
@@ -361,13 +351,11 @@ async def test_inv_03_job_concurrency_limits(migration_framework):
     assert result["success"], "Migrations should succeed"
 
     # Create starter user
-    user_id = await framework.conn.fetchval(
-        """
+    user_id = await framework.conn.fetchval("""
         INSERT INTO users (email, name, tier)
         VALUES ('starter@example.com', 'Starter User', 'starter')
         RETURNING id
-    """
-    )
+    """)
 
     # Create first job (should succeed)
     job1_id = await framework.conn.fetchval(
@@ -394,7 +382,7 @@ async def test_inv_03_job_concurrency_limits(migration_framework):
     assert violation, "Should prevent starter user from having >1 concurrent job"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inv_04_urn_validation(migration_framework):
     """INV-04: URN validation working correctly"""
     framework = migration_framework
@@ -404,13 +392,11 @@ async def test_inv_04_urn_validation(migration_framework):
     assert result["success"], "Migrations should succeed"
 
     # Create starter user
-    user_id = await framework.conn.fetchval(
-        """
+    user_id = await framework.conn.fetchval("""
         INSERT INTO users (email, name, tier)
         VALUES ('starter@example.com', 'Starter User', 'starter')
         RETURNING id
-    """
-    )
+    """)
 
     # Test: Starter user cannot have team API key
     violation = await framework.test_invariant_violation(
@@ -427,7 +413,7 @@ async def test_inv_04_urn_validation(migration_framework):
 # PERFORMANCE TESTS
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_perf_migration_timing(migration_framework):
     """PERF-DB-01: Migration completes within reasonable time"""
     framework = migration_framework
