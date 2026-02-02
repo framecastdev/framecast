@@ -16,7 +16,7 @@ default:
 # ============================================================================
 
 # Install all required tools and dependencies from scratch
-setup: install-tools install-rust-deps install-python-deps
+setup: install-tools install-rust-deps install-python-deps install-pre-commit precommit-install
     @echo "✅ Setup complete! Run 'just dev' to start development environment."
 
 # Install system tools (Rust, uv, OpenTofu, LocalStack, Docker)
@@ -74,6 +74,12 @@ install-python-deps:
     @echo "🐍 Installing Python dependencies for E2E tests..."
     cd tests/e2e && uv sync
     @echo "✅ Python dependencies installed"
+
+# Install pre-commit hooks
+install-pre-commit:
+    @echo "🪝 Installing pre-commit..."
+    pip3 install pre-commit
+    @echo "✅ Pre-commit installed"
 
 # ============================================================================
 # DEVELOPMENT ENVIRONMENT (Rules IV, VII, X: Backing Services, Port Binding, Dev/Prod Parity)
@@ -215,8 +221,8 @@ test-performance:
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)
 # ============================================================================
 
-# Run all quality checks (formatting, linting, tests)
-check: fmt-check clippy test
+# Run all quality checks (formatting, linting, tests, pre-commit)
+check: fmt-check clippy test precommit-run-all
     @echo "✅ All quality checks passed"
 
 # Check code formatting
@@ -239,6 +245,44 @@ fix:
     @echo "🔧 Fixing common issues..."
     cargo clippy --workspace --all-targets --fix --allow-dirty --allow-staged
     cargo fmt --all
+
+# ============================================================================
+# PRE-COMMIT HOOKS (Code Quality & Security)
+# ============================================================================
+
+# Install pre-commit hooks into the git repository
+precommit-install:
+    @echo "🪝 Installing pre-commit hooks..."
+    pre-commit install --install-hooks --hook-type pre-commit
+    pre-commit install --hook-type pre-push
+    pre-commit install --hook-type commit-msg
+    @echo "✅ Pre-commit hooks installed"
+
+# Run pre-commit hooks on staged files
+precommit-run:
+    @echo "🔍 Running pre-commit hooks on staged files..."
+    pre-commit run
+
+# Run pre-commit hooks on all files
+precommit-run-all:
+    @echo "🔍 Running pre-commit hooks on all files..."
+    pre-commit run --all-files
+
+# Update pre-commit hooks to latest versions
+precommit-update:
+    @echo "⬆️ Updating pre-commit hooks..."
+    pre-commit autoupdate
+    @echo "✅ Pre-commit hooks updated"
+
+# Run specific pre-commit hook
+precommit-hook hook:
+    @echo "🎯 Running specific hook: {{hook}}"
+    pre-commit run {{hook}}
+
+# Skip pre-commit hooks for emergency commits (use sparingly)
+commit-emergency message:
+    @echo "🚨 Emergency commit (skipping hooks): {{message}}"
+    git commit --no-verify -m "{{message}}"
 
 # ============================================================================
 # BUILD & RELEASE (Rule V: Build, Release, Run)

@@ -1,0 +1,32 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^http://localhost"
+    },
+    {
+      "pattern": "^https://localhost"
+    },
+    {
+      "pattern": "^http://127.0.0.1"
+    },
+    {
+      "pattern": "^https://127.0.0.1"
+    },
+    {
+      "pattern": "^#"
+    }
+  ],
+  "timeout": "10s",
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackRetryDelay": "30s",
+  "aliveStatusCodes": [200, 206, 299, 403],
+  "httpHeaders": [
+    {
+      "urls": ["https://github.com", "https://api.github.com"],
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    }
+  ]
+}

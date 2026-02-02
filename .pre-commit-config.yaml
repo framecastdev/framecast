@@ -1,0 +1,275 @@
+# Pre-commit hooks configuration for Framecast
+# Industry-standard hooks for code quality, security, and consistency
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  # ============================================================================
+  # GENERAL CODE QUALITY & FORMATTING
+  # ============================================================================
+
+  # Built-in pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # File formatting
+      - id: trailing-whitespace
+        exclude: '^tests/.*\.md$|^docs/.*\.md$'
+      - id: end-of-file-fixer
+        exclude: '^tests/.*\.md$|^docs/.*\.md$'
+      - id: check-yaml
+        args: ['--unsafe']  # Allow custom YAML tags
+      - id: check-json
+      - id: check-toml
+      - id: check-xml
+
+      # Git and merge safety
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=5000']  # 5MB limit
+      - id: forbid-new-submodules
+
+      # Security and sensitive data
+      - id: detect-aws-credentials
+      - id: detect-private-key
+
+      # Code quality
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # ============================================================================
+  # RUST CODE QUALITY
+  # ============================================================================
+
+  # Rust formatting with rustfmt
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: Rust formatting (rustfmt)
+        entry: cargo fmt
+        language: system
+        files: '\.rs$'
+        pass_filenames: false
+
+      # Rust linting with clippy
+      - id: clippy
+        name: Rust linting (clippy)
+        entry: cargo clippy
+        language: system
+        args: ['--workspace', '--all-targets', '--', '-D', 'warnings']
+        files: '\.rs$'
+        pass_filenames: false
+
+  # ============================================================================
+  # PYTHON CODE QUALITY
+  # ============================================================================
+
+  # Python code formatting with black
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3
+        args: ['--line-length=88']
+
+  # Python import sorting with isort
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--profile=black', '--line-length=88']
+
+  # Python linting with flake8
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        args: ['--max-line-length=88', '--extend-ignore=E203,W503']
+        additional_dependencies: [
+          'flake8-bugbear',      # Additional bug detection
+          'flake8-docstrings',   # Docstring conventions
+          'flake8-comprehensions' # Better comprehensions
+        ]
+
+  # ============================================================================
+  # SECURITY SCANNING
+  # ============================================================================
+
+  # Python security linting with bandit
+  - repo: https://github.com/pycqa/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: ['-r', 'scripts/', '-f', 'json']
+        files: '^scripts/.*\.py$'
+
+  # Secret detection with detect-secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+              \.lock$|
+              package-lock\.json$|
+              Cargo\.lock$|
+              poetry\.lock$
+          )
+
+  # Additional security scanning with semgrep
+  - repo: https://github.com/returntocorp/semgrep
+    rev: v1.52.0
+    hooks:
+      - id: semgrep
+        args: ['--config=auto', '--error', '--skip-unknown-extensions']
+        files: '\.(py|rs|js|ts|yaml|yml|json)$'
+
+  # ============================================================================
+  # SQL AND DATABASE
+  # ============================================================================
+
+  # SQL formatting and linting with sqlfluff
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 2.3.5
+    hooks:
+      - id: sqlfluff-lint
+        files: '^migrations/.*\.sql$'
+        args: ['--dialect=postgres']
+      - id: sqlfluff-fix
+        files: '^migrations/.*\.sql$'
+        args: ['--dialect=postgres', '--force']
+
+  # ============================================================================
+  # INFRASTRUCTURE AS CODE
+  # ============================================================================
+
+  # Terraform/OpenTofu formatting
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.86.0
+    hooks:
+      - id: terraform_fmt
+        files: '\.tf$'
+      - id: terraform_validate
+        files: '\.tf$'
+      - id: terraform_tflint
+        files: '\.tf$'
+        args: ['--args=--config=__GIT_WORKING_DIR__/.tflint.hcl']
+
+  # ============================================================================
+  # DOCUMENTATION
+  # ============================================================================
+
+  # Markdown linting and formatting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.38.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix']
+        exclude: '^\.github/.*\.md$'
+
+  # Check markdown links
+  - repo: https://github.com/tcort/markdown-link-check
+    rev: v3.11.2
+    hooks:
+      - id: markdown-link-check
+        args: ['--config', '.markdown-link-check.json']
+        files: '\.md$'
+
+  # ============================================================================
+  # COMMIT MESSAGE VALIDATION
+  # ============================================================================
+
+  # Conventional commits validation
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [
+          'feat', 'fix', 'docs', 'style', 'refactor',
+          'test', 'chore', 'perf', 'ci', 'build', 'revert'
+        ]
+
+  # ============================================================================
+  # PERFORMANCE AND BEST PRACTICES
+  # ============================================================================
+
+  # Python performance and best practices with ruff (faster alternative to flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: ['--fix', '--exit-non-zero-on-fix']
+      - id: ruff-format
+
+  # ============================================================================
+  # PROJECT-SPECIFIC HOOKS
+  # ============================================================================
+
+  # Custom local hooks
+  - repo: local
+    hooks:
+      # Validate migration naming convention
+      - id: migration-naming
+        name: Validate migration file naming
+        entry: python scripts/validate_migration_naming.py
+        language: python
+        files: '^migrations/.*\.sql$'
+
+      # Check for TODO/FIXME in production code
+      - id: check-todos
+        name: Check for TODO/FIXME in production code
+        entry: bash -c 'if grep -rn "TODO\|FIXME" crates/ --include="*.rs"; then echo "Remove TODOs from production code"; exit 1; fi'
+        language: system
+        pass_filenames: false
+
+      # Validate API spec consistency
+      - id: validate-api-spec
+        name: Validate API specification consistency
+        entry: python scripts/validate_api_spec.py
+        language: python
+        files: '^docs/spec/.*\.md$'
+
+      # Check for hardcoded secrets or credentials
+      - id: check-hardcoded-secrets
+        name: Check for hardcoded secrets
+        entry: bash -c 'if grep -rn "password\|secret\|key.*=" crates/ scripts/ --include="*.rs" --include="*.py" | grep -v "key_prefix\|key_hash"; then echo "Found potential hardcoded secrets"; exit 1; fi'
+        language: system
+        pass_filenames: false
+
+      # Validate environment variable usage
+      - id: check-env-vars
+        name: Validate environment variable usage
+        entry: python scripts/validate_env_vars.py
+        language: python
+        files: '\.(rs|py)$'
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+# Global configuration
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
+default_stages: [commit]
+
+# Exclude patterns
+exclude: |
+  (?x)^(
+      \.git/.*|
+      \.venv/.*|
+      venv/.*|
+      target/.*|
+      node_modules/.*|
+      \.pytest_cache/.*|
+      __pycache__/.*|
+      \.coverage.*|
+      htmlcov/.*|
+      \.mypy_cache/.*|
+      \.ruff_cache/.*
+  )$
+
+# Performance settings
+minimum_pre_commit_version: '3.0.0'
