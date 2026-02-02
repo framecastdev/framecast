@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 # Test configuration
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql://postgres:dev-password-framecast@localhost:5432/framecast_test",
+    "postgresql://postgres:dev-password-framecast@localhost:5432/framecast_test",  # pragma: allowlist secret
 )
 
 
@@ -75,11 +75,11 @@ async def cleanup_test_databases():
         for db in test_dbs:
             try:
                 await conn.execute(f"DROP DATABASE IF EXISTS {db['datname']}")
-            except:
+            except Exception:
                 pass  # Database might be in use
 
         await conn.close()
-    except:
+    except Exception:
         pass  # Cleanup is best effort
 
 

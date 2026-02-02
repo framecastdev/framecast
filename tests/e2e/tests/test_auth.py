@@ -36,7 +36,7 @@ class TestAccountRegistration:
         """Test basic account registration flow."""
         registration_data = {
             "email": visitor_user.email,
-            "password": "SecurePassword123!",
+            "password": "SecurePassword123!",  # pragma: allowlist secret
             "name": visitor_user.name,
             "terms_accepted": True,
         }
@@ -77,7 +77,7 @@ class TestAccountRegistration:
         """Test that duplicate email registration is rejected."""
         registration_data = {
             "email": starter_user.email,  # Already exists
-            "password": "AnotherPassword456!",
+            "password": "AnotherPassword456!",  # pragma: allowlist secret
             "name": "Different Name",
             "terms_accepted": True,
         }
@@ -105,7 +105,7 @@ class TestAccountRegistration:
         for invalid_email in invalid_emails:
             registration_data = {
                 "email": invalid_email,
-                "password": "ValidPassword123!",
+                "password": "ValidPassword123!",  # pragma: allowlist secret
                 "name": "Test User",
                 "terms_accepted": True,
             }
@@ -125,9 +125,9 @@ class TestAccountRegistration:
         visitor_user: UserPersona,
     ):
         """Test that weak passwords are rejected."""
-        weak_passwords = [
+        weak_passwords = [  # pragma: allowlist secret
             "123",  # Too short
-            "password",  # Too common
+            "password",  # Too common  # pragma: allowlist secret
             "PASSWORD",  # No lowercase/numbers
             "12345678",  # Only numbers
         ]
@@ -158,7 +158,7 @@ class TestAccountRegistration:
         """Test that terms acceptance is required."""
         registration_data = {
             "email": visitor_user.email,
-            "password": "SecurePassword123!",
+            "password": "SecurePassword123!",  # pragma: allowlist secret
             "name": visitor_user.name,
             "terms_accepted": False,  # Not accepted
         }
@@ -184,7 +184,7 @@ class TestEmailVerification:
     ):
         """Test successful email verification."""
         # Mock verification token
-        verification_token = "valid_verification_token_123"
+        verification_token = "valid_verification_token_123"  # pragma: allowlist secret
 
         response = await http_client.post(
             "/api/v1/auth/verify-email", json={"token": verification_token}
@@ -202,7 +202,7 @@ class TestEmailVerification:
         http_client: AsyncClient,
     ):
         """Test email verification with invalid token."""
-        invalid_token = "invalid_or_expired_token"
+        invalid_token = "invalid_or_expired_token"  # pragma: allowlist secret
 
         response = await http_client.post(
             "/api/v1/auth/verify-email", json={"token": invalid_token}
@@ -218,7 +218,7 @@ class TestEmailVerification:
         http_client: AsyncClient,
     ):
         """Test email verification with expired token."""
-        expired_token = "expired_verification_token"
+        expired_token = "expired_verification_token"  # pragma: allowlist secret
 
         response = await http_client.post(
             "/api/v1/auth/verify-email", json={"token": expired_token}
@@ -242,7 +242,7 @@ class TestUserLogin:
         """Test successful login with valid credentials."""
         login_data = {
             "email": starter_user.email,
-            "password": "CorrectPassword123!",
+            "password": "CorrectPassword123!",  # pragma: allowlist secret
         }
 
         response = await http_client.post("/api/v1/auth/login", json=login_data)
@@ -254,7 +254,7 @@ class TestUserLogin:
         # Verify JWT token structure
         assert "access_token" in data
         assert "token_type" in data
-        assert data["token_type"] == "bearer"
+        assert data["token_type"] == "bearer"  # pragma: allowlist secret
         assert "expires_in" in data
 
         # Verify user information
@@ -278,11 +278,11 @@ class TestUserLogin:
         invalid_credentials = [
             {
                 "email": starter_user.email,
-                "password": "WrongPassword123!",
+                "password": "WrongPassword123!",  # pragma: allowlist secret
             },
             {
                 "email": "nonexistent@example.com",
-                "password": "AnyPassword123!",
+                "password": "AnyPassword123!",  # pragma: allowlist secret
             },
             {
                 "email": starter_user.email,
@@ -305,7 +305,7 @@ class TestUserLogin:
         """Test that users with unverified emails cannot login."""
         login_data = {
             "email": "unverified@example.com",
-            "password": "ValidPassword123!",
+            "password": "ValidPassword123!",  # pragma: allowlist secret
         }
 
         response = await http_client.post("/api/v1/auth/login", json=login_data)
@@ -343,7 +343,7 @@ class TestPasswordReset:
         """Test password reset with valid token."""
         reset_data = {
             "token": "valid_reset_token",
-            "new_password": "NewSecurePassword456!",
+            "new_password": "NewSecurePassword456!",  # pragma: allowlist secret
         }
 
         response = await http_client.post("/api/v1/auth/confirm-reset", json=reset_data)
@@ -358,7 +358,7 @@ class TestPasswordReset:
         """Test password reset with invalid token."""
         reset_data = {
             "token": "invalid_token",
-            "new_password": "NewSecurePassword456!",
+            "new_password": "NewSecurePassword456!",  # pragma: allowlist secret
         }
 
         response = await http_client.post("/api/v1/auth/confirm-reset", json=reset_data)
@@ -455,7 +455,7 @@ class TestRateLimiting:
         """Test that excessive login attempts are rate limited."""
         login_data = {
             "email": starter_user.email,
-            "password": "WrongPassword",
+            "password": "WrongPassword",  # pragma: allowlist secret
         }
 
         # Make multiple failed login attempts
@@ -479,7 +479,7 @@ class TestRateLimiting:
         for i in range(5):
             registration_data = {
                 "email": f"test{i}@example.com",
-                "password": "ValidPassword123!",
+                "password": "ValidPassword123!",  # pragma: allowlist secret
                 "name": "Test User",
                 "terms_accepted": True,
             }
@@ -488,7 +488,7 @@ class TestRateLimiting:
         # Next attempt should be rate limited
         final_registration = {
             "email": "final@example.com",
-            "password": "ValidPassword123!",
+            "password": "ValidPassword123!",  # pragma: allowlist secret
             "name": "Final User",
             "terms_accepted": True,
         }

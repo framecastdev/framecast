@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-Health check script for Framecast backing services
-Verifies connectivity and basic functionality of all required services
+"""Health check script for Framecast backing services.
+
+Verifies connectivity and basic functionality of all required services.
 """
 
 import asyncio

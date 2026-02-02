@@ -34,7 +34,7 @@ class TestConfig(BaseSettings):
     api_base_url: str = "http://localhost:3000"
 
     # Database settings
-    database_url: str = "postgresql://postgres:password@localhost:5432/framecast_test"
+    database_url: str = "postgresql://postgres:password@localhost:5432/framecast_test"  # pragma: allowlist secret
 
     # External service URLs (used in real mode)
     supabase_url: str = "http://localhost:54321"

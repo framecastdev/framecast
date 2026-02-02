@@ -22,7 +22,7 @@ import pytest
 # Test configuration
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql://postgres:dev-password-framecast@localhost:5432/framecast_test",
+    "postgresql://postgres:dev-password-framecast@localhost:5432/framecast_test",  # pragma: allowlist secret
 )
 
 
@@ -91,7 +91,7 @@ class MigrationTestFramework:
                 "SELECT version, description, success FROM _sqlx_migrations ORDER BY version"
             )
             return [dict(m) for m in migrations]
-        except:
+        except Exception:
             return []
 
     async def get_table_count(self) -> int:
@@ -272,7 +272,7 @@ async def test_error_01_database_connection_failure():
     framework = MigrationTestFramework()
 
     # Don't set up test database - use invalid URL
-    framework.test_db_url = "postgresql://invalid:invalid@localhost:9999/nonexistent"
+    framework.test_db_url = "postgresql://invalid:invalid@localhost:9999/nonexistent"  # pragma: allowlist secret
 
     result = await framework.run_migrations()
     assert not result["success"], "Should fail with invalid database URL"

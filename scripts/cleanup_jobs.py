@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-Job cleanup script for Framecast
-Removes old job records and associated files based on configurable retention policies
+"""Job cleanup script for Framecast.
+
+Removes old job records and associated files based on configurable retention policies.
 """
 
 import argparse
@@ -24,14 +24,22 @@ if not DATABASE_URL:
 
 
 class JobCleanupService:
+    """Service for cleaning up old job records and associated files."""
+
     def __init__(self, database_url: str, dry_run: bool = False):
+        """Initialize the job cleanup service.
+
+        Args:
+            database_url: PostgreSQL connection URL
+            dry_run: If True, only report what would be deleted without deleting
+        """
         self.database_url = database_url
         self.dry_run = dry_run
         self.conn = None
         self.s3_client = None
 
     async def connect(self):
-        """Connect to database and AWS services"""
+        """Connect to database and AWS services."""
         try:
             self.conn = await asyncpg.connect(self.database_url)
             print("✅ Connected to database")
@@ -45,13 +53,13 @@ class JobCleanupService:
             sys.exit(1)
 
     async def disconnect(self):
-        """Disconnect from database"""
+        """Disconnect from database."""
         if self.conn:
             await self.conn.close()
             print("✅ Disconnected from database")
 
     async def get_old_jobs(self, days_old: int) -> list[dict]:
-        """Get jobs older than specified days"""
+        """Get jobs older than specified days."""
         cutoff_date = datetime.utcnow() - timedelta(days=days_old)
 
         query = """
@@ -70,7 +78,7 @@ class JobCleanupService:
         return [dict(row) for row in rows]
 
     async def cleanup_job_events(self, job_ids: list[str]) -> int:
-        """Clean up job events for given jobs"""
+        """Clean up job events for given jobs."""
         if not job_ids:
             return 0
 
@@ -91,7 +99,7 @@ class JobCleanupService:
         return deleted_count
 
     async def cleanup_webhook_deliveries(self, job_ids: list[str]) -> int:
-        """Clean up webhook deliveries for given jobs"""
+        """Clean up webhook deliveries for given jobs."""
         if not job_ids:
             return 0
 
@@ -112,7 +120,7 @@ class JobCleanupService:
         return deleted_count
 
     def get_s3_keys_from_output(self, output: dict) -> list[str]:
-        """Extract S3 keys from job output"""
+        """Extract S3 keys from job output."""
         keys = []
         if not output:
             return keys
@@ -134,7 +142,7 @@ class JobCleanupService:
         return keys
 
     async def cleanup_s3_objects(self, jobs: list[dict]) -> int:
-        """Clean up S3 objects for jobs"""
+        """Clean up S3 objects for jobs."""
         if not self.s3_client or not S3_BUCKET_OUTPUTS:
             print("  ⚠️ S3 cleanup skipped (not configured)")
             return 0
@@ -164,7 +172,10 @@ class JobCleanupService:
         for i in range(0, len(s3_keys), batch_size):
             batch = s3_keys[i : i + batch_size]
 
-            delete_objects = {"Objects": [{"Key": key} for key in batch], "Quiet": True}
+            delete_objects = {
+                "Objects": [{"Key": key} for key in batch],
+                "Quiet": True
+            }
 
             try:
                 response = self.s3_client.delete_objects(
@@ -176,7 +187,9 @@ class JobCleanupService:
 
                 errors = response.get("Errors", [])
                 for error in errors:
-                    print(f"    ⚠️ Failed to delete {error['Key']}: {error['Message']}")
+                    print(
+                        f"    ⚠️ Failed to delete {error['Key']}: {error['Message']}"
+                    )
 
             except Exception as e:
                 print(f"    ❌ S3 batch delete failed: {e}")
@@ -185,7 +198,7 @@ class JobCleanupService:
         return deleted_count
 
     async def delete_jobs(self, job_ids: list[str]) -> int:
-        """Delete job records"""
+        """Delete job records."""
         if not job_ids:
             return 0
 
@@ -202,10 +215,9 @@ class JobCleanupService:
         return deleted_count
 
     async def cleanup_old_jobs(self, days_old: int, max_jobs: int = None):
-        """Main cleanup routine"""
-        print(
-            f"🧹 {'DRY RUN: ' if self.dry_run else ''}Cleaning up jobs older than {days_old} days..."
-        )
+        """Execute cleanup routine for old jobs."""
+        prefix = "DRY RUN: " if self.dry_run else ""
+        print(f"🧹 {prefix}Cleaning up jobs older than {days_old} days...")
 
         # Get old jobs
         old_jobs = await self.get_old_jobs(days_old)
@@ -270,7 +282,7 @@ class JobCleanupService:
 
 
 async def main():
-    """Main entry point"""
+    """Execute the cleanup script."""
     parser = argparse.ArgumentParser(description="Clean up old Framecast job data")
     parser.add_argument(
         "--days",

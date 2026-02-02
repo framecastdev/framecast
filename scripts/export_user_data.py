@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-User data export script for GDPR compliance
-Exports all user data in a structured JSON format
+"""User data export script for GDPR compliance.
+
+Exports all user data in a structured JSON format.
 """
 
 import argparse
@@ -23,12 +23,19 @@ if not DATABASE_URL:
 
 
 class UserDataExporter:
+    """Service for exporting user data for GDPR compliance."""
+
     def __init__(self, database_url: str):
+        """Initialize the user data exporter.
+
+        Args:
+            database_url: PostgreSQL connection URL
+        """
         self.database_url = database_url
         self.conn = None
 
     async def connect(self):
-        """Connect to the database"""
+        """Connect to the database."""
         try:
             self.conn = await asyncpg.connect(self.database_url)
             print("✅ Connected to database")
@@ -37,13 +44,13 @@ class UserDataExporter:
             sys.exit(1)
 
     async def disconnect(self):
-        """Disconnect from the database"""
+        """Disconnect from the database."""
         if self.conn:
             await self.conn.close()
             print("✅ Disconnected from database")
 
     async def get_user_by_id_or_email(self, identifier: str) -> dict:
-        """Get user by ID or email"""
+        """Get user by ID or email."""
         # Try by UUID first
         try:
             import uuid
@@ -63,7 +70,7 @@ class UserDataExporter:
         return dict(user)
 
     async def export_user_data(self, user_id: str) -> dict[str, Any]:
-        """Export all data for a user"""
+        """Export all data for a user."""
         user_data = {
             "export_timestamp": datetime.utcnow().isoformat(),
             "user_id": user_id,
@@ -196,7 +203,7 @@ class UserDataExporter:
         return user_data
 
     async def export_to_file(self, user_identifier: str, output_file: str = None):
-        """Export user data to JSON file"""
+        """Export user data to JSON file."""
         print(f"📤 Exporting data for user: {user_identifier}")
 
         # Get user and validate
@@ -236,7 +243,7 @@ class UserDataExporter:
 
 
 async def main():
-    """Main entry point"""
+    """Execute the user data export script."""
     parser = argparse.ArgumentParser(description="Export user data for GDPR compliance")
     parser.add_argument("user", help="User ID (UUID) or email address")
     parser.add_argument("--output", "-o", help="Output file path (optional)")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-API key generation script for Framecast
-Creates new API keys for admin use with proper URN validation
+"""API key generation script for Framecast.
+
+Creates new API keys for admin use with proper URN validation.
 """
 
 import argparse
@@ -23,12 +23,19 @@ if not DATABASE_URL:
 
 
 class APIKeyGenerator:
+    """Service for generating API keys for admin use."""
+
     def __init__(self, database_url: str):
+        """Initialize the API key generator.
+
+        Args:
+            database_url: PostgreSQL connection URL
+        """
         self.database_url = database_url
         self.conn = None
 
     async def connect(self):
-        """Connect to the database"""
+        """Connect to the database."""
         try:
             self.conn = await asyncpg.connect(self.database_url)
             print("✅ Connected to database")
@@ -37,12 +44,12 @@ class APIKeyGenerator:
             sys.exit(1)
 
     async def disconnect(self):
-        """Disconnect from the database"""
+        """Disconnect from the database."""
         if self.conn:
             await self.conn.close()
 
     def generate_api_key(self, prefix: str = "sk_dev") -> tuple[str, str]:
-        """Generate a new API key with hash"""
+        """Generate a new API key with hash."""
         # Generate 32 bytes of random data
         key_data = secrets.token_urlsafe(32)
         full_key = f"{prefix}_{key_data}"
@@ -53,7 +60,7 @@ class APIKeyGenerator:
         return full_key, key_hash
 
     async def get_user_by_email(self, email: str) -> dict:
-        """Get user by email"""
+        """Get user by email."""
         query = "SELECT * FROM users WHERE email = $1"
         user = await self.conn.fetchrow(query, email)
 
@@ -64,7 +71,7 @@ class APIKeyGenerator:
         return dict(user)
 
     async def get_user_teams(self, user_id: str) -> list[dict]:
-        """Get teams where user is owner or admin"""
+        """Get teams where user is owner or admin."""
         query = """
             SELECT t.id, t.name, t.slug, m.role
             FROM teams t
@@ -76,7 +83,7 @@ class APIKeyGenerator:
         return [dict(row) for row in rows]
 
     async def validate_urn_ownership(self, user: dict, owner_urn: str) -> bool:
-        """Validate that user can own the given URN"""
+        """Validate that user can own the given URN."""
         user_id = user["id"]
         user_tier = user["tier"]
 
@@ -114,7 +121,7 @@ class APIKeyGenerator:
         scopes: list[str] = None,
         expires_days: int = None,
     ) -> dict:
-        """Create a new API key"""
+        """Create a new API key."""
         # Get user
         user = await self.get_user_by_email(user_email)
 
@@ -152,7 +159,9 @@ class APIKeyGenerator:
 
         await self.conn.execute(
             """
-            INSERT INTO api_keys (id, user_id, owner, name, key_prefix, key_hash, scopes, expires_at)
+            INSERT INTO api_keys (
+                id, user_id, owner, name, key_prefix, key_hash, scopes, expires_at
+            )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """,
             api_key_id,
@@ -184,7 +193,7 @@ class APIKeyGenerator:
 
 
 async def main():
-    """Main entry point"""
+    """Execute the API key generation script."""
     parser = argparse.ArgumentParser(description="Generate Framecast API key")
     parser.add_argument("name", help="Name for the API key")
     parser.add_argument(

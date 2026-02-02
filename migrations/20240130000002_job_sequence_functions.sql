@@ -348,15 +348,22 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION get_next_job_event_sequence(
     UUID
 ) IS 'Generate next sequence number for job events';
-COMMENT ON FUNCTION auto_set_job_event_sequence() IS 'Auto-populate sequence field on job event insert';
-COMMENT ON FUNCTION check_job_concurrency_limits() IS 'Enforce job concurrency limits (CARD-5, CARD-6, INV-J12)';
-COMMENT ON FUNCTION validate_job_status_transitions() IS 'Validate and auto-set timestamps for job status changes';
-COMMENT ON FUNCTION update_project_status_from_jobs() IS 'Auto-update project status based on job states';
+COMMENT ON FUNCTION auto_set_job_event_sequence()
+IS 'Auto-populate sequence field on job event insert';
+COMMENT ON FUNCTION check_job_concurrency_limits()
+IS 'Enforce job concurrency limits (CARD-5, CARD-6, INV-J12)';
+COMMENT ON FUNCTION validate_job_status_transitions()
+IS 'Validate and auto-set timestamps for job status changes';
+COMMENT ON FUNCTION update_project_status_from_jobs()
+IS 'Auto-update project status based on job states';
 COMMENT ON FUNCTION cleanup_old_job_events() IS 'Remove job events older than 7 days';
-COMMENT ON FUNCTION cleanup_old_webhook_deliveries() IS 'Remove webhook deliveries older than 30 days';
+COMMENT ON FUNCTION cleanup_old_webhook_deliveries()
+IS 'Remove webhook deliveries older than 30 days';
 COMMENT ON FUNCTION is_valid_urn(TEXT) IS 'Validate URN format';
-COMMENT ON FUNCTION check_api_key_owner_constraints() IS 'Enforce API key ownership rules based on user tier';
-COMMENT ON FUNCTION get_job_stats() IS 'Get current job status distribution for monitoring';
+COMMENT ON FUNCTION check_api_key_owner_constraints()
+IS 'Enforce API key ownership rules based on user tier';
+COMMENT ON FUNCTION get_job_stats()
+IS 'Get current job status distribution for monitoring';
 COMMENT ON FUNCTION get_team_stats(
     UUID
 ) IS 'Get team statistics for dashboard display';

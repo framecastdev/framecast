@@ -8,11 +8,13 @@
 
 ## Objective
 
-Set up the complete project infrastructure to enable development according to the 12-factor methodology and Critical Rules.
+Set up the complete project infrastructure to enable development according to
+the 12-factor methodology and Critical Rules.
 
 ## Reference Resources Available
 
-**🚨 CRITICAL:** Reference experimental projects with proven solutions available via SSH:
+**🚨 CRITICAL:** Reference experimental projects with proven solutions
+available via SSH:
 
 - `~/workspace/splice-experimental-1`
 - `~/workspace/splice-experimental-2`
@@ -156,7 +158,8 @@ just build        # Build artifacts ✓
 ## Risk Mitigation
 
 - **Technical blockers:** Consult reference experimental projects immediately
-- **Pattern uncertainty:** Review working implementations in experimental projects
+- **Pattern uncertainty:** Review working implementations in experimental
+  projects
 - **Integration issues:** Check proven ComfyUI/RunPod patterns in references
 - **Rule violations:** Run compliance check after each phase
 
@@ -175,4 +178,5 @@ just build        # Build artifacts ✓
 - [ ] Phase 3: Development Environment (Steps 10-13)
 - [ ] Phase 4: Validation & Documentation (Steps 14-15)
 
-This plan establishes the foundation for all future development while ensuring strict adherence to the project's Critical Rules and 12-Factor principles.
+This plan establishes the foundation for all future development while ensuring
+strict adherence to the project's Critical Rules and 12-Factor principles.

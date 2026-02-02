@@ -26,7 +26,7 @@ from seed import FramecastSeeder
 # Test configuration
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql://postgres:dev-password-framecast@localhost:5432/framecast_test",
+    "postgresql://postgres:dev-password-framecast@localhost:5432/framecast_test",  # pragma: allowlist secret
 )
 
 

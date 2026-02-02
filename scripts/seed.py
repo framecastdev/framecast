@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-Database seeding script for Framecast development
-Creates test users, teams, and sample data following the entity relationships
+"""Database seeding script for Framecast development.
+
+Creates test users, teams, and sample data following the entity relationships.
 """
 
 import asyncio
