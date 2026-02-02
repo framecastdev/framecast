@@ -172,10 +172,7 @@ class JobCleanupService:
         for i in range(0, len(s3_keys), batch_size):
             batch = s3_keys[i : i + batch_size]
 
-            delete_objects = {
-                "Objects": [{"Key": key} for key in batch],
-                "Quiet": True
-            }
+            delete_objects = {"Objects": [{"Key": key} for key in batch], "Quiet": True}
 
             try:
                 response = self.s3_client.delete_objects(
@@ -187,9 +184,7 @@ class JobCleanupService:
 
                 errors = response.get("Errors", [])
                 for error in errors:
-                    print(
-                        f"    ⚠️ Failed to delete {error['Key']}: {error['Message']}"
-                    )
+                    print(f"    ⚠️ Failed to delete {error['Key']}: {error['Message']}")
 
             except Exception as e:
                 print(f"    ❌ S3 batch delete failed: {e}")

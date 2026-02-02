@@ -5,9 +5,11 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::types::Json;
 use std::collections::HashMap;
 use uuid::Uuid;
+use rand::Rng;
 
 use framecast_common::{Error, Result, Urn};
 
@@ -498,7 +500,10 @@ impl ApiKey {
             key_prefix,
             uuid::Uuid::new_v4().to_string().replace('-', "")
         );
-        let key_hash = format!("{:x}", md5::compute(&full_key)); // In production, use proper hashing
+
+        // SECURITY: Use SHA-256 with random salt for production-grade hashing
+        let salt: [u8; 32] = rand::thread_rng().gen();
+        let key_hash = Self::hash_key(&full_key, &salt);
 
         Ok(ApiKey {
             id: Uuid::new_v4(),
@@ -558,6 +563,56 @@ impl ApiKey {
         let _urn = self.owner_urn()?;
 
         Ok(())
+    }
+
+    /// Hash an API key with salt using SHA-256 (production-grade cryptography)
+    fn hash_key(key: &str, salt: &[u8]) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(key.as_bytes());
+        hasher.update(salt);
+        let hash = hasher.finalize();
+
+        // Encode as hex string with salt prepended for storage
+        format!("{}:{}",
+            hex::encode(salt),
+            hex::encode(hash)
+        )
+    }
+
+    /// Verify an API key against stored hash using constant-time comparison
+    pub fn verify_key(&self, candidate_key: &str) -> bool {
+        // Parse stored hash: salt:hash
+        let parts: Vec<&str> = self.key_hash.split(':').collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let stored_salt = match hex::decode(parts[0]) {
+            Ok(salt) => salt,
+            Err(_) => return false,
+        };
+
+        let stored_hash = match hex::decode(parts[1]) {
+            Ok(hash) => hash,
+            Err(_) => return false,
+        };
+
+        // Compute hash of candidate key with stored salt
+        let mut hasher = Sha256::new();
+        hasher.update(candidate_key.as_bytes());
+        hasher.update(&stored_salt);
+        let candidate_hash = hasher.finalize();
+
+        // Constant-time comparison to prevent timing attacks
+        if stored_hash.len() != candidate_hash.len() {
+            return false;
+        }
+
+        let mut result = 0u8;
+        for (a, b) in stored_hash.iter().zip(candidate_hash.iter()) {
+            result |= a ^ b;
+        }
+        result == 0
     }
 }
 
@@ -1607,6 +1662,66 @@ mod tests {
         api_key.revoke();
         assert!(!api_key.is_valid());
         assert!(api_key.revoked_at.is_some());
+    }
+
+    #[test]
+    fn test_api_key_secure_hashing_and_verification() {
+        let user_id = Uuid::new_v4();
+        let owner = Urn::user(user_id);
+
+        // Create API key with secure hashing
+        let api_key = ApiKey::new(user_id, owner.clone(), None, None).unwrap();
+
+        // The hash should be in salt:hash format with hex encoding
+        assert!(api_key.key_hash.contains(':'));
+        let parts: Vec<&str> = api_key.key_hash.split(':').collect();
+        assert_eq!(parts.len(), 2);
+
+        // Both salt and hash should be valid hex
+        assert!(hex::decode(parts[0]).is_ok());
+        assert!(hex::decode(parts[1]).is_ok());
+
+        // The hash should be 64 characters (SHA-256 = 32 bytes = 64 hex chars)
+        assert_eq!(parts[1].len(), 64);
+
+        // NOTE: Since we can't access the original key from the creation,
+        // we'll test the verification logic with a known key
+        let test_key = "sk_live_test123456789";
+        let salt: [u8; 32] = [42; 32]; // Fixed salt for testing
+        let test_hash = ApiKey::hash_key(test_key, &salt);
+
+        // Create a test API key with known hash
+        let mut test_api_key = ApiKey {
+            id: Uuid::new_v4(),
+            user_id,
+            owner: owner.to_string(),
+            name: "Test".to_string(),
+            key_prefix: "sk_live_".to_string(),
+            key_hash: test_hash,
+            scopes: sqlx::types::Json(vec!["*".to_string()]),
+            last_used_at: None,
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+        };
+
+        // Test verification with correct key
+        assert!(test_api_key.verify_key(test_key));
+
+        // Test verification with wrong key
+        assert!(!test_api_key.verify_key("wrong_key"));
+        assert!(!test_api_key.verify_key("sk_live_wrong"));
+
+        // Test verification with empty key
+        assert!(!test_api_key.verify_key(""));
+
+        // Test verification with malformed hash
+        test_api_key.key_hash = "invalid:hash".to_string();
+        assert!(!test_api_key.verify_key(test_key));
+
+        // Test verification with missing colon
+        test_api_key.key_hash = "invalidhash".to_string();
+        assert!(!test_api_key.verify_key(test_key));
     }
 
     #[test]
