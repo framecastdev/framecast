@@ -174,6 +174,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "outputs" {
     id     = "cleanup_old_outputs"
     status = "Enabled"
 
+    filter {} # Apply to all objects
+
     expiration {
       days = 90 # Keep outputs for 90 days
     }
@@ -431,6 +433,7 @@ output "assets_bucket_name" {
 output "database_endpoint" {
   description = "RDS instance endpoint"
   value       = local.use_rds ? aws_db_instance.main[0].endpoint : null
+  sensitive   = true
 }
 
 output "database_url" {

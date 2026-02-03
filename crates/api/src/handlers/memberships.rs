@@ -224,7 +224,7 @@ pub async fn invite_member(
 pub async fn accept_invitation(
     auth_context: AuthUser,
     State(state): State<AppState>,
-    Path((team_id, invitation_id)): Path<(Uuid, Uuid)>,
+    Path(invitation_id): Path<Uuid>,
 ) -> Result<Json<MembershipResponse>> {
     let user = &auth_context.0.user;
 
@@ -244,12 +244,8 @@ pub async fn accept_invitation(
         .map_err(|e| Error::Internal(format!("Failed to get invitation: {}", e)))?
         .ok_or_else(|| Error::NotFound("Invitation not found".to_string()))?;
 
-    // Validate invitation belongs to this team
-    if invitation.team_id != team_id {
-        return Err(Error::NotFound(
-            "Invitation not found for this team".to_string(),
-        ));
-    }
+    // Get team_id from the invitation
+    let team_id = invitation.team_id;
 
     // Validate invitation is for this user
     if invitation.email != user.email {
@@ -315,7 +311,7 @@ pub async fn accept_invitation(
 pub async fn decline_invitation(
     auth_context: AuthUser,
     State(state): State<AppState>,
-    Path((team_id, invitation_id)): Path<(Uuid, Uuid)>,
+    Path(invitation_id): Path<Uuid>,
 ) -> Result<StatusCode> {
     let user = &auth_context.0.user;
 
@@ -327,13 +323,6 @@ pub async fn decline_invitation(
         .await
         .map_err(|e| Error::Internal(format!("Failed to get invitation: {}", e)))?
         .ok_or_else(|| Error::NotFound("Invitation not found".to_string()))?;
-
-    // Validate invitation belongs to this team
-    if invitation.team_id != team_id {
-        return Err(Error::NotFound(
-            "Invitation not found for this team".to_string(),
-        ));
-    }
 
     // Validate invitation is for this user
     if invitation.email != user.email {

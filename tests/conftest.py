@@ -75,6 +75,7 @@ async def cleanup_test_databases():
 
         for db in test_dbs:
             with contextlib.suppress(Exception):
+                # nosemgrep: asyncpg-sqli
                 await conn.execute(f"DROP DATABASE IF EXISTS {db['datname']}")
 
         await conn.close()

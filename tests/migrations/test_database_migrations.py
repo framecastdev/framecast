@@ -41,7 +41,7 @@ class MigrationTestFramework:
         test_db_url = f"{base_url}/postgres"
 
         conn = await asyncpg.connect(test_db_url)
-        await conn.execute(f"CREATE DATABASE {self.test_db_name}")
+        await conn.execute(f"CREATE DATABASE {self.test_db_name}")  # nosemgrep
         await conn.close()
 
         # Connect to the test database

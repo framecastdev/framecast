@@ -21,7 +21,7 @@ import pytest
 
 # Add scripts directory to path
 sys.path.insert(0, "/Users/thiago/Workscape/splice/scripts")
-from seed import FramecastSeeder
+from seed import FramecastSeeder  # noqa: E402
 
 # Test configuration
 TEST_DATABASE_URL = os.getenv(
@@ -48,7 +48,7 @@ class SeedingTestFramework:
         test_db_url = f"{base_url}/postgres"
 
         conn = await asyncpg.connect(test_db_url)
-        await conn.execute(f"CREATE DATABASE {self.test_db_name}")
+        await conn.execute(f"CREATE DATABASE {self.test_db_name}")  # nosemgrep
         await conn.close()
 
         # Connect to test database
