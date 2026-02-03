@@ -233,8 +233,8 @@ repos:
       # Check for hardcoded secrets or credentials
       - id: check-hardcoded-secrets
         name: Check for hardcoded secrets
-        entry: bash -c 'if grep -rn "password.*=.*[\"'\''][^\"'\'']" crates/ scripts/ --include="*.rs" --include="*.py" | grep -v "fake_password\|test_password\|example_password"; then echo "Found potential hardcoded secrets"; exit 1; fi'
-        language: system
+        entry: scripts/check_hardcoded_secrets.sh
+        language: script
         pass_filenames: false
 
       # Validate environment variable usage

@@ -213,7 +213,9 @@ async def authenticated_client(
 
 # LocalStack email client for E2E testing
 @pytest.fixture
-async def localstack_email_client(test_config: E2EConfig) -> AsyncGenerator[LocalStackEmailClient, None]:
+async def localstack_email_client(
+    test_config: E2EConfig,
+) -> AsyncGenerator[LocalStackEmailClient, None]:
     """LocalStack SES email client for E2E tests."""
     client = LocalStackEmailClient(test_config.localstack_ses_url)
     try:
@@ -234,7 +236,7 @@ async def email_cleanup(localstack_email_client: LocalStackEmailClient):
     yield register_email
 
     # Cleanup after test
-    for email_address, msg_id in collected_emails:
+    for _email_address, msg_id in collected_emails:
         await localstack_email_client.delete_email(msg_id)
 
 
@@ -346,16 +348,6 @@ async def mock_s3(test_config: E2EConfig):
         respx.put("https://mock-s3-url").mock(return_value=httpx.Response(200))
 
         yield
-
-
-# Database utilities
-@pytest.fixture
-async def clean_database(test_config: E2EConfig):
-    """Ensure clean database state for testing."""
-    # This will be implemented when we have database layer
-    # For now, it's a placeholder
-    return
-    # Cleanup after test
 
 
 # Temporary file management
@@ -487,7 +479,6 @@ __all__ = [
     "mock_anthropic",
     "mock_inngest",
     "mock_s3",
-    "clean_database",
     "temp_asset_file",
     "test_data_factory",
     "TestDataFactory",

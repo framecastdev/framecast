@@ -188,14 +188,9 @@ impl TestApp {
 
     /// Clean up test data (call in test teardown)
     pub async fn cleanup(&self) -> Result<()> {
-        // Delete in order to respect foreign key constraints
-        sqlx::query!("DELETE FROM memberships")
-            .execute(&self.pool)
-            .await?;
-        sqlx::query!("DELETE FROM teams")
-            .execute(&self.pool)
-            .await?;
-        sqlx::query!("DELETE FROM users")
+        // Use TRUNCATE CASCADE to bypass foreign key constraints and triggers
+        // This is test-only cleanup, so we can bypass the INV-T1 constraint
+        sqlx::query!("TRUNCATE TABLE invitations, memberships, teams, users CASCADE")
             .execute(&self.pool)
             .await?;
         Ok(())
@@ -258,6 +253,7 @@ pub fn create_test_jwt(user: &User, secret: &str) -> Result<String> {
         sub: String,
         email: String,
         aud: String,
+        iss: String,
         role: String,
         framecast_tier: String,
         iat: u64,
@@ -270,6 +266,7 @@ pub fn create_test_jwt(user: &User, secret: &str) -> Result<String> {
         sub: user.id.to_string(),
         email: user.email.clone(),
         aud: "authenticated".to_string(),
+        iss: "framecast-test".to_string(),
         role: "authenticated".to_string(),
         framecast_tier: user.tier.to_string(),
         iat: now,

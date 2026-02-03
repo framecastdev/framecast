@@ -1,5 +1,4 @@
-"""
-Authentication and Authorization E2E Tests
+"""Authentication and Authorization E2E Tests.
 
 Tests user stories US-001 through US-010:
 - Account registration and verification
@@ -8,13 +7,11 @@ Tests user stories US-001 through US-010:
 - OAuth integration
 - Session management and JWT validation
 - Rate limiting and security measures
-
-This module establishes the E2E testing patterns for the entire application.
 """
 
 import pytest
 from conftest import (
-    TestConfig,
+    E2EConfig,
     UserPersona,
     assert_credits_non_negative,
     assert_user_tier_valid,
@@ -24,13 +21,14 @@ from httpx import AsyncClient
 
 
 @pytest.mark.auth
+@pytest.mark.real_services
 class TestAccountRegistration:
     """US-001: Account registration with email verification."""
 
     async def test_visitor_can_register_new_account(
         self,
         http_client: AsyncClient,
-        test_config: TestConfig,
+        test_config: E2EConfig,
         visitor_user: UserPersona,
     ):
         """Test basic account registration flow."""
@@ -175,6 +173,7 @@ class TestAccountRegistration:
 
 
 @pytest.mark.auth
+@pytest.mark.real_services
 class TestEmailVerification:
     """US-002: Email verification link handling and expiration."""
 
@@ -184,7 +183,7 @@ class TestEmailVerification:
     ):
         """Test successful email verification."""
         # Mock verification token
-        verification_token = "valid_verification_token_123"  # pragma: allowlist secret
+        verification_token = "valid_verification_token_123"  # noqa: S105
 
         response = await http_client.post(
             "/api/v1/auth/verify-email", json={"token": verification_token}
@@ -202,7 +201,7 @@ class TestEmailVerification:
         http_client: AsyncClient,
     ):
         """Test email verification with invalid token."""
-        invalid_token = "invalid_or_expired_token"  # pragma: allowlist secret
+        invalid_token = "invalid_or_expired_token"  # noqa: S105
 
         response = await http_client.post(
             "/api/v1/auth/verify-email", json={"token": invalid_token}
@@ -218,7 +217,7 @@ class TestEmailVerification:
         http_client: AsyncClient,
     ):
         """Test email verification with expired token."""
-        expired_token = "expired_verification_token"  # pragma: allowlist secret
+        expired_token = "expired_verification_token"  # noqa: S105
 
         response = await http_client.post(
             "/api/v1/auth/verify-email", json={"token": expired_token}
@@ -231,6 +230,7 @@ class TestEmailVerification:
 
 
 @pytest.mark.auth
+@pytest.mark.real_services
 class TestUserLogin:
     """US-003: Login with email/password authentication."""
 
@@ -254,7 +254,7 @@ class TestUserLogin:
         # Verify JWT token structure
         assert "access_token" in data
         assert "token_type" in data
-        assert data["token_type"] == "bearer"  # pragma: allowlist secret
+        assert data["token_type"] == "bearer"  # noqa: S105
         assert "expires_in" in data
 
         # Verify user information
@@ -318,6 +318,7 @@ class TestUserLogin:
 
 
 @pytest.mark.auth
+@pytest.mark.real_services
 class TestPasswordReset:
     """US-004: Password reset flow with secure token handling."""
 
@@ -370,6 +371,7 @@ class TestPasswordReset:
 
 
 @pytest.mark.auth
+@pytest.mark.real_services
 class TestSessionManagement:
     """US-009: Session management and JWT token validation."""
 
@@ -444,6 +446,7 @@ class TestSessionManagement:
 
 @pytest.mark.auth
 @pytest.mark.security
+@pytest.mark.real_services
 class TestRateLimiting:
     """US-007: Rate limiting on authentication endpoints."""
 
@@ -505,6 +508,7 @@ class TestRateLimiting:
 
 @pytest.mark.auth
 @pytest.mark.integration
+@pytest.mark.real_services
 class TestOAuthIntegration:
     """US-005: OAuth login integration (Google, GitHub)."""
 

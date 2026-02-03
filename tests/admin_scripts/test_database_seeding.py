@@ -31,7 +31,7 @@ TEST_DATABASE_URL = os.getenv(
 
 
 class SeedingTestFramework:
-    """Framework for testing database seeding"""
+    """Framework for testing database seeding."""
 
     def __init__(self):
         self.conn = None
@@ -39,7 +39,7 @@ class SeedingTestFramework:
         self.seeder = None
 
     async def setup_test_database(self):
-        """Create isolated test database with migrations"""
+        """Create isolated test database with migrations."""
         # Create test database
         base_url = TEST_DATABASE_URL.rsplit("/", 1)[0]
         self.test_db_name = (
@@ -62,7 +62,7 @@ class SeedingTestFramework:
         self.seeder = FramecastSeeder(self.test_db_url)
 
     async def teardown_test_database(self):
-        """Clean up test database"""
+        """Clean up test database."""
         if self.seeder and self.seeder.conn:
             await self.seeder.disconnect()
 
@@ -77,7 +77,7 @@ class SeedingTestFramework:
             await conn.close()
 
     async def run_migrations(self):
-        """Run database migrations on test database"""
+        """Run database migrations on test database."""
         env = os.environ.copy()
         env["DATABASE_URL"] = self.test_db_url
 
@@ -93,7 +93,7 @@ class SeedingTestFramework:
             raise Exception(f"Migration failed: {result.stderr}")
 
     async def get_record_counts(self) -> dict[str, int]:
-        """Get counts of all seeded record types"""
+        """Get counts of all seeded record types."""
         tables = [
             "users",
             "teams",
@@ -106,16 +106,18 @@ class SeedingTestFramework:
         counts = {}
 
         for table in tables:
-            count = await self.conn.fetchval(f"SELECT COUNT(*) FROM {table}")
+            # Table names are from hardcoded list, not user input
+            query = f"SELECT COUNT(*) FROM {table}"  # noqa: S608
+            count = await self.conn.fetchval(query)
             counts[table] = count
 
         return counts
 
     async def verify_user_data(self) -> dict[str, Any]:
-        """Verify seeded user data integrity"""
+        """Verify seeded user data integrity."""
         users = await self.conn.fetch("SELECT * FROM users ORDER BY email")
 
-        verification = {
+        return {
             "total_users": len(users),
             "creator_users": len([u for u in users if u["tier"] == "creator"]),
             "starter_users": len([u for u in users if u["tier"] == "starter"]),
@@ -123,25 +125,21 @@ class SeedingTestFramework:
             "users_with_names": len([u for u in users if u["name"] is not None]),
         }
 
-        return verification
-
     async def verify_team_data(self) -> dict[str, Any]:
-        """Verify seeded team data integrity"""
+        """Verify seeded team data integrity."""
         teams = await self.conn.fetch("SELECT * FROM teams")
         memberships = await self.conn.fetch("SELECT * FROM memberships")
 
-        verification = {
+        return {
             "total_teams": len(teams),
             "teams_with_credits": len([t for t in teams if t["credits"] > 0]),
             "total_memberships": len(memberships),
             "owner_memberships": len([m for m in memberships if m["role"] == "owner"]),
-            "unique_team_slugs": len(set(t["slug"] for t in teams)),
+            "unique_team_slugs": len({t["slug"] for t in teams}),
         }
 
-        return verification
-
     async def verify_business_rules(self) -> dict[str, bool]:
-        """Verify all seeded data follows business rules"""
+        """Verify all seeded data follows business rules."""
         checks = {}
 
         # Check: All teams have at least one owner
@@ -185,7 +183,7 @@ class SeedingTestFramework:
 
 @pytest.fixture
 async def seeding_framework():
-    """Pytest fixture for seeding testing"""
+    """Pytest fixture for seeding testing."""
     framework = SeedingTestFramework()
     await framework.setup_test_database()
     yield framework
@@ -301,9 +299,9 @@ async def test_seed_error_01_constraint_violations(seeding_framework):
         assert len(teams) >= 1, "Should handle slug conflicts"
     except Exception as e:
         # If it fails, should be a clear constraint error
-        assert "constraint" in str(e).lower() or "unique" in str(e).lower(), (
-            f"Should be clear constraint error: {e}"
-        )
+        assert (  # noqa: PT017
+            "constraint" in str(e).lower() or "unique" in str(e).lower()
+        ), f"Should be clear constraint error: {e}"
 
 
 # INVARIANT TESTS

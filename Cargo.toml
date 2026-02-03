@@ -81,6 +81,7 @@ mockall = "0.12"
 wiremock = "0.6"
 tempfile = "3.8"
 test-log = "0.2"
+serial_test = "3.1"
 
 # === Async Traits ===
 async-trait = "0.1"

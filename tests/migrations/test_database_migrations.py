@@ -95,12 +95,11 @@ class MigrationTestFramework:
             return []
 
     async def get_table_count(self) -> int:
-        """Get number of tables in database"""
-        count = await self.conn.fetchval("""
+        """Get number of tables in database."""
+        return await self.conn.fetchval("""
             SELECT COUNT(*) FROM information_schema.tables
             WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
         """)
-        return count
 
     async def check_table_exists(self, table_name: str) -> bool:
         """Check if table exists"""
