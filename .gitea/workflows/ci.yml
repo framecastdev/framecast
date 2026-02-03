@@ -61,6 +61,8 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
+        env:
+          SQLX_OFFLINE: "true"
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run migrations
