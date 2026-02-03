@@ -85,16 +85,16 @@ jobs:
 
       - name: Install pre-commit
         run: |
-          # Install pre-commit with --break-system-packages for managed environments
-          python3 -m pip install --user --break-system-packages pre-commit
+          # Install pre-commit system-wide (works better in CI containers)
+          pip3 install pre-commit || python3 -m pip install pre-commit
 
       - name: Run pre-commit (non-Rust hooks)
         run: |
           # Run only non-Rust hooks (Rust is handled in ci job)
-          ~/.local/bin/pre-commit run --all-files trailing-whitespace || true
-          ~/.local/bin/pre-commit run --all-files end-of-file-fixer || true
-          ~/.local/bin/pre-commit run --all-files check-yaml || true
-          ~/.local/bin/pre-commit run --all-files check-json || true
-          ~/.local/bin/pre-commit run --all-files check-toml || true
-          ~/.local/bin/pre-commit run --all-files check-merge-conflict
-          ~/.local/bin/pre-commit run --all-files detect-private-key
+          pre-commit run --all-files trailing-whitespace || true
+          pre-commit run --all-files end-of-file-fixer || true
+          pre-commit run --all-files check-yaml || true
+          pre-commit run --all-files check-json || true
+          pre-commit run --all-files check-toml || true
+          pre-commit run --all-files check-merge-conflict
+          pre-commit run --all-files detect-private-key
