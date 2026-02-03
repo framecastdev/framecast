@@ -13,6 +13,8 @@ use uuid::Uuid;
 
 use framecast_common::{Error, Result, Urn};
 
+use crate::state::{JobEvent, JobState, JobStateMachine, StateError};
+
 /// User tier levels
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, Default)]
 #[sqlx(type_name = "user_tier", rename_all = "lowercase")]
@@ -701,10 +703,38 @@ pub enum JobStatus {
 impl JobStatus {
     /// Check if status is terminal (job has finished)
     pub fn is_terminal(&self) -> bool {
-        matches!(
-            self,
-            JobStatus::Completed | JobStatus::Failed | JobStatus::Canceled
-        )
+        self.to_state().is_terminal()
+    }
+
+    /// Convert to state machine state
+    pub fn to_state(&self) -> JobState {
+        match self {
+            JobStatus::Queued => JobState::Queued,
+            JobStatus::Processing => JobState::Processing,
+            JobStatus::Completed => JobState::Completed,
+            JobStatus::Failed => JobState::Failed,
+            JobStatus::Canceled => JobState::Canceled,
+        }
+    }
+
+    /// Create from state machine state
+    pub fn from_state(state: JobState) -> Self {
+        match state {
+            JobState::Queued => JobStatus::Queued,
+            JobState::Processing => JobStatus::Processing,
+            JobState::Completed => JobStatus::Completed,
+            JobState::Failed => JobStatus::Failed,
+            JobState::Canceled => JobStatus::Canceled,
+        }
+    }
+
+    /// Get valid next states from current state
+    pub fn valid_transitions(&self) -> Vec<JobStatus> {
+        self.to_state()
+            .valid_transitions()
+            .iter()
+            .map(|s| JobStatus::from_state(*s))
+            .collect()
     }
 }
 
@@ -801,11 +831,8 @@ impl Job {
 
     /// Start job processing
     pub fn start(&mut self) -> Result<()> {
-        if self.status != JobStatus::Queued {
-            return Err(Error::Validation("Can only start queued jobs".to_string()));
-        }
-
-        self.status = JobStatus::Processing;
+        let new_state = self.apply_transition(JobEvent::WorkerPicksUp)?;
+        self.status = JobStatus::from_state(new_state);
         self.started_at = Some(Utc::now());
         self.updated_at = Utc::now();
         Ok(())
@@ -817,13 +844,8 @@ impl Job {
         output: serde_json::Value,
         output_size_bytes: Option<i64>,
     ) -> Result<()> {
-        if self.status != JobStatus::Processing {
-            return Err(Error::Validation(
-                "Can only complete processing jobs".to_string(),
-            ));
-        }
-
-        self.status = JobStatus::Completed;
+        let new_state = self.apply_transition(JobEvent::Success)?;
+        self.status = JobStatus::from_state(new_state);
         self.output = Some(Json(output));
         self.output_size_bytes = output_size_bytes;
         self.completed_at = Some(Utc::now());
@@ -833,11 +855,8 @@ impl Job {
 
     /// Fail job
     pub fn fail(&mut self, error: serde_json::Value, failure_type: JobFailureType) -> Result<()> {
-        if self.is_terminal() {
-            return Err(Error::Validation("Cannot fail terminal job".to_string()));
-        }
-
-        self.status = JobStatus::Failed;
+        let new_state = self.apply_transition(JobEvent::Failure)?;
+        self.status = JobStatus::from_state(new_state);
         self.error = Some(Json(error));
         self.failure_type = Some(failure_type.clone());
 
@@ -851,11 +870,8 @@ impl Job {
 
     /// Cancel job
     pub fn cancel(&mut self) -> Result<()> {
-        if self.is_terminal() {
-            return Err(Error::Validation("Cannot cancel terminal job".to_string()));
-        }
-
-        self.status = JobStatus::Canceled;
+        let new_state = self.apply_transition(JobEvent::Cancel)?;
+        self.status = JobStatus::from_state(new_state);
         self.failure_type = Some(JobFailureType::Canceled);
 
         // Apply refund with 10% cancellation fee
@@ -864,6 +880,27 @@ impl Job {
         self.completed_at = Some(Utc::now());
         self.updated_at = Utc::now();
         Ok(())
+    }
+
+    /// Apply a state transition using the state machine
+    fn apply_transition(&self, event: JobEvent) -> Result<JobState> {
+        let current_state = self.status.to_state();
+        JobStateMachine::transition(current_state, event).map_err(|e| match e {
+            StateError::InvalidTransition { from, event, .. } => Error::Validation(format!(
+                "Invalid job transition: cannot apply '{}' event from '{}' state",
+                event, from
+            )),
+            StateError::TerminalState(state) => Error::Validation(format!(
+                "Job is in terminal state '{}' and cannot transition",
+                state
+            )),
+            StateError::GuardFailed(msg) => Error::Validation(msg),
+        })
+    }
+
+    /// Check if a transition is valid without applying it
+    pub fn can_transition(&self, event: &JobEvent) -> bool {
+        JobStateMachine::can_transition(self.status.to_state(), event)
     }
 
     /// Get owner URN
