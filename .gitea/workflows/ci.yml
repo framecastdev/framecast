@@ -85,8 +85,8 @@ jobs:
 
       - name: Install pre-commit
         run: |
-          # Use system Python (avoid setup-python which needs GitHub API)
-          python3 -m pip install --user pre-commit
+          # Install pre-commit with --break-system-packages for managed environments
+          python3 -m pip install --user --break-system-packages pre-commit
 
       - name: Run pre-commit (non-Rust hooks)
         run: |
