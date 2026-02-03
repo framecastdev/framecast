@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 /// Represents an email retrieved from LocalStack SES API
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)] // Fields used for deserialization and future extensibility
 pub struct LocalStackEmail {
     #[serde(default = "default_id")]
     pub id: String,
@@ -27,7 +28,6 @@ pub struct LocalStackEmail {
     pub timestamp: Option<String>,
 
     #[serde(flatten)]
-    #[allow(dead_code)] // Reserved for debugging and future extensibility
     pub raw_data: HashMap<String, serde_json::Value>,
 }
 
@@ -50,6 +50,7 @@ pub struct LocalStackEmailClient {
     client: Client,
 }
 
+#[allow(dead_code)] // Methods available for future use and testing
 impl LocalStackEmailClient {
     /// Create a new LocalStack email client
     pub fn new(base_url: &str) -> Self {
@@ -100,33 +101,19 @@ impl LocalStackEmailClient {
             }
             serde_json::Value::Object(obj) if obj.contains_key("emails") => {
                 // Wrapped in "emails" field
-                if let Ok(emails) =
-                    serde_json::from_value::<Vec<LocalStackEmail>>(obj["emails"].clone())
-                {
-                    emails
-                } else {
-                    Vec::new()
-                }
+                serde_json::from_value::<Vec<LocalStackEmail>>(obj["emails"].clone())
+                    .unwrap_or_default()
             }
             serde_json::Value::Object(obj) if obj.contains_key("messages") => {
                 // LocalStack format: wrapped in "messages" field
-                if let Ok(emails) =
-                    serde_json::from_value::<Vec<LocalStackEmail>>(obj["messages"].clone())
-                {
-                    emails
-                } else {
-                    Vec::new()
-                }
+                serde_json::from_value::<Vec<LocalStackEmail>>(obj["messages"].clone())
+                    .unwrap_or_default()
             }
             serde_json::Value::Object(obj) => {
                 // Single email object - try to parse it directly
-                if let Ok(email) =
-                    serde_json::from_value::<LocalStackEmail>(serde_json::Value::Object(obj))
-                {
-                    vec![email]
-                } else {
-                    Vec::new()
-                }
+                serde_json::from_value::<LocalStackEmail>(serde_json::Value::Object(obj))
+                    .map(|email| vec![email])
+                    .unwrap_or_default()
             }
             _ => Vec::new(),
         };
@@ -435,7 +422,7 @@ mod tests {
         let email = LocalStackEmail {
             id: "test".to_string(),
             subject: "Team Invitation".to_string(),
-            body: "Join team: https://framecast.app/teams/87654321-4321-7654-ba98-876543210987/invitations/12345678-1234-4567-89ab-123456789012/accept".to_string(), // pragma: allowlist secret
+            body: "Join team: https://framecast.app/teams/87654321-4321-4654-ba98-876543210987/invitations/12345678-1234-4567-89ab-123456789012/accept".to_string(), // pragma: allowlist secret
             from: "noreply@framecast.app".to_string(),
             to: vec!["user@example.com".to_string()],
             timestamp: None,
@@ -446,7 +433,7 @@ mod tests {
         assert!(team_id.is_some());
         assert_eq!(
             team_id.unwrap().to_string(),
-            "87654321-4321-7654-ba98-876543210987" // pragma: allowlist secret
+            "87654321-4321-4654-ba98-876543210987" // pragma: allowlist secret
         );
     }
 

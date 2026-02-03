@@ -191,6 +191,12 @@ seed:
     # TODO: Implement seeding script
     @echo "✅ Database seeded"
 
+# Generate sqlx offline query data for compile-time verification
+sqlx-prepare:
+    @echo "📦 Generating sqlx offline query data..."
+    cargo sqlx prepare --workspace
+    @echo "✅ sqlx offline data generated in .sqlx/"
+
 # ============================================================================
 # TESTING (Rules I, VI: Codebase, Processes)
 # ============================================================================

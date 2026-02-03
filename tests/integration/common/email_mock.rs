@@ -295,7 +295,7 @@ impl Default for MockEmailService {
 pub mod test_utils {
     use super::*;
     use crate::common::{TestApp, UserFixture};
-    use framecast_domain::entities::{MembershipRole, UserTier};
+    use framecast_domain::entities::{InvitationRole, UserTier};
 
     /// Create a complete invitation test scenario
     pub struct InvitationTestScenario {
@@ -330,7 +330,7 @@ pub mod test_utils {
         /// Send invitation and return the invitation ID from captured email
         pub async fn send_invitation(
             &self,
-            role: MembershipRole,
+            role: InvitationRole,
         ) -> Result<Uuid, Box<dyn std::error::Error>> {
             // Create invitation in database (simulating API call)
             let invitation = framecast_domain::entities::Invitation::new(
@@ -402,7 +402,7 @@ pub mod test_utils {
         /// Complete invitation workflow: send invitation, create user, accept invitation
         pub async fn complete_invitation_workflow(
             &self,
-            role: MembershipRole,
+            role: InvitationRole,
         ) -> Result<(Uuid, UserFixture), Box<dyn std::error::Error>> {
             // Send invitation
             let invitation_id = self.send_invitation(role).await?;

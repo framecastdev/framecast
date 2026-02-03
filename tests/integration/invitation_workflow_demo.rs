@@ -18,7 +18,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 use framecast_api::routes;
-use framecast_domain::entities::{MembershipRole, User, UserTier};
+use framecast_domain::entities::{InvitationRole, User, UserTier};
 
 use crate::common::{email_mock::MockEmailService, TestApp, UserFixture};
 
@@ -326,16 +326,17 @@ async fn demo_invitation_workflow_error_scenarios() {
     // Simulate invitation exists
     sqlx::query!(
         r#"
-        INSERT INTO invitations (id, team_id, email, role, invited_by, created_at, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO invitations (id, team_id, email, role, invited_by, created_at, expires_at, token)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         "#,
         invitation_id,
         team.id,
         invitee_email,
-        MembershipRole::Member as MembershipRole,
+        InvitationRole::Member as InvitationRole,
         owner_fixture.user.id,
         Utc::now(),
-        Utc::now() + chrono::Duration::days(7)
+        Utc::now() + chrono::Duration::days(7),
+        Uuid::new_v4().to_string()
     )
     .execute(&app.pool)
     .await

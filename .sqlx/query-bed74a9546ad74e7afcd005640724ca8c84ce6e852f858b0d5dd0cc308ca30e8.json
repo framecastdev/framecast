@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT t.id, t.name, t.slug, t.credits, t.ephemeral_storage_bytes,\n                   t.settings, t.created_at, t.updated_at,\n                   m.role as \"role: MembershipRole\"\n            FROM teams t\n            INNER JOIN memberships m ON t.id = m.team_id\n            WHERE m.user_id = $1\n            ORDER BY t.created_at ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "credits",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "ephemeral_storage_bytes",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "settings",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "role: MembershipRole",
+        "type_info": {
+          "Custom": {
+            "name": "membership_role",
+            "kind": {
+              "Enum": [
+                "owner",
+                "admin",
+                "member",
+                "viewer"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bed74a9546ad74e7afcd005640724ca8c84ce6e852f858b0d5dd0cc308ca30e8"
+}

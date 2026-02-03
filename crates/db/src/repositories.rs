@@ -565,7 +565,7 @@ impl InvitationRepository {
         let row = sqlx::query_as!(
             Invitation,
             r#"
-            SELECT id, team_id, invited_by, email, role as "role: MembershipRole",
+            SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
                    token, expires_at, accepted_at, revoked_at, created_at
             FROM invitations
             WHERE id = $1
@@ -587,7 +587,7 @@ impl InvitationRepository {
         let row = sqlx::query_as!(
             Invitation,
             r#"
-            SELECT id, team_id, invited_by, email, role as "role: MembershipRole",
+            SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
                    token, expires_at, accepted_at, revoked_at, created_at
             FROM invitations
             WHERE team_id = $1 AND email = $2
@@ -610,14 +610,14 @@ impl InvitationRepository {
             r#"
             INSERT INTO invitations (id, team_id, invited_by, email, role, token, expires_at, accepted_at, revoked_at, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING id, team_id, invited_by, email, role as "role: MembershipRole",
+            RETURNING id, team_id, invited_by, email, role as "role: InvitationRole",
                       token, expires_at, accepted_at, revoked_at, created_at
             "#,
             invitation.id,
             invitation.team_id,
             invitation.invited_by,
             invitation.email,
-            invitation.role.clone() as MembershipRole,
+            invitation.role.clone() as InvitationRole,
             invitation.token,
             invitation.expires_at,
             invitation.accepted_at,

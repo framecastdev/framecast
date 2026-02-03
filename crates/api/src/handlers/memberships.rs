@@ -10,7 +10,7 @@ use axum::{
 };
 use framecast_common::{Error, Result};
 use framecast_domain::entities::{
-    Invitation, InvitationState, Membership, MembershipRole, UserTier,
+    Invitation, InvitationRole, InvitationState, Membership, MembershipRole, UserTier,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -42,7 +42,7 @@ pub struct InvitationResponse {
     pub id: Uuid,
     pub team_id: Uuid,
     pub email: String,
-    pub role: MembershipRole,
+    pub role: InvitationRole,
     pub state: InvitationState,
     pub invited_by: Uuid,
     pub expires_at: chrono::DateTime<chrono::Utc>,
@@ -197,8 +197,11 @@ pub async fn invite_member(
         ));
     }
 
+    // Convert MembershipRole to InvitationRole (validates that Owner cannot be invited)
+    let invitation_role = InvitationRole::try_from(request.role)?;
+
     // Create invitation
-    let invitation = Invitation::new(team_id, user.id, request.email, request.role)?;
+    let invitation = Invitation::new(team_id, user.id, request.email, invitation_role)?;
 
     let created_invitation = state
         .repos
@@ -283,8 +286,8 @@ pub async fn accept_invitation(
         ));
     }
 
-    // Create membership
-    let membership = Membership::new(team_id, user.id, invitation.role);
+    // Create membership (convert InvitationRole to MembershipRole)
+    let membership = Membership::new(team_id, user.id, invitation.role.to_membership_role());
 
     let created_membership = state
         .repos
@@ -562,7 +565,7 @@ mod tests {
             id: Uuid::new_v4(),
             team_id: Uuid::new_v4(),
             email: "test@example.com".to_string(),
-            role: MembershipRole::Member,
+            role: InvitationRole::Member,
             state: InvitationState::Pending,
             invited_by: Uuid::new_v4(),
             expires_at: chrono::Utc::now(),

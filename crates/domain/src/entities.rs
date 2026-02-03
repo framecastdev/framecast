@@ -314,6 +314,53 @@ impl MembershipRole {
     }
 }
 
+/// Role for invitation (excludes Owner since owners cannot be invited)
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "invitation_role", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum InvitationRole {
+    Admin,
+    #[default]
+    Member,
+    Viewer,
+}
+
+impl InvitationRole {
+    /// Convert to MembershipRole for use after invitation is accepted
+    pub fn to_membership_role(&self) -> MembershipRole {
+        match self {
+            InvitationRole::Admin => MembershipRole::Admin,
+            InvitationRole::Member => MembershipRole::Member,
+            InvitationRole::Viewer => MembershipRole::Viewer,
+        }
+    }
+}
+
+impl TryFrom<MembershipRole> for InvitationRole {
+    type Error = Error;
+
+    fn try_from(role: MembershipRole) -> Result<Self> {
+        match role {
+            MembershipRole::Admin => Ok(InvitationRole::Admin),
+            MembershipRole::Member => Ok(InvitationRole::Member),
+            MembershipRole::Viewer => Ok(InvitationRole::Viewer),
+            MembershipRole::Owner => Err(Error::Validation(
+                "Cannot invite owners via invitation".to_string(),
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for InvitationRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InvitationRole::Admin => write!(f, "admin"),
+            InvitationRole::Member => write!(f, "member"),
+            InvitationRole::Viewer => write!(f, "viewer"),
+        }
+    }
+}
+
 /// Membership entity - association between User and Team
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Membership {
@@ -396,7 +443,7 @@ pub struct Invitation {
     pub team_id: Uuid,
     pub invited_by: Uuid,
     pub email: String,
-    pub role: MembershipRole, // Cannot be Owner per constraints
+    pub role: InvitationRole, // Cannot be Owner per constraints
     pub token: String,
     pub expires_at: DateTime<Utc>,
     pub accepted_at: Option<DateTime<Utc>>,
@@ -410,18 +457,11 @@ impl Invitation {
         team_id: Uuid,
         invited_by: Uuid,
         email: String,
-        role: MembershipRole,
+        role: InvitationRole,
     ) -> Result<Self> {
         // Validate email
         if !email.contains('@') || email.is_empty() {
             return Err(Error::Validation("Invalid email format".to_string()));
-        }
-
-        // Validate role - cannot invite owners
-        if role == MembershipRole::Owner {
-            return Err(Error::Validation(
-                "Cannot invite owners via invitation".to_string(),
-            ));
         }
 
         // Generate secure token
@@ -515,10 +555,8 @@ impl Invitation {
             return Err(Error::Validation("Invalid email format".to_string()));
         }
 
-        // Role validation
-        if self.role == MembershipRole::Owner {
-            return Err(Error::Validation("Cannot invite owners".to_string()));
-        }
+        // Note: Role validation for Owner is enforced at the type level -
+        // InvitationRole doesn't include Owner variant
 
         // State validation
         if self.accepted_at.is_some() && self.revoked_at.is_some() {
@@ -2013,7 +2051,7 @@ mod tests {
         let team_id = Uuid::new_v4();
         let invited_by = Uuid::new_v4();
         let email = "invitee@example.com".to_string();
-        let role = MembershipRole::Member;
+        let role = InvitationRole::Member;
 
         let invitation = Invitation::new(team_id, invited_by, email.clone(), role.clone()).unwrap();
 
@@ -2029,12 +2067,14 @@ mod tests {
 
     #[test]
     fn test_invitation_owner_restriction() {
-        let team_id = Uuid::new_v4();
-        let invited_by = Uuid::new_v4();
-        let email = "invitee@example.com".to_string();
-
-        let result = Invitation::new(team_id, invited_by, email, MembershipRole::Owner);
+        // Test that MembershipRole::Owner cannot be converted to InvitationRole
+        let result = InvitationRole::try_from(MembershipRole::Owner);
         assert!(result.is_err());
+
+        // Test that valid roles convert successfully
+        let admin_result = InvitationRole::try_from(MembershipRole::Admin);
+        assert!(admin_result.is_ok());
+        assert_eq!(admin_result.unwrap(), InvitationRole::Admin);
     }
 
     #[test]
@@ -2045,7 +2085,7 @@ mod tests {
             team_id,
             invited_by,
             "test@example.com".to_string(),
-            MembershipRole::Member,
+            InvitationRole::Member,
         )
         .unwrap();
 
@@ -2067,7 +2107,7 @@ mod tests {
             team_id,
             invited_by,
             "test@example.com".to_string(),
-            MembershipRole::Member,
+            InvitationRole::Member,
         )
         .unwrap();
 
@@ -3402,7 +3442,7 @@ mod tests {
             Uuid::new_v4(),
             Uuid::new_v4(),
             "test@example.com".to_string(),
-            MembershipRole::Member,
+            InvitationRole::Member,
         )
         .unwrap();
 
@@ -3417,7 +3457,7 @@ mod tests {
             Uuid::new_v4(),
             Uuid::new_v4(),
             "test@example.com".to_string(),
-            MembershipRole::Member,
+            InvitationRole::Member,
         )
         .unwrap();
 
@@ -3431,7 +3471,7 @@ mod tests {
             Uuid::new_v4(),
             Uuid::new_v4(),
             "test@example.com".to_string(),
-            MembershipRole::Member,
+            InvitationRole::Member,
         )
         .unwrap();
 
@@ -3446,7 +3486,7 @@ mod tests {
             Uuid::new_v4(),
             Uuid::new_v4(),
             "test@example.com".to_string(),
-            MembershipRole::Member,
+            InvitationRole::Member,
         )
         .unwrap();
 
@@ -3461,7 +3501,7 @@ mod tests {
             Uuid::new_v4(),
             Uuid::new_v4(),
             "test@example.com".to_string(),
-            MembershipRole::Member,
+            InvitationRole::Member,
         )
         .unwrap();
 
@@ -3479,7 +3519,7 @@ mod tests {
             Uuid::new_v4(),
             Uuid::new_v4(),
             "test@example.com".to_string(),
-            MembershipRole::Member,
+            InvitationRole::Member,
         )
         .unwrap();
 

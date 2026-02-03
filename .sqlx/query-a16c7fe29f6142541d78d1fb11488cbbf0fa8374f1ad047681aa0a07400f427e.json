@@ -1,0 +1,87 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users SET\n                credits = credits + $2,\n                updated_at = NOW()\n            WHERE id = $1 AND credits + $2 >= 0\n            RETURNING id, email, name, avatar_url,\n                      tier as \"tier: UserTier\", credits,\n                      ephemeral_storage_bytes, upgraded_at,\n                      created_at, updated_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "tier: UserTier",
+        "type_info": {
+          "Custom": {
+            "name": "user_tier",
+            "kind": {
+              "Enum": [
+                "starter",
+                "creator"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "credits",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "ephemeral_storage_bytes",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "upgraded_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "a16c7fe29f6142541d78d1fb11488cbbf0fa8374f1ad047681aa0a07400f427e"
+}

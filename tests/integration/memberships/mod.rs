@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use framecast_api::routes;
-use framecast_domain::entities::{UserTier, TeamRole, InvitationState};
+use framecast_domain::entities::{UserTier, MembershipRole, InvitationRole, InvitationState};
 
 use crate::common::{TestApp, UserFixture, assertions, email_mock::{MockEmailService, test_utils::InvitationTestScenario}};
 
@@ -164,7 +164,7 @@ mod test_invite_member {
             Uuid::new_v4(),
             team.id,
             existing_member.user.id,
-            TeamRole::Member as TeamRole,
+            MembershipRole::Member as MembershipRole,
             chrono::Utc::now()
         ).execute(&app.pool).await.unwrap();
 
@@ -310,7 +310,7 @@ mod test_invite_member {
             Uuid::new_v4(),
             team.id,
             member_fixture.user.id,
-            TeamRole::Member as TeamRole,
+            MembershipRole::Member as MembershipRole,
             chrono::Utc::now()
         ).execute(&app.pool).await.unwrap();
 
@@ -353,7 +353,7 @@ mod test_invite_member {
             Uuid::new_v4(),
             team.id,
             admin_fixture.user.id,
-            TeamRole::Admin as TeamRole,
+            MembershipRole::Admin as MembershipRole,
             chrono::Utc::now()
         ).execute(&app.pool).await.unwrap();
 
@@ -407,7 +407,7 @@ mod test_accept_invitation {
 
         // Complete the invitation workflow
         let (invitation_id, invitee_fixture) = scenario
-            .complete_invitation_workflow(TeamRole::Member)
+            .complete_invitation_workflow(InvitationRole::Member)
             .await
             .unwrap();
 
@@ -440,7 +440,7 @@ mod test_accept_invitation {
             invitee_fixture.user.id
         ).fetch_one(&scenario.app.pool).await.unwrap();
 
-        assert_eq!(db_membership.role, TeamRole::Member as TeamRole);
+        assert_eq!(db_membership.role, MembershipRole::Member as MembershipRole);
 
         scenario.cleanup().await.unwrap();
     }
@@ -451,7 +451,7 @@ mod test_accept_invitation {
         let router = create_test_router(&scenario.app).await;
 
         // Send invitation
-        let invitation_id = scenario.send_invitation(TeamRole::Member).await.unwrap();
+        let invitation_id = scenario.send_invitation(InvitationRole::Member).await.unwrap();
 
         // Create starter user (cannot accept team invitations per INV-M4)
         let starter_invitee = UserFixture::starter(&scenario.app).await.unwrap();
@@ -481,7 +481,7 @@ mod test_accept_invitation {
         let router = create_test_router(&scenario.app).await;
 
         // Send invitation
-        let invitation_id = scenario.send_invitation(TeamRole::Member).await.unwrap();
+        let invitation_id = scenario.send_invitation(InvitationRole::Member).await.unwrap();
 
         // Create different user (wrong email)
         let wrong_user = UserFixture::creator(&scenario.app).await.unwrap();
@@ -507,7 +507,7 @@ mod test_accept_invitation {
 
         // Complete invitation workflow
         let (invitation_id, invitee_fixture) = scenario
-            .complete_invitation_workflow(TeamRole::Member)
+            .complete_invitation_workflow(InvitationRole::Member)
             .await
             .unwrap();
 
@@ -570,7 +570,7 @@ mod test_decline_invitation {
 
         // Send invitation and create invitee
         let (invitation_id, invitee_fixture) = scenario
-            .complete_invitation_workflow(TeamRole::Member)
+            .complete_invitation_workflow(InvitationRole::Member)
             .await
             .unwrap();
 
@@ -603,7 +603,7 @@ mod test_decline_invitation {
         let router = create_test_router(&scenario.app).await;
 
         // Send invitation
-        let invitation_id = scenario.send_invitation(TeamRole::Member).await.unwrap();
+        let invitation_id = scenario.send_invitation(InvitationRole::Member).await.unwrap();
 
         // Create different user
         let wrong_user = UserFixture::creator(&scenario.app).await.unwrap();
@@ -641,7 +641,7 @@ mod test_remove_member {
             Uuid::new_v4(),
             team.id,
             member_fixture.user.id,
-            TeamRole::Member as TeamRole,
+            MembershipRole::Member as MembershipRole,
             chrono::Utc::now()
         ).execute(&app.pool).await.unwrap();
 
@@ -711,7 +711,7 @@ mod test_remove_member {
             Uuid::new_v4(),
             team.id,
             member_fixture.user.id,
-            TeamRole::Member as TeamRole,
+            MembershipRole::Member as MembershipRole,
             chrono::Utc::now()
         ).execute(&app.pool).await.unwrap();
 
@@ -725,7 +725,7 @@ mod test_remove_member {
             Uuid::new_v4(),
             team.id,
             other_member_fixture.user.id,
-            TeamRole::Member as TeamRole,
+            MembershipRole::Member as MembershipRole,
             chrono::Utc::now()
         ).execute(&app.pool).await.unwrap();
 
@@ -765,7 +765,7 @@ mod test_update_member_role {
             Uuid::new_v4(),
             team.id,
             member_fixture.user.id,
-            TeamRole::Member as TeamRole,
+            MembershipRole::Member as MembershipRole,
             chrono::Utc::now()
         ).execute(&app.pool).await.unwrap();
 
@@ -799,7 +799,7 @@ mod test_update_member_role {
             member_fixture.user.id
         ).fetch_one(&app.pool).await.unwrap();
 
-        assert_eq!(db_membership.role, TeamRole::Admin as TeamRole);
+        assert_eq!(db_membership.role, MembershipRole::Admin as MembershipRole);
 
         app.cleanup().await.unwrap();
     }
@@ -819,7 +819,7 @@ mod test_update_member_role {
             Uuid::new_v4(),
             team.id,
             admin_fixture.user.id,
-            TeamRole::Admin as TeamRole,
+            MembershipRole::Admin as MembershipRole,
             chrono::Utc::now()
         ).execute(&app.pool).await.unwrap();
 
@@ -833,7 +833,7 @@ mod test_update_member_role {
             Uuid::new_v4(),
             team.id,
             member_fixture.user.id,
-            TeamRole::Member as TeamRole,
+            MembershipRole::Member as MembershipRole,
             chrono::Utc::now()
         ).execute(&app.pool).await.unwrap();
 
@@ -962,7 +962,7 @@ mod test_invitation_lifecycle_with_email {
             invitee_fixture.user.id
         ).fetch_one(&scenario.app.pool).await.unwrap();
 
-        assert_eq!(membership_check.role, TeamRole::Admin as TeamRole);
+        assert_eq!(membership_check.role, MembershipRole::Admin as MembershipRole);
 
         scenario.cleanup().await.unwrap();
     }
@@ -977,24 +977,28 @@ mod test_invitation_lifecycle_with_email {
             id: Uuid::new_v4(),
             team_id: scenario.team.id,
             email: scenario.invitee_email.clone(),
-            role: TeamRole::Member,
+            role: InvitationRole::Member,
             invited_by: scenario.inviter.user.id,
+            token: Uuid::new_v4().to_string().replace("-", ""),
             created_at: chrono::Utc::now() - chrono::Duration::days(8), // Expired
             expires_at: chrono::Utc::now() - chrono::Duration::days(1), // Expired
+            accepted_at: None,
+            revoked_at: None,
         };
 
         sqlx::query!(
             r#"
-            INSERT INTO invitations (id, team_id, email, role, invited_by, created_at, expires_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO invitations (id, team_id, email, role, invited_by, created_at, expires_at, token)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
             invitation.id,
             invitation.team_id,
             invitation.email,
-            invitation.role as TeamRole,
+            invitation.role as InvitationRole,
             invitation.invited_by,
             invitation.created_at,
-            invitation.expires_at
+            invitation.expires_at,
+            invitation.token
         ).execute(&scenario.app.pool).await.unwrap();
 
         let invitee_fixture = scenario.create_invitee_user().await.unwrap();
