@@ -13,7 +13,11 @@ use uuid::Uuid;
 
 use framecast_common::{Error, Result, Urn};
 
-use crate::state::{JobEvent, JobState, JobStateMachine, StateError};
+use crate::state::{
+    InvitationEvent, InvitationGuardContext, InvitationState as StateMachineInvitationState,
+    InvitationStateMachine, JobEvent, JobState, JobStateMachine, ProjectEvent, ProjectState,
+    ProjectStateMachine, StateError,
+};
 
 /// User tier levels
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, Default)]
@@ -339,13 +343,49 @@ impl Membership {
 }
 
 /// Invitation states (derived from timestamps)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InvitationState {
     Pending,
     Accepted,
     Revoked,
     Expired,
+}
+
+impl InvitationState {
+    /// Check if this is a terminal state
+    pub fn is_terminal(&self) -> bool {
+        self.to_state().is_terminal()
+    }
+
+    /// Convert to state machine state
+    pub fn to_state(&self) -> StateMachineInvitationState {
+        match self {
+            InvitationState::Pending => StateMachineInvitationState::Pending,
+            InvitationState::Accepted => StateMachineInvitationState::Accepted,
+            InvitationState::Revoked => StateMachineInvitationState::Revoked,
+            InvitationState::Expired => StateMachineInvitationState::Expired,
+        }
+    }
+
+    /// Create from state machine state
+    pub fn from_state(state: StateMachineInvitationState) -> Self {
+        match state {
+            StateMachineInvitationState::Pending => InvitationState::Pending,
+            StateMachineInvitationState::Accepted => InvitationState::Accepted,
+            StateMachineInvitationState::Revoked => InvitationState::Revoked,
+            StateMachineInvitationState::Expired => InvitationState::Expired,
+        }
+    }
+
+    /// Get valid next states from current state
+    pub fn valid_transitions(&self) -> Vec<InvitationState> {
+        self.to_state()
+            .valid_transitions()
+            .iter()
+            .map(|s| InvitationState::from_state(*s))
+            .collect()
+    }
 }
 
 /// Invitation entity - pending invitation to join a team
@@ -416,29 +456,55 @@ impl Invitation {
 
     /// Check if invitation can be acted upon
     pub fn is_actionable(&self) -> bool {
-        matches!(self.state(), InvitationState::Pending)
+        !self.state().is_terminal()
+    }
+
+    /// Check if invitation is expired
+    pub fn is_expired(&self) -> bool {
+        self.expires_at < Utc::now()
     }
 
     /// Accept the invitation
     pub fn accept(&mut self) -> Result<()> {
-        if !self.is_actionable() {
-            return Err(Error::Validation(
-                "Invitation is not actionable".to_string(),
-            ));
-        }
+        self.apply_transition(InvitationEvent::Accept)?;
         self.accepted_at = Some(Utc::now());
         Ok(())
     }
 
     /// Revoke the invitation
     pub fn revoke(&mut self) -> Result<()> {
-        if self.accepted_at.is_some() {
-            return Err(Error::Validation(
-                "Cannot revoke accepted invitation".to_string(),
-            ));
-        }
+        self.apply_transition(InvitationEvent::Revoke)?;
         self.revoked_at = Some(Utc::now());
         Ok(())
+    }
+
+    /// Apply a state transition using the state machine
+    fn apply_transition(&self, event: InvitationEvent) -> Result<StateMachineInvitationState> {
+        let current_state = self.state().to_state();
+        let context = InvitationGuardContext {
+            is_expired: self.is_expired(),
+        };
+        InvitationStateMachine::transition(current_state, event, Some(&context)).map_err(
+            |e| match e {
+                StateError::InvalidTransition { from, event, .. } => Error::Validation(format!(
+                    "Invalid invitation transition: cannot apply '{}' event from '{}' state",
+                    event, from
+                )),
+                StateError::TerminalState(state) => Error::Validation(format!(
+                    "Invitation is in terminal state '{}' and cannot transition",
+                    state
+                )),
+                StateError::GuardFailed(msg) => Error::Validation(msg),
+            },
+        )
+    }
+
+    /// Check if a transition is valid without applying it
+    pub fn can_transition(&self, event: &InvitationEvent) -> bool {
+        let context = InvitationGuardContext {
+            is_expired: self.is_expired(),
+        };
+        InvitationStateMachine::can_transition(self.state().to_state(), event, Some(&context))
     }
 
     /// Validate invariants per spec
@@ -625,7 +691,7 @@ impl ApiKey {
 }
 
 /// Project status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, Default)]
 #[sqlx(type_name = "project_status", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectStatus {
@@ -634,6 +700,42 @@ pub enum ProjectStatus {
     Rendering,
     Completed,
     Archived,
+}
+
+impl ProjectStatus {
+    /// Check if this is a terminal state (Project has no terminal states)
+    pub fn is_terminal(&self) -> bool {
+        self.to_state().is_terminal()
+    }
+
+    /// Convert to state machine state
+    pub fn to_state(&self) -> ProjectState {
+        match self {
+            ProjectStatus::Draft => ProjectState::Draft,
+            ProjectStatus::Rendering => ProjectState::Rendering,
+            ProjectStatus::Completed => ProjectState::Completed,
+            ProjectStatus::Archived => ProjectState::Archived,
+        }
+    }
+
+    /// Create from state machine state
+    pub fn from_state(state: ProjectState) -> Self {
+        match state {
+            ProjectState::Draft => ProjectStatus::Draft,
+            ProjectState::Rendering => ProjectStatus::Rendering,
+            ProjectState::Completed => ProjectStatus::Completed,
+            ProjectState::Archived => ProjectStatus::Archived,
+        }
+    }
+
+    /// Get valid next states from current state
+    pub fn valid_transitions(&self) -> Vec<ProjectStatus> {
+        self.to_state()
+            .valid_transitions()
+            .iter()
+            .map(|s| ProjectStatus::from_state(*s))
+            .collect()
+    }
 }
 
 /// Project entity
@@ -684,6 +786,75 @@ impl Project {
             ));
         }
         Ok(())
+    }
+
+    /// Start rendering the project
+    pub fn start_render(&mut self) -> Result<()> {
+        let new_state = self.apply_transition(ProjectEvent::Render)?;
+        self.status = ProjectStatus::from_state(new_state);
+        self.updated_at = Utc::now();
+        Ok(())
+    }
+
+    /// Mark project as completed (called when job completes)
+    pub fn on_job_completed(&mut self) -> Result<()> {
+        let new_state = self.apply_transition(ProjectEvent::JobCompleted)?;
+        self.status = ProjectStatus::from_state(new_state);
+        self.updated_at = Utc::now();
+        Ok(())
+    }
+
+    /// Mark project as draft (called when job fails)
+    pub fn on_job_failed(&mut self) -> Result<()> {
+        let new_state = self.apply_transition(ProjectEvent::JobFailed)?;
+        self.status = ProjectStatus::from_state(new_state);
+        self.updated_at = Utc::now();
+        Ok(())
+    }
+
+    /// Mark project as draft (called when job is canceled)
+    pub fn on_job_canceled(&mut self) -> Result<()> {
+        let new_state = self.apply_transition(ProjectEvent::JobCanceled)?;
+        self.status = ProjectStatus::from_state(new_state);
+        self.updated_at = Utc::now();
+        Ok(())
+    }
+
+    /// Archive the project
+    pub fn archive(&mut self) -> Result<()> {
+        let new_state = self.apply_transition(ProjectEvent::Archive)?;
+        self.status = ProjectStatus::from_state(new_state);
+        self.updated_at = Utc::now();
+        Ok(())
+    }
+
+    /// Unarchive the project
+    pub fn unarchive(&mut self) -> Result<()> {
+        let new_state = self.apply_transition(ProjectEvent::Unarchive)?;
+        self.status = ProjectStatus::from_state(new_state);
+        self.updated_at = Utc::now();
+        Ok(())
+    }
+
+    /// Apply a state transition using the state machine
+    fn apply_transition(&self, event: ProjectEvent) -> Result<ProjectState> {
+        let current_state = self.status.to_state();
+        ProjectStateMachine::transition(current_state, event).map_err(|e| match e {
+            StateError::InvalidTransition { from, event, .. } => Error::Validation(format!(
+                "Invalid project transition: cannot apply '{}' event from '{}' state",
+                event, from
+            )),
+            StateError::TerminalState(state) => Error::Validation(format!(
+                "Project is in terminal state '{}' and cannot transition",
+                state
+            )),
+            StateError::GuardFailed(msg) => Error::Validation(msg),
+        })
+    }
+
+    /// Check if a transition is valid without applying it
+    pub fn can_transition(&self, event: &ProjectEvent) -> bool {
+        ProjectStateMachine::can_transition(self.status.to_state(), event)
     }
 }
 
@@ -2911,5 +3082,301 @@ mod tests {
         let deserialized: User = serde_json::from_str(&json).unwrap();
 
         assert_eq!(user, deserialized);
+    }
+
+    // ========================================================================
+    // Project State Machine Integration Tests
+    // ========================================================================
+
+    #[test]
+    fn test_project_start_render() {
+        let mut project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        assert_eq!(project.status, ProjectStatus::Draft);
+        project.start_render().unwrap();
+        assert_eq!(project.status, ProjectStatus::Rendering);
+    }
+
+    #[test]
+    fn test_project_on_job_completed() {
+        let mut project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        project.start_render().unwrap();
+        project.on_job_completed().unwrap();
+        assert_eq!(project.status, ProjectStatus::Completed);
+    }
+
+    #[test]
+    fn test_project_on_job_failed() {
+        let mut project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        project.start_render().unwrap();
+        project.on_job_failed().unwrap();
+        assert_eq!(project.status, ProjectStatus::Draft);
+    }
+
+    #[test]
+    fn test_project_on_job_canceled() {
+        let mut project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        project.start_render().unwrap();
+        project.on_job_canceled().unwrap();
+        assert_eq!(project.status, ProjectStatus::Draft);
+    }
+
+    #[test]
+    fn test_project_archive_from_draft() {
+        let mut project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        project.archive().unwrap();
+        assert_eq!(project.status, ProjectStatus::Archived);
+    }
+
+    #[test]
+    fn test_project_archive_from_completed() {
+        let mut project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        project.start_render().unwrap();
+        project.on_job_completed().unwrap();
+        project.archive().unwrap();
+        assert_eq!(project.status, ProjectStatus::Archived);
+    }
+
+    #[test]
+    fn test_project_unarchive() {
+        let mut project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        project.archive().unwrap();
+        project.unarchive().unwrap();
+        assert_eq!(project.status, ProjectStatus::Draft);
+    }
+
+    #[test]
+    fn test_project_rerender() {
+        let mut project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        project.start_render().unwrap();
+        project.on_job_completed().unwrap();
+        project.start_render().unwrap(); // Re-render
+        assert_eq!(project.status, ProjectStatus::Rendering);
+    }
+
+    #[test]
+    fn test_project_invalid_transition() {
+        let mut project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        // Cannot complete a draft project (must render first)
+        let result = project.on_job_completed();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_project_can_transition() {
+        let project = Project::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "Test".to_string(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        use crate::state::ProjectEvent;
+        assert!(project.can_transition(&ProjectEvent::Render));
+        assert!(project.can_transition(&ProjectEvent::Archive));
+        assert!(!project.can_transition(&ProjectEvent::JobCompleted));
+        assert!(!project.can_transition(&ProjectEvent::Unarchive));
+    }
+
+    #[test]
+    fn test_project_status_valid_transitions() {
+        assert_eq!(
+            ProjectStatus::Draft.valid_transitions(),
+            vec![ProjectStatus::Rendering, ProjectStatus::Archived]
+        );
+        assert_eq!(
+            ProjectStatus::Rendering.valid_transitions(),
+            vec![ProjectStatus::Completed, ProjectStatus::Draft]
+        );
+        assert_eq!(
+            ProjectStatus::Completed.valid_transitions(),
+            vec![ProjectStatus::Archived, ProjectStatus::Rendering]
+        );
+        assert_eq!(
+            ProjectStatus::Archived.valid_transitions(),
+            vec![ProjectStatus::Draft]
+        );
+    }
+
+    // ========================================================================
+    // Invitation State Machine Integration Tests
+    // ========================================================================
+
+    #[test]
+    fn test_invitation_accept() {
+        let mut invitation = Invitation::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            MembershipRole::Member,
+        )
+        .unwrap();
+
+        assert_eq!(invitation.state(), InvitationState::Pending);
+        invitation.accept().unwrap();
+        assert_eq!(invitation.state(), InvitationState::Accepted);
+    }
+
+    #[test]
+    fn test_invitation_revoke() {
+        let mut invitation = Invitation::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            MembershipRole::Member,
+        )
+        .unwrap();
+
+        invitation.revoke().unwrap();
+        assert_eq!(invitation.state(), InvitationState::Revoked);
+    }
+
+    #[test]
+    fn test_invitation_cannot_accept_after_revoked() {
+        let mut invitation = Invitation::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            MembershipRole::Member,
+        )
+        .unwrap();
+
+        invitation.revoke().unwrap();
+        let result = invitation.accept();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invitation_cannot_revoke_after_accepted() {
+        let mut invitation = Invitation::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            MembershipRole::Member,
+        )
+        .unwrap();
+
+        invitation.accept().unwrap();
+        let result = invitation.revoke();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invitation_cannot_accept_expired() {
+        let mut invitation = Invitation::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            MembershipRole::Member,
+        )
+        .unwrap();
+
+        // Set expiration to the past
+        invitation.expires_at = Utc::now() - chrono::Duration::hours(1);
+
+        assert_eq!(invitation.state(), InvitationState::Expired);
+        let result = invitation.accept();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invitation_can_transition() {
+        let invitation = Invitation::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            MembershipRole::Member,
+        )
+        .unwrap();
+
+        use crate::state::InvitationEvent;
+        assert!(invitation.can_transition(&InvitationEvent::Accept));
+        assert!(invitation.can_transition(&InvitationEvent::Revoke));
+    }
+
+    #[test]
+    fn test_invitation_state_is_terminal() {
+        assert!(!InvitationState::Pending.is_terminal());
+        assert!(InvitationState::Accepted.is_terminal());
+        assert!(InvitationState::Revoked.is_terminal());
+        assert!(InvitationState::Expired.is_terminal());
+    }
+
+    #[test]
+    fn test_invitation_state_valid_transitions() {
+        assert_eq!(
+            InvitationState::Pending.valid_transitions(),
+            vec![
+                InvitationState::Accepted,
+                InvitationState::Expired,
+                InvitationState::Revoked
+            ]
+        );
+        assert!(InvitationState::Accepted.valid_transitions().is_empty());
+        assert!(InvitationState::Revoked.valid_transitions().is_empty());
+        assert!(InvitationState::Expired.valid_transitions().is_empty());
     }
 }
