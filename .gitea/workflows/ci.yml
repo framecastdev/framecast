@@ -50,7 +50,9 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        run: |
+          # Install just via cargo (works without GitHub API token)
+          cargo install just
 
       - name: Install sqlx-cli
         run: cargo install sqlx-cli --no-default-features --features postgres
@@ -79,21 +81,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Install pre-commit
-        run: pip install pre-commit
+        run: |
+          # Use system Python (avoid setup-python which needs GitHub API)
+          python3 -m pip install --user pre-commit
 
       - name: Run pre-commit (non-Rust hooks)
         run: |
           # Run only non-Rust hooks (Rust is handled in ci job)
-          pre-commit run --all-files trailing-whitespace || true
-          pre-commit run --all-files end-of-file-fixer || true
-          pre-commit run --all-files check-yaml || true
-          pre-commit run --all-files check-json || true
-          pre-commit run --all-files check-toml || true
-          pre-commit run --all-files check-merge-conflict
-          pre-commit run --all-files detect-private-key
+          ~/.local/bin/pre-commit run --all-files trailing-whitespace || true
+          ~/.local/bin/pre-commit run --all-files end-of-file-fixer || true
+          ~/.local/bin/pre-commit run --all-files check-yaml || true
+          ~/.local/bin/pre-commit run --all-files check-json || true
+          ~/.local/bin/pre-commit run --all-files check-toml || true
+          ~/.local/bin/pre-commit run --all-files check-merge-conflict
+          ~/.local/bin/pre-commit run --all-files detect-private-key
