@@ -135,10 +135,8 @@ class APIKeyGenerator:
             sys.exit(1)
 
         # Determine key prefix based on environment/URN type
-        if "team" in owner_urn:
-            prefix = "sk_live"  # Team keys are production
-        else:
-            prefix = "sk_dev"  # Personal keys are development
+        # Team keys are production, personal keys are development
+        prefix = "sk_live" if "team" in owner_urn else "sk_dev"
 
         # Generate key
         full_key, key_hash = self.generate_api_key(prefix)

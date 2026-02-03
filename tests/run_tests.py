@@ -176,8 +176,7 @@ class FramecastTestRunner:
             ]
         )
 
-        # Rust test coverage (if available)
-        rust_coverage = 0  # Would use cargo-tarpaulin if available
+        # Rust test coverage would use cargo-tarpaulin if available
 
         if python_coverage == 0:
             print("✅ Coverage report generated in coverage_html/")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-API specification validation script
-Ensures API specification files are consistent and well-formed
+"""API specification validation script.
+
+Ensures API specification files are consistent and well-formed.
 """
 
 import os
@@ -10,7 +10,7 @@ import sys
 
 
 def validate_api_spec(file_paths):
-    """Validate API specification consistency"""
+    """Validate API specification consistency."""
     errors = []
 
     for file_path in file_paths:
@@ -29,7 +29,6 @@ def validate_api_spec(file_paths):
                 # Check for broken internal links
                 link_pattern = r"\[([^\]]+)\]\(([^)]+)\)"
                 for match in re.finditer(link_pattern, line):
-                    link_text = match.group(1)
                     link_url = match.group(2)
 
                     # Check internal markdown links
@@ -44,11 +43,10 @@ def validate_api_spec(file_paths):
                             )
 
                 # Check for consistent heading format
-                if line.startswith("#"):
-                    if not re.match(r"^#+\s+\S", line):
-                        errors.append(
-                            f"{file_path}:{line_num}: Heading should have space after #"
-                        )
+                if line.startswith("#") and not re.match(r"^#+\s+\S", line):
+                    errors.append(
+                        f"{file_path}:{line_num}: Heading should have space after #"
+                    )
 
         except Exception as e:
             errors.append(f"Error reading {file_path}: {e}")
@@ -57,6 +55,7 @@ def validate_api_spec(file_paths):
 
 
 def main():
+    """Run API specification validation as main entry point."""
     if len(sys.argv) < 2:
         return 0
 

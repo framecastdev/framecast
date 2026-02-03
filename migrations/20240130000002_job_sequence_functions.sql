@@ -356,7 +356,8 @@ COMMENT ON FUNCTION validate_job_status_transitions()
 IS 'Validate and auto-set timestamps for job status changes';
 COMMENT ON FUNCTION update_project_status_from_jobs()
 IS 'Auto-update project status based on job states';
-COMMENT ON FUNCTION cleanup_old_job_events() IS 'Remove job events older than 7 days';
+COMMENT ON FUNCTION cleanup_old_job_events()
+IS 'Remove job events older than 7 days';
 COMMENT ON FUNCTION cleanup_old_webhook_deliveries()
 IS 'Remove webhook deliveries older than 30 days';
 COMMENT ON FUNCTION is_valid_urn(TEXT) IS 'Validate URN format';

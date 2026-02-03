@@ -4,6 +4,7 @@ Following Rule 2: Tests Before Code compliance
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 
@@ -20,7 +21,7 @@ TEST_DATABASE_URL = os.getenv(
 
 
 def pytest_configure(config):
-    """Configure pytest with custom markers"""
+    """Configure pytest with custom markers."""
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )
@@ -41,7 +42,7 @@ def event_loop():
 
 @pytest.fixture(scope="session")
 async def verify_test_database():
-    """Verify test database is available before running tests"""
+    """Verify test database is available before running tests."""
     try:
         import asyncpg
 
@@ -56,7 +57,7 @@ async def verify_test_database():
 
 @pytest.fixture(autouse=True)
 async def cleanup_test_databases():
-    """Cleanup any leftover test databases after tests"""
+    """Cleanup any leftover test databases after tests."""
     yield  # Run the test
 
     # Cleanup after test
@@ -73,19 +74,18 @@ async def cleanup_test_databases():
         """)
 
         for db in test_dbs:
-            try:
+            with contextlib.suppress(Exception):
+                # nosemgrep: asyncpg-sqli
                 await conn.execute(f"DROP DATABASE IF EXISTS {db['datname']}")
-            except Exception:
-                pass  # Database might be in use
 
         await conn.close()
-    except Exception:
-        pass  # Cleanup is best effort
+    except Exception:  # noqa: S110 - Cleanup is best effort
+        pass
 
 
 @pytest.fixture
 def mock_environment(monkeypatch):
-    """Mock environment variables for testing"""
+    """Mock environment variables for testing."""
     test_env = {
         "DATABASE_URL": TEST_DATABASE_URL,
         "AWS_REGION": "us-east-1",

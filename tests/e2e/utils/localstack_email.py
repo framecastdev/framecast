@@ -1,5 +1,4 @@
-"""
-LocalStack SES Email Client
+"""LocalStack SES Email Client.
 
 Provides functionality to retrieve and parse emails sent through LocalStack SES
 for comprehensive E2E testing of email workflows.
@@ -8,7 +7,7 @@ for comprehensive E2E testing of email workflows.
 import asyncio
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -16,7 +15,7 @@ import httpx
 class LocalStackEmail:
     """Represents an email retrieved from LocalStack SES."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         """Initialize email from LocalStack response data."""
         self.id = data.get("id", "")
         self.subject = data.get("subject", "")
@@ -27,7 +26,10 @@ class LocalStackEmail:
         self.raw_data = data
 
     def __repr__(self) -> str:
-        return f"LocalStackEmail(id='{self.id}', subject='{self.subject}', to={self.to})"
+        """Return string representation of the email."""
+        return (
+            f"LocalStackEmail(id='{self.id}', subject='{self.subject}', to={self.to})"
+        )
 
 
 class LocalStackEmailClient:
@@ -55,7 +57,7 @@ class LocalStackEmailClient:
         """Async context manager exit."""
         await self.close()
 
-    async def get_emails(self, email_address: str) -> List[LocalStackEmail]:
+    async def get_emails(self, email_address: str) -> list[LocalStackEmail]:
         """
         Get all emails for a specific email address.
 
@@ -82,22 +84,29 @@ class LocalStackEmailClient:
                 emails = data
             elif isinstance(data, dict) and "emails" in data:
                 emails = data["emails"]
+            elif isinstance(data, dict) and data:
+                # Single email object - check if it has required fields
+                if data.get("id") or data.get("subject") or data.get("body"):
+                    emails = [data]
+                else:
+                    emails = []
             else:
-                # If response format is unexpected, try to adapt
-                emails = [data] if data else []
+                emails = []
 
-            return [LocalStackEmail(email) for email in emails]
+            return [LocalStackEmail(email) for email in emails if email]
 
         except httpx.RequestError as e:
-            raise httpx.RequestError(f"Failed to retrieve emails from LocalStack: {e}")
+            raise httpx.RequestError(
+                f"Failed to retrieve emails from LocalStack: {e}"
+            ) from e
         except httpx.HTTPStatusError as e:
             raise httpx.HTTPStatusError(
                 f"LocalStack SES API error: {e.response.status_code}",
                 request=e.request,
-                response=e.response
-            )
+                response=e.response,
+            ) from e
 
-    async def get_latest_email(self, email_address: str) -> Optional[LocalStackEmail]:
+    async def get_latest_email(self, email_address: str) -> LocalStackEmail | None:
         """
         Get the most recent email for an email address.
 
@@ -116,7 +125,7 @@ class LocalStackEmailClient:
             if email.timestamp:
                 try:
                     # Try to parse timestamp for proper sorting
-                    dt = datetime.fromisoformat(email.timestamp.replace('Z', '+00:00'))
+                    dt = datetime.fromisoformat(email.timestamp.replace("Z", "+00:00"))
                     return dt.isoformat()
                 except ValueError:
                     # Fall back to string comparison
@@ -126,7 +135,7 @@ class LocalStackEmailClient:
         sorted_emails = sorted(emails, key=sort_key, reverse=True)
         return sorted_emails[0]
 
-    async def get_latest_invitation(self, email_address: str) -> Optional[LocalStackEmail]:
+    async def get_latest_invitation(self, email_address: str) -> LocalStackEmail | None:
         """
         Get the most recent invitation email for an email address.
 
@@ -140,8 +149,10 @@ class LocalStackEmailClient:
 
         # Filter for invitation emails
         invitation_emails = [
-            email for email in emails
-            if "invitation" in email.subject.lower() or "invite" in email.subject.lower()
+            email
+            for email in emails
+            if "invitation" in email.subject.lower()
+            or "invite" in email.subject.lower()
         ]
 
         if not invitation_emails:
@@ -151,7 +162,7 @@ class LocalStackEmailClient:
         def sort_key(email: LocalStackEmail) -> str:
             if email.timestamp:
                 try:
-                    dt = datetime.fromisoformat(email.timestamp.replace('Z', '+00:00'))
+                    dt = datetime.fromisoformat(email.timestamp.replace("Z", "+00:00"))
                     return dt.isoformat()
                 except ValueError:
                     return email.timestamp
@@ -197,7 +208,7 @@ class LocalStackEmailClient:
 
         return deleted_count
 
-    def extract_invitation_url(self, email_body: str) -> Optional[str]:
+    def extract_invitation_url(self, email_body: str) -> str | None:
         """
         Extract invitation acceptance URL from email content.
 
@@ -208,37 +219,29 @@ class LocalStackEmailClient:
             Invitation URL if found, None otherwise
         """
         patterns = [
-            # Full URL patterns
-            r'https?://[^/]+/teams/[^/]+/invitations/([^/\s\'"]+)/accept',
-            r'https?://framecast\.app/teams/[^/]+/invitations/([^/\s\'"]+)/accept',
-
-            # Relative URL patterns
-            r'/teams/[^/]+/invitations/([^/\s\'"]+)/accept',
-
-            # General invitation URL patterns
-            r'invitation[_\-]?url["\s]*[:=]["\s]*([^"\s]+)',
-            r'accept[_\-]?invitation["\s]*[:=]["\s]*([^"\s]+)',
-
+            # Full URL patterns - capture entire URL
+            r'(https?://[^/\s\'"]+/teams/[^/\s\'"]+/invitations/[^/\s\'"]+/accept)',
+            # Relative URL patterns - capture entire path
+            r'(/teams/[^/\s\'"]+/invitations/[^/\s\'"]+/accept)',
             # Button/link href patterns
-            r'href=["\'](.*?invitations.*?accept.*?)["\'"]',
+            r'href=["\'](.*?invitations.*?accept.*?)["\']',
         ]
 
         for pattern in patterns:
             match = re.search(pattern, email_body, re.IGNORECASE)
             if match:
-                url = match.group(1) if len(match.groups()) > 0 else match.group(0)
+                url = match.group(1)
                 # Clean up the URL if needed
-                if url.startswith('/'):
+                if url.startswith("/"):
                     return f"https://framecast.app{url}"
-                elif url.startswith('http'):
+                if url.startswith("http"):
                     return url
-                else:
-                    # Assume it's a relative path
-                    return f"https://framecast.app/{url.lstrip('/')}"
+                # Assume it's a relative path
+                return f"https://framecast.app/{url.lstrip('/')}"
 
         return None
 
-    def extract_invitation_id(self, email_body: str) -> Optional[str]:
+    def extract_invitation_id(self, email_body: str) -> str | None:
         """
         Extract invitation ID (UUID) from email content.
 
@@ -249,18 +252,18 @@ class LocalStackEmailClient:
             Invitation UUID if found, None otherwise
         """
         # UUID v4 pattern
-        uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+        uuid_pattern = (
+            r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+        )
 
         patterns = [
             # In invitation URLs
-            rf'/invitations/({uuid_pattern})/accept',
+            rf"/invitations/({uuid_pattern})/accept",
             rf'invitation[_\-]?id["\s]*[:=]["\s]*["\']?({uuid_pattern})["\']?',
-            rf'invitations/({uuid_pattern})',
-
+            rf"invitations/({uuid_pattern})",
             # In query parameters
-            rf'invitation_id=({uuid_pattern})',
-            rf'id=({uuid_pattern})',
-
+            rf"invitation_id=({uuid_pattern})",
+            rf"id=({uuid_pattern})",
             # In metadata
             rf'"invitation_id"["\s]*:["\s]*"({uuid_pattern})"',
             rf'invitation_id["\s]*=["\s]*["\']({uuid_pattern})["\']',
@@ -273,7 +276,7 @@ class LocalStackEmailClient:
 
         return None
 
-    def extract_team_id(self, email_body: str) -> Optional[str]:
+    def extract_team_id(self, email_body: str) -> str | None:
         """
         Extract team ID (UUID) from email content.
 
@@ -284,17 +287,17 @@ class LocalStackEmailClient:
             Team UUID if found, None otherwise
         """
         # UUID v4 pattern
-        uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+        uuid_pattern = (
+            r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+        )
 
         patterns = [
             # In team URLs
-            rf'/teams/({uuid_pattern})/',
-            rf'/teams/({uuid_pattern})/invitations',
+            rf"/teams/({uuid_pattern})/",
+            rf"/teams/({uuid_pattern})/invitations",
             rf'team[_\-]?id["\s]*[:=]["\s]*["\']?({uuid_pattern})["\']?',
-
             # In query parameters
-            rf'team_id=({uuid_pattern})',
-
+            rf"team_id=({uuid_pattern})",
             # In metadata
             rf'"team_id"["\s]*:["\s]*"({uuid_pattern})"',
             rf'team_id["\s]*=["\s]*["\']({uuid_pattern})["\']',
@@ -308,11 +311,8 @@ class LocalStackEmailClient:
         return None
 
     async def wait_for_email(
-        self,
-        email_address: str,
-        timeout: float = 10.0,
-        poll_interval: float = 0.5
-    ) -> Optional[LocalStackEmail]:
+        self, email_address: str, timeout: float = 10.0, poll_interval: float = 0.5
+    ) -> LocalStackEmail | None:
         """
         Wait for an email to arrive at the specified address.
 
@@ -336,11 +336,8 @@ class LocalStackEmailClient:
         return None
 
     async def wait_for_invitation_email(
-        self,
-        email_address: str,
-        timeout: float = 10.0,
-        poll_interval: float = 0.5
-    ) -> Optional[LocalStackEmail]:
+        self, email_address: str, timeout: float = 10.0, poll_interval: float = 0.5
+    ) -> LocalStackEmail | None:
         """
         Wait for an invitation email to arrive at the specified address.
 

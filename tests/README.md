@@ -2,7 +2,8 @@
 
 **Following Rule 2: Tests Before Code**
 
-This comprehensive test suite validates all components with brainstormed test cases covering happy paths, edge cases, error conditions, and invariants.
+This comprehensive test suite validates all components with brainstormed test cases
+covering happy paths, edge cases, error conditions, and invariants.
 
 ## Test Strategy Overview
 
@@ -115,7 +116,7 @@ Tests use isolated test databases and mock services:
 
 ```bash
 # Test database (isolated from development data)
-TEST_DATABASE_URL=postgresql://postgres:password@localhost:5432/framecast_test
+TEST_DATABASE_URL=postgresql://postgres:password@localhost:5432/framecast_test  # pragma: allowlist secret
 
 # Mock service endpoints
 LOCALSTACK_ENDPOINT=http://localhost:4566
@@ -219,7 +220,7 @@ Tests integrate with CI/CD pipeline:
 docker compose -f docker-compose.local.yml up -d postgres
 
 # Check connection
-psql postgresql://postgres:dev-password-framecast@localhost:5432/postgres
+psql postgresql://postgres:dev-password-framecast@localhost:5432/postgres  # pragma: allowlist secret
 ```
 
 **Missing Dependencies:**
@@ -252,4 +253,5 @@ pytest tests/ --profile-mem
 pytest tests/ -n 1
 ```
 
-This test suite ensures comprehensive validation while following Rule 2: Tests Before Code, providing confidence in all system components.
+This test suite ensures comprehensive validation while following Rule 2:
+Tests Before Code, providing confidence in all system components.

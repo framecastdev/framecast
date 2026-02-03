@@ -41,7 +41,7 @@ class MigrationTestFramework:
         test_db_url = f"{base_url}/postgres"
 
         conn = await asyncpg.connect(test_db_url)
-        await conn.execute(f"CREATE DATABASE {self.test_db_name}")
+        await conn.execute(f"CREATE DATABASE {self.test_db_name}")  # nosemgrep
         await conn.close()
 
         # Connect to the test database
@@ -95,12 +95,11 @@ class MigrationTestFramework:
             return []
 
     async def get_table_count(self) -> int:
-        """Get number of tables in database"""
-        count = await self.conn.fetchval("""
+        """Get number of tables in database."""
+        return await self.conn.fetchval("""
             SELECT COUNT(*) FROM information_schema.tables
             WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
         """)
-        return count
 
     async def check_table_exists(self, table_name: str) -> bool:
         """Check if table exists"""

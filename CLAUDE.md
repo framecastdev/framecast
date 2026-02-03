@@ -274,7 +274,9 @@ framecast/
 
 **Location:** Ubuntu host via SSH: `~/workspace/splice-experimental-1`, `~/workspace/splice-experimental-2`
 
-Consult these for proven patterns when facing implementation challenges (Rust + Lambda, database schemas, testing patterns, ComfyUI/RunPod integration, Inngest job orchestration).
+Consult these for proven patterns when facing implementation challenges
+(Rust + Lambda, database schemas, testing patterns,
+ComfyUI/RunPod integration, Inngest job orchestration).
 
 ---
 

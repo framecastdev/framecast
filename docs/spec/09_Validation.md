@@ -86,7 +86,8 @@ All scene IDs in montage elements must exist in the scenes array.
   )
 ```
 
-Transitions map keys (except 'default') must be in the format "scene1->scene2" where both scene IDs exist in the scenes array.
+Transitions map keys (except 'default') must be in the format "scene1->scene2"
+where both scene IDs exist in the scenes array.
 
 #### Symbol References in Prompts
 
@@ -198,7 +199,9 @@ When validating a spec, the API returns a comprehensive validation response with
 
 ## 10.3 Webhook Event Types (NEW in v0.4.0)
 
-Webhooks allow your application to receive real-time notifications about job state changes. The Framecast API sends webhook events to your registered endpoints for job lifecycle events.
+Webhooks allow your application to receive real-time notifications about job state
+changes. The Framecast API sends webhook events to your registered endpoints
+for job lifecycle events.
 
 ### Valid Webhook Events
 
