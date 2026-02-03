@@ -16,7 +16,8 @@ use framecast_common::{Error, Result, Urn};
 use crate::state::{
     InvitationEvent, InvitationGuardContext, InvitationState as StateMachineInvitationState,
     InvitationStateMachine, JobEvent, JobState, JobStateMachine, ProjectEvent, ProjectState,
-    ProjectStateMachine, StateError,
+    ProjectStateMachine, StateError, WebhookDeliveryEvent, WebhookDeliveryGuardContext,
+    WebhookDeliveryState, WebhookDeliveryStateMachine,
 };
 
 /// User tier levels
@@ -1487,15 +1488,54 @@ impl Webhook {
 }
 
 /// Webhook delivery status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, Default)]
 #[sqlx(type_name = "webhook_delivery_status", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum WebhookDeliveryStatus {
     #[default]
     Pending,
-    Retrying,
+    Attempting,
     Delivered,
+    Retrying,
     Failed,
+}
+
+impl WebhookDeliveryStatus {
+    /// Check if this is a terminal state
+    pub fn is_terminal(&self) -> bool {
+        self.to_state().is_terminal()
+    }
+
+    /// Convert to state machine state
+    pub fn to_state(&self) -> WebhookDeliveryState {
+        match self {
+            WebhookDeliveryStatus::Pending => WebhookDeliveryState::Pending,
+            WebhookDeliveryStatus::Attempting => WebhookDeliveryState::Attempting,
+            WebhookDeliveryStatus::Delivered => WebhookDeliveryState::Delivered,
+            WebhookDeliveryStatus::Retrying => WebhookDeliveryState::Retrying,
+            WebhookDeliveryStatus::Failed => WebhookDeliveryState::Failed,
+        }
+    }
+
+    /// Create from state machine state
+    pub fn from_state(state: WebhookDeliveryState) -> Self {
+        match state {
+            WebhookDeliveryState::Pending => WebhookDeliveryStatus::Pending,
+            WebhookDeliveryState::Attempting => WebhookDeliveryStatus::Attempting,
+            WebhookDeliveryState::Delivered => WebhookDeliveryStatus::Delivered,
+            WebhookDeliveryState::Retrying => WebhookDeliveryStatus::Retrying,
+            WebhookDeliveryState::Failed => WebhookDeliveryStatus::Failed,
+        }
+    }
+
+    /// Get valid next states from current state
+    pub fn valid_transitions(&self) -> Vec<WebhookDeliveryStatus> {
+        self.to_state()
+            .valid_transitions()
+            .iter()
+            .map(|s| WebhookDeliveryStatus::from_state(*s))
+            .collect()
+    }
 }
 
 /// Webhook delivery entity
@@ -1558,6 +1598,97 @@ impl WebhookDelivery {
         }
 
         Ok(())
+    }
+
+    /// Start an attempt to deliver the webhook
+    pub fn start_attempt(&mut self) -> Result<()> {
+        let new_state = self.apply_transition(WebhookDeliveryEvent::Attempt)?;
+        self.status = WebhookDeliveryStatus::from_state(new_state);
+        self.attempts += 1;
+        Ok(())
+    }
+
+    /// Mark delivery as successful (2xx response)
+    pub fn mark_delivered(
+        &mut self,
+        response_status: i32,
+        response_body: Option<String>,
+    ) -> Result<()> {
+        let new_state = self.apply_transition(WebhookDeliveryEvent::Success)?;
+        self.status = WebhookDeliveryStatus::from_state(new_state);
+        self.response_status = Some(response_status);
+        self.response_body = response_body;
+        self.delivered_at = Some(Utc::now());
+        self.next_retry_at = None;
+        Ok(())
+    }
+
+    /// Mark for retry (5xx or timeout)
+    pub fn mark_for_retry(
+        &mut self,
+        response_status: Option<i32>,
+        response_body: Option<String>,
+        next_retry_at: DateTime<Utc>,
+    ) -> Result<()> {
+        let new_state = self.apply_transition(WebhookDeliveryEvent::Retry)?;
+        self.status = WebhookDeliveryStatus::from_state(new_state);
+        self.response_status = response_status;
+        self.response_body = response_body;
+        self.next_retry_at = Some(next_retry_at);
+        Ok(())
+    }
+
+    /// Mark as permanently failed (4xx response)
+    pub fn mark_failed_permanent(
+        &mut self,
+        response_status: i32,
+        response_body: Option<String>,
+    ) -> Result<()> {
+        let new_state = self.apply_transition(WebhookDeliveryEvent::PermanentFailure)?;
+        self.status = WebhookDeliveryStatus::from_state(new_state);
+        self.response_status = Some(response_status);
+        self.response_body = response_body;
+        self.next_retry_at = None;
+        Ok(())
+    }
+
+    /// Mark as failed due to max attempts exceeded
+    pub fn mark_failed_max_attempts(&mut self) -> Result<()> {
+        let new_state = self.apply_transition(WebhookDeliveryEvent::MaxAttemptsExceeded)?;
+        self.status = WebhookDeliveryStatus::from_state(new_state);
+        self.next_retry_at = None;
+        Ok(())
+    }
+
+    /// Apply a state transition using the state machine
+    fn apply_transition(&self, event: WebhookDeliveryEvent) -> Result<WebhookDeliveryState> {
+        let current_state = self.status.to_state();
+        let context = WebhookDeliveryGuardContext {
+            attempt_count: self.attempts as u32,
+            max_attempts: self.max_attempts as u32,
+        };
+        WebhookDeliveryStateMachine::transition(current_state, event, Some(&context)).map_err(|e| {
+            match e {
+                StateError::InvalidTransition { from, event, .. } => Error::Validation(format!(
+                    "Invalid webhook delivery transition: cannot apply '{}' event from '{}' state",
+                    event, from
+                )),
+                StateError::TerminalState(state) => Error::Validation(format!(
+                    "Webhook delivery is in terminal state '{}' and cannot transition",
+                    state
+                )),
+                StateError::GuardFailed(msg) => Error::Validation(msg),
+            }
+        })
+    }
+
+    /// Check if a transition is valid without applying it
+    pub fn can_transition(&self, event: &WebhookDeliveryEvent) -> bool {
+        let context = WebhookDeliveryGuardContext {
+            attempt_count: self.attempts as u32,
+            max_attempts: self.max_attempts as u32,
+        };
+        WebhookDeliveryStateMachine::can_transition(self.status.to_state(), event, Some(&context))
     }
 }
 
@@ -3378,5 +3509,238 @@ mod tests {
         assert!(InvitationState::Accepted.valid_transitions().is_empty());
         assert!(InvitationState::Revoked.valid_transitions().is_empty());
         assert!(InvitationState::Expired.valid_transitions().is_empty());
+    }
+
+    // ========================================================================
+    // WebhookDelivery State Machine Integration Tests
+    // ========================================================================
+
+    #[test]
+    fn test_webhook_delivery_start_attempt() {
+        let mut delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Pending);
+        assert_eq!(delivery.attempts, 0);
+        delivery.start_attempt().unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Attempting);
+        assert_eq!(delivery.attempts, 1);
+    }
+
+    #[test]
+    fn test_webhook_delivery_mark_delivered() {
+        let mut delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+
+        delivery.start_attempt().unwrap();
+        delivery
+            .mark_delivered(200, Some("OK".to_string()))
+            .unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Delivered);
+        assert_eq!(delivery.response_status, Some(200));
+        assert!(delivery.delivered_at.is_some());
+    }
+
+    #[test]
+    fn test_webhook_delivery_mark_for_retry() {
+        let mut delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+
+        delivery.start_attempt().unwrap();
+        let next_retry = Utc::now() + chrono::Duration::minutes(5);
+        delivery
+            .mark_for_retry(
+                Some(503),
+                Some("Service Unavailable".to_string()),
+                next_retry,
+            )
+            .unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Retrying);
+        assert_eq!(delivery.response_status, Some(503));
+        assert!(delivery.next_retry_at.is_some());
+    }
+
+    #[test]
+    fn test_webhook_delivery_retry_then_success() {
+        let mut delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+
+        // First attempt fails
+        delivery.start_attempt().unwrap();
+        let next_retry = Utc::now() + chrono::Duration::minutes(5);
+        delivery
+            .mark_for_retry(Some(500), None, next_retry)
+            .unwrap();
+
+        // Second attempt succeeds
+        delivery.start_attempt().unwrap();
+        delivery.mark_delivered(200, None).unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Delivered);
+        assert_eq!(delivery.attempts, 2);
+    }
+
+    #[test]
+    fn test_webhook_delivery_mark_failed_permanent() {
+        let mut delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+
+        delivery.start_attempt().unwrap();
+        delivery
+            .mark_failed_permanent(404, Some("Not Found".to_string()))
+            .unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Failed);
+        assert_eq!(delivery.response_status, Some(404));
+    }
+
+    #[test]
+    fn test_webhook_delivery_mark_failed_max_attempts() {
+        let mut delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+
+        // Simulate reaching max attempts
+        let next_retry = Utc::now() + chrono::Duration::minutes(5);
+        for _ in 0..5 {
+            delivery.start_attempt().unwrap();
+            delivery
+                .mark_for_retry(Some(500), None, next_retry)
+                .unwrap();
+        }
+
+        // Max attempts exceeded
+        delivery.mark_failed_max_attempts().unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Failed);
+        assert_eq!(delivery.attempts, 5);
+    }
+
+    #[test]
+    fn test_webhook_delivery_cannot_retry_after_max_attempts() {
+        let mut delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+        delivery.max_attempts = 2; // Lower max for testing
+
+        let next_retry = Utc::now() + chrono::Duration::minutes(5);
+        for _ in 0..2 {
+            delivery.start_attempt().unwrap();
+            delivery
+                .mark_for_retry(Some(500), None, next_retry)
+                .unwrap();
+        }
+
+        // Should fail because max attempts reached
+        let result = delivery.start_attempt();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_webhook_delivery_cannot_transition_from_delivered() {
+        let mut delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+
+        delivery.start_attempt().unwrap();
+        delivery.mark_delivered(200, None).unwrap();
+
+        // Cannot retry after delivered
+        let result = delivery.start_attempt();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_webhook_delivery_cannot_transition_from_failed() {
+        let mut delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+
+        delivery.start_attempt().unwrap();
+        delivery.mark_failed_permanent(400, None).unwrap();
+
+        // Cannot retry after failed
+        let result = delivery.start_attempt();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_webhook_delivery_status_is_terminal() {
+        assert!(!WebhookDeliveryStatus::Pending.is_terminal());
+        assert!(!WebhookDeliveryStatus::Attempting.is_terminal());
+        assert!(!WebhookDeliveryStatus::Retrying.is_terminal());
+        assert!(WebhookDeliveryStatus::Delivered.is_terminal());
+        assert!(WebhookDeliveryStatus::Failed.is_terminal());
+    }
+
+    #[test]
+    fn test_webhook_delivery_status_valid_transitions() {
+        assert_eq!(
+            WebhookDeliveryStatus::Pending.valid_transitions(),
+            vec![WebhookDeliveryStatus::Attempting]
+        );
+        assert_eq!(
+            WebhookDeliveryStatus::Attempting.valid_transitions(),
+            vec![
+                WebhookDeliveryStatus::Delivered,
+                WebhookDeliveryStatus::Retrying,
+                WebhookDeliveryStatus::Failed
+            ]
+        );
+        assert_eq!(
+            WebhookDeliveryStatus::Retrying.valid_transitions(),
+            vec![
+                WebhookDeliveryStatus::Attempting,
+                WebhookDeliveryStatus::Failed
+            ]
+        );
+        assert!(WebhookDeliveryStatus::Delivered
+            .valid_transitions()
+            .is_empty());
+        assert!(WebhookDeliveryStatus::Failed.valid_transitions().is_empty());
+    }
+
+    #[test]
+    fn test_webhook_delivery_can_transition() {
+        let delivery = WebhookDelivery::new(
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            "job.completed".to_string(),
+            serde_json::json!({"job_id": "123"}),
+        );
+
+        use crate::state::WebhookDeliveryEvent;
+        assert!(delivery.can_transition(&WebhookDeliveryEvent::Attempt));
+        assert!(!delivery.can_transition(&WebhookDeliveryEvent::Success));
+        assert!(!delivery.can_transition(&WebhookDeliveryEvent::Retry));
     }
 }
