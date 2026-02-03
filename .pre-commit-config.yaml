@@ -65,13 +65,8 @@ repos:
   # PYTHON CODE QUALITY
   # ============================================================================
 
-  # Python code formatting with black
-  - repo: https://github.com/psf/black
-    rev: 26.1.0
-    hooks:
-      - id: black
-        language_version: python3
-        args: ['--line-length=88']
+  # Note: Using ruff-format instead of black (see below)
+  # black is disabled to avoid conflicts with ruff-format
 
   # Python import sorting with isort
   - repo: https://github.com/pycqa/isort
