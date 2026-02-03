@@ -63,11 +63,7 @@ jobs:
       - name: Run clippy
         env:
           SQLX_OFFLINE: "true"
-        run: |
-          # Exclude integration tests (they have queries not in .sqlx cache)
-          cargo clippy --workspace --all-targets \
-            --exclude framecast-integration-tests \
-            -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run migrations
         env:

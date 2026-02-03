@@ -112,22 +112,23 @@ impl TestApp {
         // Clone tier before move
         let user_tier = user.tier.clone();
 
-        // Insert into database
-        sqlx::query!(
+        // Insert into database (using runtime query to avoid sqlx offline mode issues in tests)
+        sqlx::query(
             r#"
             INSERT INTO users (id, email, name, tier, credits, ephemeral_storage_bytes, upgraded_at, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4::user_tier, $5, $6, $7, $8, $9)
             "#,
-            user.id,
-            user.email,
-            user.name,
-            user_tier as UserTier,
-            user.credits,
-            user.ephemeral_storage_bytes,
-            user.upgraded_at,
-            user.created_at,
-            user.updated_at
-        ).execute(&self.pool).await?;
+        )
+        .bind(user.id)
+        .bind(&user.email)
+        .bind(&user.name)
+        .bind(user_tier.to_string())
+        .bind(user.credits)
+        .bind(user.ephemeral_storage_bytes)
+        .bind(user.upgraded_at)
+        .bind(user.created_at)
+        .bind(user.updated_at)
+        .execute(&self.pool).await?;
 
         Ok(user)
     }
@@ -141,21 +142,22 @@ impl TestApp {
         let mut team = Team::new(name, Some(slug))?;
         team.id = team_id;
 
-        // Insert team into database
-        sqlx::query!(
+        // Insert team into database (using runtime query to avoid sqlx offline mode issues in tests)
+        sqlx::query(
             r#"
             INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
-            team.id,
-            team.name,
-            team.slug,
-            team.credits,
-            team.ephemeral_storage_bytes,
-            serde_json::to_value(&team.settings.0)?,
-            team.created_at,
-            team.updated_at
-        ).execute(&self.pool).await?;
+        )
+        .bind(team.id)
+        .bind(&team.name)
+        .bind(&team.slug)
+        .bind(team.credits)
+        .bind(team.ephemeral_storage_bytes)
+        .bind(serde_json::to_value(&team.settings.0)?)
+        .bind(team.created_at)
+        .bind(team.updated_at)
+        .execute(&self.pool).await?;
 
         // Create owner membership
         let membership = Membership {
@@ -166,20 +168,18 @@ impl TestApp {
             created_at: Utc::now(),
         };
 
-        // Clone role before move
-        let membership_role = membership.role.clone();
-
-        sqlx::query!(
+        // Using runtime query to avoid sqlx offline mode issues in tests
+        sqlx::query(
             r#"
             INSERT INTO memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            membership.id,
-            membership.team_id,
-            membership.user_id,
-            membership_role as MembershipRole,
-            membership.created_at
         )
+        .bind(membership.id)
+        .bind(membership.team_id)
+        .bind(membership.user_id)
+        .bind("owner") // Always owner for team creation
+        .bind(membership.created_at)
         .execute(&self.pool)
         .await?;
 
@@ -190,7 +190,8 @@ impl TestApp {
     pub async fn cleanup(&self) -> Result<()> {
         // Use TRUNCATE CASCADE to bypass foreign key constraints and triggers
         // This is test-only cleanup, so we can bypass the INV-T1 constraint
-        sqlx::query!("TRUNCATE TABLE invitations, memberships, teams, users CASCADE")
+        // Using runtime query to avoid sqlx offline mode issues in tests
+        sqlx::query("TRUNCATE TABLE invitations, memberships, teams, users CASCADE")
             .execute(&self.pool)
             .await?;
         Ok(())

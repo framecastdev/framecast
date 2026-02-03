@@ -21,6 +21,15 @@ use framecast_domain::entities::{UserTier, MembershipRole, InvitationRole, Invit
 
 use crate::common::{TestApp, UserFixture, assertions, email_mock::{MockEmailService, test_utils::InvitationTestScenario}};
 
+/// Helper to convert InvitationRole to string for SQL binding
+fn invitation_role_to_str(role: &InvitationRole) -> &'static str {
+    match role {
+        InvitationRole::Admin => "admin",
+        InvitationRole::Member => "member",
+        InvitationRole::Viewer => "viewer",
+    }
+}
+
 /// Create test router with all routes
 async fn create_test_router(app: &TestApp) -> Router {
     routes::create_routes().with_state(app.state.clone())
@@ -155,18 +164,19 @@ mod test_invite_member {
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let existing_member = UserFixture::creator(&app).await.unwrap();
 
-        // Add existing_member to team
-        sqlx::query!(
+        // Add existing_member to team (using runtime query to avoid sqlx offline mode issues)
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            existing_member.user.id,
-            MembershipRole::Member as MembershipRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(existing_member.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         let router = create_test_router(&app).await;
 
@@ -301,18 +311,19 @@ mod test_invite_member {
         // Create member user
         let member_fixture = UserFixture::creator(&app).await.unwrap();
 
-        // Add as member to team
-        sqlx::query!(
+        // Add as member to team (using runtime query to avoid sqlx offline mode issues)
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            member_fixture.user.id,
-            MembershipRole::Member as MembershipRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         let router = create_test_router(&app).await;
 
@@ -344,18 +355,19 @@ mod test_invite_member {
         // Create admin user
         let admin_fixture = UserFixture::creator(&app).await.unwrap();
 
-        // Add as admin to team
-        sqlx::query!(
+        // Add as admin to team (using runtime query to avoid sqlx offline mode issues)
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            admin_fixture.user.id,
-            MembershipRole::Admin as MembershipRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(admin_fixture.user.id)
+        .bind("admin")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         let router = create_test_router(&app).await;
 
@@ -433,14 +445,15 @@ mod test_accept_invitation {
         assert_eq!(membership["user_id"], invitee_fixture.user.id.to_string());
         assert_eq!(membership["role"], "member");
 
-        // Verify membership exists in database
-        let db_membership = sqlx::query!(
-            "SELECT * FROM team_memberships WHERE team_id = $1 AND user_id = $2",
-            scenario.team.id,
-            invitee_fixture.user.id
-        ).fetch_one(&scenario.app.pool).await.unwrap();
+        // Verify membership exists in database (using runtime query to avoid sqlx offline mode issues)
+        let db_membership: (String,) = sqlx::query_as(
+            "SELECT role FROM memberships WHERE team_id = $1 AND user_id = $2",
+        )
+        .bind(scenario.team.id)
+        .bind(invitee_fixture.user.id)
+        .fetch_one(&scenario.app.pool).await.unwrap();
 
-        assert_eq!(db_membership.role, MembershipRole::Member as MembershipRole);
+        assert_eq!(db_membership.0, "member");
 
         scenario.cleanup().await.unwrap();
     }
@@ -585,14 +598,15 @@ mod test_decline_invitation {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-        // Verify no membership was created
-        let membership_check = sqlx::query!(
-            "SELECT COUNT(*) as count FROM team_memberships WHERE team_id = $1 AND user_id = $2",
-            scenario.team.id,
-            invitee_fixture.user.id
-        ).fetch_one(&scenario.app.pool).await.unwrap();
+        // Verify no membership was created (using runtime query to avoid sqlx offline mode issues)
+        let membership_check: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM memberships WHERE team_id = $1 AND user_id = $2",
+        )
+        .bind(scenario.team.id)
+        .bind(invitee_fixture.user.id)
+        .fetch_one(&scenario.app.pool).await.unwrap();
 
-        assert_eq!(membership_check.count.unwrap(), 0);
+        assert_eq!(membership_check.0, 0);
 
         scenario.cleanup().await.unwrap();
     }
@@ -631,19 +645,20 @@ mod test_remove_member {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add a member to remove
+        // Add a member to remove (using runtime query to avoid sqlx offline mode issues)
         let member_fixture = UserFixture::creator(&app).await.unwrap();
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            member_fixture.user.id,
-            MembershipRole::Member as MembershipRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         let router = create_test_router(&app).await;
 
@@ -658,14 +673,15 @@ mod test_remove_member {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-        // Verify member was removed
-        let membership_check = sqlx::query!(
-            "SELECT COUNT(*) as count FROM team_memberships WHERE team_id = $1 AND user_id = $2",
-            team.id,
-            member_fixture.user.id
-        ).fetch_one(&app.pool).await.unwrap();
+        // Verify member was removed (using runtime query to avoid sqlx offline mode issues)
+        let membership_check: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM memberships WHERE team_id = $1 AND user_id = $2",
+        )
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .fetch_one(&app.pool).await.unwrap();
 
-        assert_eq!(membership_check.count.unwrap(), 0);
+        assert_eq!(membership_check.0, 0);
 
         app.cleanup().await.unwrap();
     }
@@ -701,33 +717,35 @@ mod test_remove_member {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add member
+        // Add member (using runtime query to avoid sqlx offline mode issues)
         let member_fixture = UserFixture::creator(&app).await.unwrap();
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            member_fixture.user.id,
-            MembershipRole::Member as MembershipRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         // Add another member
         let other_member_fixture = UserFixture::creator(&app).await.unwrap();
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            other_member_fixture.user.id,
-            MembershipRole::Member as MembershipRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(other_member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         let router = create_test_router(&app).await;
 
@@ -755,19 +773,20 @@ mod test_update_member_role {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add member to promote
+        // Add member to promote (using runtime query to avoid sqlx offline mode issues)
         let member_fixture = UserFixture::creator(&app).await.unwrap();
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            member_fixture.user.id,
-            MembershipRole::Member as MembershipRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         let router = create_test_router(&app).await;
 
@@ -792,14 +811,15 @@ mod test_update_member_role {
 
         assert_eq!(membership["role"], "admin");
 
-        // Verify in database
-        let db_membership = sqlx::query!(
-            "SELECT role FROM team_memberships WHERE team_id = $1 AND user_id = $2",
-            team.id,
-            member_fixture.user.id
-        ).fetch_one(&app.pool).await.unwrap();
+        // Verify in database (using runtime query to avoid sqlx offline mode issues)
+        let db_membership: (String,) = sqlx::query_as(
+            "SELECT role FROM memberships WHERE team_id = $1 AND user_id = $2",
+        )
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .fetch_one(&app.pool).await.unwrap();
 
-        assert_eq!(db_membership.role, MembershipRole::Admin as MembershipRole);
+        assert_eq!(db_membership.0, "admin");
 
         app.cleanup().await.unwrap();
     }
@@ -809,33 +829,35 @@ mod test_update_member_role {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add admin
+        // Add admin (using runtime query to avoid sqlx offline mode issues)
         let admin_fixture = UserFixture::creator(&app).await.unwrap();
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            admin_fixture.user.id,
-            MembershipRole::Admin as MembershipRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(admin_fixture.user.id)
+        .bind("admin")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         // Add member
         let member_fixture = UserFixture::creator(&app).await.unwrap();
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            member_fixture.user.id,
-            MembershipRole::Member as MembershipRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         let router = create_test_router(&app).await;
 
@@ -955,14 +977,15 @@ mod test_invitation_lifecycle_with_email {
         assert_eq!(membership["role"], "admin");
         assert_eq!(membership["user_id"], invitee_fixture.user.id.to_string());
 
-        // Step 5: Verify membership exists
-        let membership_check = sqlx::query!(
-            "SELECT role FROM team_memberships WHERE team_id = $1 AND user_id = $2",
-            scenario.team.id,
-            invitee_fixture.user.id
-        ).fetch_one(&scenario.app.pool).await.unwrap();
+        // Step 5: Verify membership exists (using runtime query to avoid sqlx offline mode issues)
+        let membership_check: (String,) = sqlx::query_as(
+            "SELECT role FROM memberships WHERE team_id = $1 AND user_id = $2",
+        )
+        .bind(scenario.team.id)
+        .bind(invitee_fixture.user.id)
+        .fetch_one(&scenario.app.pool).await.unwrap();
 
-        assert_eq!(membership_check.role, MembershipRole::Admin as MembershipRole);
+        assert_eq!(membership_check.0, "admin");
 
         scenario.cleanup().await.unwrap();
     }
@@ -986,20 +1009,22 @@ mod test_invitation_lifecycle_with_email {
             revoked_at: None,
         };
 
-        sqlx::query!(
+        // Using runtime query to avoid sqlx offline mode issues
+        sqlx::query(
             r#"
             INSERT INTO invitations (id, team_id, email, role, invited_by, created_at, expires_at, token)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4::invitation_role, $5, $6, $7, $8)
             "#,
-            invitation.id,
-            invitation.team_id,
-            invitation.email,
-            invitation.role as InvitationRole,
-            invitation.invited_by,
-            invitation.created_at,
-            invitation.expires_at,
-            invitation.token
-        ).execute(&scenario.app.pool).await.unwrap();
+        )
+        .bind(invitation.id)
+        .bind(invitation.team_id)
+        .bind(&invitation.email)
+        .bind(invitation_role_to_str(&invitation.role))
+        .bind(invitation.invited_by)
+        .bind(invitation.created_at)
+        .bind(invitation.expires_at)
+        .bind(&invitation.token)
+        .execute(&scenario.app.pool).await.unwrap();
 
         let invitee_fixture = scenario.create_invitee_user().await.unwrap();
 

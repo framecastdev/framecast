@@ -4,7 +4,7 @@
 //! according to the permission matrix in docs/spec/08_Permissions.md
 
 use framecast_api::middleware::{AuthUser, ApiKeyUser, AuthError};
-use framecast_domain::entities::{UserTier, TeamRole};
+use framecast_domain::entities::{UserTier, MembershipRole};
 use axum::{
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, HeaderValue, request::Parts, StatusCode},
@@ -343,18 +343,19 @@ mod test_permission_matrix {
         let member_user = app.create_test_user(UserTier::Creator).await.unwrap();
         let member_jwt = create_test_jwt(&member_user, &app.config.jwt_secret).unwrap();
 
-        // Add member to team with Member role
-        sqlx::query!(
+        // Add member to team with Member role (using runtime query to avoid sqlx offline mode issues)
+        sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            member_user.id,
-            TeamRole::Member as TeamRole,
-            chrono::Utc::now()
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool).await.unwrap();
 
         // Test owner permissions
         let mut owner_parts = Parts::default();
@@ -368,7 +369,7 @@ mod test_permission_matrix {
 
         assert!(!owner_memberships.is_empty());
         let owner_membership = owner_memberships.iter().find(|m| m.team_id == team.id).unwrap();
-        assert_eq!(owner_membership.role, TeamRole::Owner);
+        assert_eq!(owner_membership.role, MembershipRole::Owner);
 
         // Test member permissions
         let mut member_parts = Parts::default();
@@ -382,7 +383,7 @@ mod test_permission_matrix {
 
         assert!(!member_memberships.is_empty());
         let member_membership = member_memberships.iter().find(|m| m.team_id == team.id).unwrap();
-        assert_eq!(member_membership.role, TeamRole::Member);
+        assert_eq!(member_membership.role, MembershipRole::Member);
 
         app.cleanup().await.unwrap();
     }

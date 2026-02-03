@@ -10,6 +10,16 @@ use uuid::Uuid;
 
 use crate::common::{TestApp, assertions};
 
+/// Helper to convert MembershipRole to string for SQL binding
+fn role_to_str(role: &MembershipRole) -> &'static str {
+    match role {
+        MembershipRole::Owner => "owner",
+        MembershipRole::Admin => "admin",
+        MembershipRole::Member => "member",
+        MembershipRole::Viewer => "viewer",
+    }
+}
+
 mod test_user_invariants {
     use super::*;
 
@@ -59,16 +69,16 @@ mod test_user_invariants {
         // Create starter user
         let starter_user = app.create_test_user(UserTier::Starter).await.unwrap();
 
-        // Verify no memberships exist
-        let memberships = sqlx::query!(
-            "SELECT COUNT(*) as count FROM team_memberships WHERE user_id = $1",
-            starter_user.id
+        // Verify no memberships exist (using runtime query to avoid sqlx offline mode issues in tests)
+        let memberships: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM memberships WHERE user_id = $1",
         )
+        .bind(starter_user.id)
         .fetch_one(&app.pool)
         .await
         .unwrap();
 
-        assert_eq!(memberships.count.unwrap(), 0);
+        assert_eq!(memberships.0, 0);
 
         // Attempting to create a team membership for starter user should be prevented
         // This is enforced at the application level, not database level
@@ -200,18 +210,18 @@ mod test_team_invariants {
         // Verify owner membership exists
         assert_eq!(membership.team_id, team.id);
         assert_eq!(membership.user_id, creator_user.id);
-        assert_eq!(membership.role, TeamRole::Owner);
+        assert_eq!(membership.role, MembershipRole::Owner);
 
-        // Verify owner count in database
-        let owner_count = sqlx::query!(
-            "SELECT COUNT(*) as count FROM team_memberships WHERE team_id = $1 AND role = 'owner'",
-            team.id
+        // Verify owner count in database (using runtime query to avoid sqlx offline mode issues)
+        let owner_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM memberships WHERE team_id = $1 AND role = 'owner'",
         )
+        .bind(team.id)
         .fetch_one(&app.pool)
         .await
         .unwrap();
 
-        assert!(owner_count.count.unwrap() >= 1);
+        assert!(owner_count.0 >= 1);
 
         app.cleanup().await.unwrap();
     }
@@ -227,38 +237,40 @@ mod test_team_invariants {
         // Both teams can be created with same slug in memory,
         // but database constraint should prevent duplicate insertion
 
-        // Insert first team
-        sqlx::query!(
+        // Insert first team (using runtime query to avoid sqlx offline mode issues)
+        sqlx::query(
             r#"
             INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
-            team1.id,
-            team1.name,
-            team1.slug,
-            team1.credits,
-            team1.ephemeral_storage_bytes,
-            team1.settings,
-            team1.created_at,
-            team1.updated_at
-        ).execute(&app.pool).await.unwrap();
+        )
+        .bind(team1.id)
+        .bind(&team1.name)
+        .bind(&team1.slug)
+        .bind(team1.credits)
+        .bind(team1.ephemeral_storage_bytes)
+        .bind(&team1.settings)
+        .bind(team1.created_at)
+        .bind(team1.updated_at)
+        .execute(&app.pool).await.unwrap();
 
         // Attempt to insert second team with same slug should fail
         let team2 = team2_result.unwrap();
-        let insert_result = sqlx::query!(
+        let insert_result = sqlx::query(
             r#"
             INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
-            team2.id,
-            team2.name,
-            team2.slug,
-            team2.credits,
-            team2.ephemeral_storage_bytes,
-            team2.settings,
-            team2.created_at,
-            team2.updated_at
-        ).execute(&app.pool).await;
+        )
+        .bind(team2.id)
+        .bind(&team2.name)
+        .bind(&team2.slug)
+        .bind(team2.credits)
+        .bind(team2.ephemeral_storage_bytes)
+        .bind(&team2.settings)
+        .bind(team2.created_at)
+        .bind(team2.updated_at)
+        .execute(&app.pool).await;
 
         assert!(insert_result.is_err(), "Duplicate slug should be rejected by database");
 
@@ -315,46 +327,48 @@ mod test_team_invariants {
 
             let team = Team::new(team_name, Some(team_slug)).unwrap();
 
-            // Insert team
-            sqlx::query!(
+            // Insert team (using runtime query to avoid sqlx offline mode issues)
+            sqlx::query(
                 r#"
                 INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 "#,
-                team.id,
-                team.name,
-                team.slug,
-                team.credits,
-                team.ephemeral_storage_bytes,
-                team.settings,
-                team.created_at,
-                team.updated_at
-            ).execute(&app.pool).await.unwrap();
+            )
+            .bind(team.id)
+            .bind(&team.name)
+            .bind(&team.slug)
+            .bind(team.credits)
+            .bind(team.ephemeral_storage_bytes)
+            .bind(&team.settings)
+            .bind(team.created_at)
+            .bind(team.updated_at)
+            .execute(&app.pool).await.unwrap();
 
             // Create owner membership
-            sqlx::query!(
+            sqlx::query(
                 r#"
-                INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO memberships (id, team_id, user_id, role, created_at)
+                VALUES ($1, $2, $3, $4::membership_role, $5)
                 "#,
-                Uuid::new_v4(),
-                team.id,
-                creator_user.id,
-                TeamRole::Owner as TeamRole,
-                Utc::now()
-            ).execute(&app.pool).await.unwrap();
+            )
+            .bind(Uuid::new_v4())
+            .bind(team.id)
+            .bind(creator_user.id)
+            .bind("owner")
+            .bind(Utc::now())
+            .execute(&app.pool).await.unwrap();
         }
 
-        // Verify we have exactly 10 owned teams
-        let owned_count = sqlx::query!(
-            "SELECT COUNT(*) as count FROM team_memberships WHERE user_id = $1 AND role = 'owner'",
-            creator_user.id
+        // Verify we have exactly 10 owned teams (using runtime query)
+        let owned_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM memberships WHERE user_id = $1 AND role = 'owner'",
         )
+        .bind(creator_user.id)
         .fetch_one(&app.pool)
         .await
         .unwrap();
 
-        assert_eq!(owned_count.count.unwrap(), 10);
+        assert_eq!(owned_count.0, 10);
 
         // This constraint would be enforced in the application layer,
         // not at the database level, so we can't test the failure case here
@@ -393,17 +407,18 @@ mod test_membership_invariants {
 
         // Attempting to create membership for starter user should be prevented
         // This is enforced at the application level, but we can test the database constraint
-        let membership_result = sqlx::query!(
+        let membership_result = sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            starter_user.id,
-            TeamRole::Member as TeamRole,
-            Utc::now()
-        ).execute(&app.pool).await;
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(starter_user.id)
+        .bind("member")
+        .bind(Utc::now())
+        .execute(&app.pool).await;
 
         // If database has trigger to enforce this constraint, it should fail
         // Otherwise, this constraint is enforced in application logic
@@ -427,34 +442,35 @@ mod test_membership_invariants {
 
         // Test all valid roles
         let valid_roles = vec![
-            TeamRole::Owner,
-            TeamRole::Admin,
-            TeamRole::Member,
-            TeamRole::Viewer,
+            MembershipRole::Owner,
+            MembershipRole::Admin,
+            MembershipRole::Member,
+            MembershipRole::Viewer,
         ];
 
         for role in valid_roles {
             let membership_id = Uuid::new_v4();
 
-            let insert_result = sqlx::query!(
+            // Using runtime query to avoid sqlx offline mode issues
+            let insert_result = sqlx::query(
                 r#"
-                INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO memberships (id, team_id, user_id, role, created_at)
+                VALUES ($1, $2, $3, $4::membership_role, $5)
                 "#,
-                membership_id,
-                team.id,
-                member_user.id,
-                role as TeamRole,
-                Utc::now()
-            ).execute(&app.pool).await;
+            )
+            .bind(membership_id)
+            .bind(team.id)
+            .bind(member_user.id)
+            .bind(role_to_str(&role))
+            .bind(Utc::now())
+            .execute(&app.pool).await;
 
             assert!(insert_result.is_ok(), "Role {:?} should be valid", role);
 
             // Clean up for next iteration
-            sqlx::query!(
-                "DELETE FROM team_memberships WHERE id = $1",
-                membership_id
-            ).execute(&app.pool).await.unwrap();
+            sqlx::query("DELETE FROM memberships WHERE id = $1")
+                .bind(membership_id)
+                .execute(&app.pool).await.unwrap();
         }
 
         app.cleanup().await.unwrap();
@@ -470,33 +486,35 @@ mod test_membership_invariants {
 
         let member_user = app.create_test_user(UserTier::Creator).await.unwrap();
 
-        // Create first membership
-        let membership1_result = sqlx::query!(
+        // Create first membership (using runtime query to avoid sqlx offline mode issues)
+        let membership1_result = sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            member_user.id,
-            TeamRole::Member as TeamRole,
-            Utc::now()
-        ).execute(&app.pool).await;
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_user.id)
+        .bind("member")
+        .bind(Utc::now())
+        .execute(&app.pool).await;
 
         assert!(membership1_result.is_ok());
 
         // Attempt to create duplicate membership
-        let membership2_result = sqlx::query!(
+        let membership2_result = sqlx::query(
             r#"
-            INSERT INTO team_memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
             "#,
-            Uuid::new_v4(),
-            team.id,
-            member_user.id,
-            TeamRole::Admin as TeamRole,
-            Utc::now()
-        ).execute(&app.pool).await;
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_user.id)
+        .bind("admin")
+        .bind(Utc::now())
+        .execute(&app.pool).await;
 
         // Should fail due to unique constraint on (team_id, user_id)
         assert!(membership2_result.is_err());
@@ -563,17 +581,19 @@ mod test_cross_entity_constraints {
         let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
         let (team, membership) = app.create_test_team(creator_user.id).await.unwrap();
 
-        // Verify membership references exist
-        let user_check = sqlx::query!(
+        // Verify membership references exist (using runtime queries)
+        let user_check: Result<(Uuid,), _> = sqlx::query_as(
             "SELECT id FROM users WHERE id = $1",
-            membership.user_id
-        ).fetch_one(&app.pool).await;
+        )
+        .bind(membership.user_id)
+        .fetch_one(&app.pool).await;
         assert!(user_check.is_ok());
 
-        let team_check = sqlx::query!(
+        let team_check: Result<(Uuid,), _> = sqlx::query_as(
             "SELECT id FROM teams WHERE id = $1",
-            membership.team_id
-        ).fetch_one(&app.pool).await;
+        )
+        .bind(membership.team_id)
+        .fetch_one(&app.pool).await;
         assert!(team_check.is_ok());
 
         app.cleanup().await.unwrap();
@@ -587,25 +607,28 @@ mod test_cross_entity_constraints {
         let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
         let (team, membership) = app.create_test_team(creator_user.id).await.unwrap();
 
-        // Verify membership exists
-        let membership_check = sqlx::query!(
-            "SELECT COUNT(*) as count FROM team_memberships WHERE team_id = $1",
-            team.id
-        ).fetch_one(&app.pool).await.unwrap();
-        assert_eq!(membership_check.count.unwrap(), 1);
+        // Verify membership exists (using runtime queries)
+        let membership_check: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM memberships WHERE team_id = $1",
+        )
+        .bind(team.id)
+        .fetch_one(&app.pool).await.unwrap();
+        assert_eq!(membership_check.0, 1);
 
         // Delete team (this should cascade to memberships)
-        sqlx::query!("DELETE FROM teams WHERE id = $1", team.id)
+        sqlx::query("DELETE FROM teams WHERE id = $1")
+            .bind(team.id)
             .execute(&app.pool)
             .await
             .unwrap();
 
         // Verify membership was deleted
-        let membership_check_after = sqlx::query!(
-            "SELECT COUNT(*) as count FROM team_memberships WHERE team_id = $1",
-            team.id
-        ).fetch_one(&app.pool).await.unwrap();
-        assert_eq!(membership_check_after.count.unwrap(), 0);
+        let membership_check_after: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM memberships WHERE team_id = $1",
+        )
+        .bind(team.id)
+        .fetch_one(&app.pool).await.unwrap();
+        assert_eq!(membership_check_after.0, 0);
 
         app.cleanup().await.unwrap();
     }

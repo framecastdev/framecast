@@ -295,7 +295,7 @@ impl Default for MockEmailService {
 pub mod test_utils {
     use super::*;
     use crate::common::{TestApp, UserFixture};
-    use framecast_domain::entities::{InvitationRole, UserTier};
+    use framecast_domain::entities::InvitationRole;
 
     /// Create a complete invitation test scenario
     pub struct InvitationTestScenario {
@@ -373,22 +373,23 @@ pub mod test_utils {
             // Clone tier before move
             let user_tier = invitee_user.tier.clone();
 
-            // Insert into database
-            sqlx::query!(
+            // Insert into database (using runtime query to avoid sqlx offline mode issues in tests)
+            sqlx::query(
                 r#"
                 INSERT INTO users (id, email, name, tier, credits, ephemeral_storage_bytes, upgraded_at, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                VALUES ($1, $2, $3, $4::user_tier, $5, $6, $7, $8, $9)
                 "#,
-                invitee_user.id,
-                invitee_user.email,
-                invitee_user.name,
-                user_tier as UserTier,
-                invitee_user.credits,
-                invitee_user.ephemeral_storage_bytes,
-                invitee_user.upgraded_at,
-                invitee_user.created_at,
-                invitee_user.updated_at
-            ).execute(&self.app.pool).await?;
+            )
+            .bind(invitee_user.id)
+            .bind(&invitee_user.email)
+            .bind(&invitee_user.name)
+            .bind(user_tier.to_string())
+            .bind(invitee_user.credits)
+            .bind(invitee_user.ephemeral_storage_bytes)
+            .bind(invitee_user.upgraded_at)
+            .bind(invitee_user.created_at)
+            .bind(invitee_user.updated_at)
+            .execute(&self.app.pool).await?;
 
             let jwt_token =
                 crate::common::create_test_jwt(&invitee_user, &self.app.config.jwt_secret)?;
