@@ -171,6 +171,16 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
+# === AWS SAM ===
+# Local environment variables (contains secrets)
+env.json
+# SAM build artifacts
+.aws-sam/
+
+# === UV (Python package manager) ===
+# Root-level uv.lock is accidental - the real one is in tests/e2e/
+/uv.lock
+
 # === Project Specific ===
 # Local development artifacts
 .framecast/

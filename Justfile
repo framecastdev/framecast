@@ -389,24 +389,89 @@ commit-emergency message:
 # ============================================================================
 
 # Build all release artifacts
-build: build-lambda build-docker
+build: sam-build build-docker
     @echo "✅ All artifacts built successfully"
-
-# Build Lambda deployment packages
-build-lambda:
-    @echo "🏗️ Building Lambda functions..."
-    cargo build --release --bin lambda
-    # Package for Lambda deployment
-    mkdir -p target/lambda/framecast-api
-    cp target/release/lambda target/lambda/framecast-api/bootstrap
-    cd target/lambda/framecast-api && zip -r ../framecast-api.zip .
-    @echo "📦 Lambda package created: target/lambda/framecast-api.zip"
 
 # Build Docker images for RunPod workers
 build-docker:
     @echo "🐳 Building Docker images..."
     docker build -t framecast/comfyui-worker:latest -f infra/runpod/Dockerfile .
     @echo "✅ Docker images built"
+
+# ============================================================================
+# AWS SAM - Serverless Deployment
+# ============================================================================
+
+# Install cargo-lambda for SAM builds
+install-cargo-lambda:
+    @echo "🦀 Installing cargo-lambda..."
+    cargo install cargo-lambda
+    @echo "✅ cargo-lambda installed"
+
+# Build with SAM (uses cargo-lambda)
+sam-build:
+    @echo "🏗️ Building Lambda with SAM..."
+    sam build --beta-features
+    @echo "✅ SAM build complete"
+
+# Start local API with SAM (uses LocalStack network)
+sam-local:
+    @echo "🚀 Starting SAM local API..."
+    @echo "📊 API will be available at http://localhost:3001"
+    @echo "💡 Make sure LocalStack is running: just start-backing-services"
+    sam local start-api --config-env dev
+
+# Invoke Lambda locally with test event
+sam-invoke event="events/api-gateway-request.json":
+    @echo "⚡ Invoking Lambda locally..."
+    sam local invoke FramecastApiFunction --event {{event}} --config-env dev
+
+# Validate SAM template
+sam-validate:
+    @echo "🔍 Validating SAM template..."
+    sam validate --lint
+    @echo "✅ Template is valid"
+
+# Deploy to dev environment
+sam-deploy-dev:
+    @echo "🚀 Deploying to dev environment..."
+    sam build --beta-features
+    sam deploy --config-env dev
+    @echo "✅ Deployed to dev"
+
+# Deploy to staging environment
+sam-deploy-staging:
+    @echo "🚀 Deploying to staging environment..."
+    sam build --beta-features
+    sam deploy --config-env staging
+    @echo "✅ Deployed to staging"
+
+# Deploy to production environment (runs tests first)
+sam-deploy-prod:
+    @echo "🚀 Deploying to production environment..."
+    @echo "⚠️ Running tests before production deployment..."
+    just test
+    just test-e2e-mocked
+    sam build --beta-features
+    sam deploy --config-env prod
+    @echo "✅ Deployed to production"
+
+# View Lambda logs (tail mode)
+sam-logs env="dev":
+    @echo "📋 Viewing logs for framecast-api-{{env}}..."
+    sam logs --stack-name framecast-api-{{env}} --tail
+
+# Delete SAM stack
+sam-delete env="dev":
+    @echo "🗑️ Deleting SAM stack framecast-api-{{env}}..."
+    @read -p "Are you sure? Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ]
+    sam delete --stack-name framecast-api-{{env}}
+    @echo "✅ Stack deleted"
+
+# Show SAM stack outputs
+sam-outputs env="dev":
+    @echo "📊 Stack outputs for framecast-api-{{env}}:"
+    aws cloudformation describe-stacks --stack-name framecast-api-{{env}} --query 'Stacks[0].Outputs' --output table
 
 # Create release artifacts with version tag
 release version:
@@ -419,26 +484,25 @@ release version:
 # INFRASTRUCTURE & DEPLOYMENT (Rules V, XI: Build/Release/Run, Logs)
 # ============================================================================
 
-# Deploy to staging environment
-deploy-staging:
-    @echo "🚀 Deploying to staging..."
-    cd infra/opentofu && tofu init && tofu plan -var="environment=staging"
-    @read -p "Apply changes? (y/N): " confirm && [ "$$confirm" = "y" ]
-    cd infra/opentofu && tofu apply -var="environment=staging"
+# Deploy to staging environment (uses SAM for Lambda, OpenTofu for other infra)
+deploy-staging: sam-deploy-staging
+    @echo "✅ Staging deployment complete"
 
-# Deploy to production environment
-deploy-prod:
-    @echo "🚀 Deploying to production..."
-    @echo "⚠️ This will deploy to PRODUCTION. Ensure all tests pass!"
-    just test && just test-e2e-mocked
-    cd infra/opentofu && tofu init && tofu plan -var="environment=production"
-    @read -p "Deploy to PRODUCTION? Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ]
-    cd infra/opentofu && tofu apply -var="environment=production"
+# Deploy to production environment (uses SAM for Lambda, OpenTofu for other infra)
+deploy-prod: sam-deploy-prod
+    @echo "✅ Production deployment complete"
 
 # View production logs (CloudWatch)
 logs-prod:
     @echo "📊 Viewing production logs..."
-    aws logs tail /aws/lambda/framecast-api --follow
+    sam logs --stack-name framecast-api-prod --tail
+
+# Deploy non-Lambda infrastructure with OpenTofu (RDS, VPC, etc.)
+deploy-infra env="dev":
+    @echo "🏗️ Deploying infrastructure with OpenTofu..."
+    cd infra/opentofu && tofu init && tofu plan -var="environment={{env}}"
+    @read -p "Apply changes? (y/N): " confirm && [ "$$confirm" = "y" ]
+    cd infra/opentofu && tofu apply -var="environment={{env}}"
 
 # ============================================================================
 # ADMIN PROCESSES (Rule XII: Admin Processes)

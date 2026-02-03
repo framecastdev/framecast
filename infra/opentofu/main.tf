@@ -85,34 +85,8 @@ variable "supabase_service_role_key" {
   sensitive   = true
 }
 
-variable "anthropic_api_key" {
-  description = "Anthropic API key for LLM"
-  type        = string
-  sensitive   = true
-}
-
-variable "inngest_event_key" {
-  description = "Inngest event key"
-  type        = string
-  sensitive   = true
-}
-
-variable "inngest_signing_key" {
-  description = "Inngest signing key"
-  type        = string
-  sensitive   = true
-}
-
-variable "runpod_api_key" {
-  description = "RunPod API key"
-  type        = string
-  sensitive   = true
-}
-
-variable "runpod_endpoint_id" {
-  description = "RunPod endpoint ID"
-  type        = string
-}
+# NOTE: Lambda environment variables (API keys, etc.) are now configured
+# in template.yaml SAM parameters. Only database-related variables remain here.
 
 # ============================================================================
 # LOCAL VALUES
@@ -127,99 +101,18 @@ locals {
     ManagedBy   = "OpenTofu"
   }
 
-  # Lambda configuration
-  lambda_runtime = "provided.al2"
-  lambda_timeout = 30
-  lambda_memory  = 512
-
-  # S3 bucket names
-  outputs_bucket = "${local.name_prefix}-outputs"
-  assets_bucket  = "${local.name_prefix}-assets"
+  # NOTE: Lambda and API Gateway are now managed by AWS SAM (template.yaml)
+  # This file only manages non-Lambda infrastructure (RDS, VPC, security groups)
 
   # Database configuration (use RDS if Supabase URL not provided)
   use_rds = var.supabase_url == null
 }
 
 # ============================================================================
-# S3 BUCKETS - Object Storage (12-Factor Rule IV)
+# S3 BUCKETS - Now managed by AWS SAM (template.yaml)
 # ============================================================================
-
-# S3 bucket for video outputs
-resource "aws_s3_bucket" "outputs" {
-  bucket = local.outputs_bucket
-  tags   = local.common_tags
-}
-
-resource "aws_s3_bucket_public_access_block" "outputs" {
-  bucket = aws_s3_bucket.outputs.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_versioning" "outputs" {
-  bucket = aws_s3_bucket.outputs.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "outputs" {
-  bucket = aws_s3_bucket.outputs.id
-
-  rule {
-    id     = "cleanup_old_outputs"
-    status = "Enabled"
-
-    filter {} # Apply to all objects
-
-    expiration {
-      days = 90 # Keep outputs for 90 days
-    }
-
-    noncurrent_version_expiration {
-      noncurrent_days = 30
-    }
-  }
-}
-
-# S3 bucket for user assets
-resource "aws_s3_bucket" "assets" {
-  bucket = local.assets_bucket
-  tags   = local.common_tags
-}
-
-resource "aws_s3_bucket_public_access_block" "assets" {
-  bucket = aws_s3_bucket.assets.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_versioning" "assets" {
-  bucket = aws_s3_bucket.assets.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_cors_configuration" "assets" {
-  bucket = aws_s3_bucket.assets.id
-
-  cors_rule {
-    allowed_headers = ["*"]
-    allowed_methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
-    allowed_origins = ["*"] # Configure for your domain in production
-    expose_headers  = ["ETag"]
-    max_age_seconds = 3000
-  }
-}
+# NOTE: S3 buckets for outputs and assets are defined in template.yaml
+# to keep all Lambda-related resources together for atomic deployments.
 
 # ============================================================================
 # RDS POSTGRESQL - Database (12-Factor Rule IV)
@@ -336,6 +229,8 @@ data "aws_subnets" "default" {
 }
 
 # Security group for RDS
+# NOTE: Lambda is now managed by SAM. If using VPC-enabled Lambda,
+# configure the Lambda security group in template.yaml and reference it here.
 resource "aws_security_group" "rds" {
   count = local.use_rds ? 1 : 0
 
@@ -343,34 +238,14 @@ resource "aws_security_group" "rds" {
   vpc_id      = data.aws_vpc.default.id
   description = "Security group for RDS database"
 
+  # Allow PostgreSQL from within the VPC (Lambda will need VPC access configured in SAM)
   ingress {
-    description     = "PostgreSQL from Lambda"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.lambda.id]
+    description = "PostgreSQL from VPC"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
   }
-
-  egress {
-    description = "All outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = local.common_tags
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Security group for Lambda functions
-resource "aws_security_group" "lambda" {
-  name_prefix = "${local.name_prefix}-lambda-"
-  vpc_id      = data.aws_vpc.default.id
-  description = "Security group for Lambda functions"
 
   egress {
     description = "All outbound traffic"
@@ -420,15 +295,8 @@ resource "aws_iam_role_policy_attachment" "rds_monitoring" {
 # OUTPUTS
 # ============================================================================
 
-output "outputs_bucket_name" {
-  description = "Name of the S3 bucket for outputs"
-  value       = aws_s3_bucket.outputs.id
-}
-
-output "assets_bucket_name" {
-  description = "Name of the S3 bucket for assets"
-  value       = aws_s3_bucket.assets.id
-}
+# NOTE: S3 bucket outputs are now provided by SAM stack (template.yaml)
+# Use `just sam-outputs` to see Lambda/S3 related outputs
 
 output "database_endpoint" {
   description = "RDS instance endpoint"
@@ -440,6 +308,22 @@ output "database_url" {
   description = "Database connection URL"
   value       = local.use_rds ? "postgresql://postgres:${random_password.db_password[0].result}@${aws_db_instance.main[0].endpoint}:5432/framecast" : var.supabase_url
   sensitive   = true
+}
+
+output "rds_security_group_id" {
+  description = "RDS security group ID (for VPC Lambda configuration)"
+  value       = local.use_rds ? aws_security_group.rds[0].id : null
+  sensitive   = true
+}
+
+output "vpc_id" {
+  description = "VPC ID"
+  value       = data.aws_vpc.default.id
+}
+
+output "subnet_ids" {
+  description = "Subnet IDs for VPC Lambda"
+  value       = data.aws_subnets.default.ids
 }
 
 output "aws_region" {

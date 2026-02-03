@@ -1,0 +1,272 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Framecast API - Serverless deployment with cargo-lambda
+  Storyboard-to-video generation API using AWS SAM
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment
+
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: PostgreSQL connection URL
+
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    Description: JWT signing secret
+
+  SupabaseUrl:
+    Type: String
+    Default: ""
+    Description: Supabase project URL (optional)
+
+  SupabaseAnonKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Supabase anonymous key (optional)
+
+  AnthropicApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Anthropic API key for LLM (optional)
+
+  InngestEventKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Inngest event key (optional)
+
+  InngestSigningKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Inngest signing key (optional)
+
+  RunpodApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: RunPod API key (optional)
+
+  RunpodEndpointId:
+    Type: String
+    Default: ""
+    Description: RunPod endpoint ID (optional)
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+  IsNotProd: !Not [!Equals [!Ref Environment, prod]]
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: provided.al2023
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        RUST_LOG: !If [IsProd, "info", "debug,sqlx=warn"]
+
+Resources:
+  # ===========================================================================
+  # API GATEWAY - HTTP API (12-Factor Rule VII: Port Binding)
+  # ===========================================================================
+
+  FramecastHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: !Sub "Framecast API - ${Environment}"
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Api-Key
+          - X-Amz-Date
+          - X-Amz-Security-Token
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        MaxAge: 3600
+
+  # ===========================================================================
+  # LAMBDA FUNCTION - API Handler (12-Factor Rule VI: Processes)
+  # ===========================================================================
+
+  FramecastApiFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+      BuildProperties:
+        Binary: lambda
+    Properties:
+      CodeUri: ./crates/api
+      Handler: bootstrap
+      FunctionName: !Sub framecast-api-${Environment}
+      Description: Framecast API Lambda function
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          JWT_SECRET: !Ref JwtSecret
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_ANON_KEY: !Ref SupabaseAnonKey
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          INNGEST_EVENT_KEY: !Ref InngestEventKey
+          INNGEST_SIGNING_KEY: !Ref InngestSigningKey
+          RUNPOD_API_KEY: !Ref RunpodApiKey
+          RUNPOD_ENDPOINT_ID: !Ref RunpodEndpointId
+          S3_BUCKET_OUTPUTS: !Ref OutputsBucket
+          S3_BUCKET_ASSETS: !Ref AssetsBucket
+      Events:
+        ApiProxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FramecastHttpApi
+            Path: /{proxy+}
+            Method: ANY
+        ApiRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FramecastHttpApi
+            Path: /
+            Method: GET
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref OutputsBucket
+        - S3CrudPolicy:
+            BucketName: !Ref AssetsBucket
+
+  # CloudWatch Log Group for API Lambda
+  FramecastApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/framecast-api-${Environment}
+      RetentionInDays: !If [IsProd, 30, 14]
+
+  # ===========================================================================
+  # S3 BUCKETS - Object Storage (12-Factor Rule IV: Backing Services)
+  # ===========================================================================
+
+  OutputsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub framecast-outputs-${Environment}-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: CleanupOldOutputs
+            Status: Enabled
+            ExpirationInDays: 90
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+
+  AssetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub framecast-assets-${Environment}-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              - "*"
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3000
+
+  # ===========================================================================
+  # CLOUDWATCH ALARMS - Monitoring (Production only)
+  # ===========================================================================
+
+  LambdaErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsProd
+    Properties:
+      AlarmName: !Sub framecast-api-${Environment}-lambda-errors
+      AlarmDescription: Alarm for Lambda function errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref FramecastApiFunction
+
+  ApiGateway5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsProd
+    Properties:
+      AlarmName: !Sub framecast-api-${Environment}-5xx-errors
+      AlarmDescription: Alarm for API Gateway 5xx errors
+      MetricName: 5XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref FramecastHttpApi
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${FramecastHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+
+  LambdaFunctionName:
+    Description: Lambda function name
+    Value: !Ref FramecastApiFunction
+
+  LambdaFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt FramecastApiFunction.Arn
+
+  OutputsBucketName:
+    Description: S3 bucket for video outputs
+    Value: !Ref OutputsBucket
+
+  AssetsBucketName:
+    Description: S3 bucket for user assets
+    Value: !Ref AssetsBucket
