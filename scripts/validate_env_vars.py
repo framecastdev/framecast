@@ -50,6 +50,10 @@ def validate_env_vars(file_paths):
                 if line.strip().startswith("#") or line.strip().startswith("//"):
                     continue
 
+                # Skip lines with allowlist pragma
+                if "pragma: allowlist secret" in line:
+                    continue
+
                 for pattern, description in suspicious_patterns:
                     matches = re.finditer(pattern, line, re.IGNORECASE)
                     for match in matches:
