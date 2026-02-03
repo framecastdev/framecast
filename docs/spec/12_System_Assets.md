@@ -2,14 +2,18 @@
 
 ## 13.1 Overview
 
-System assets are pre-loaded assets available to all users within the Framecast platform. These assets represent commonly-used audio elements (sound effects, ambient sounds, music, and transitions) that serve as a foundation for content creation. Unlike user-created assets, system assets are:
+System assets are pre-loaded assets available to all users within the Framecast platform.
+These assets represent commonly-used audio elements (sound effects, ambient sounds, music,
+and transitions) that serve as a foundation for content creation.
+Unlike user-created assets, system assets are:
 
 - **Pre-loaded**: Automatically available without explicit user creation
 - **Universal**: Accessible to all authenticated users
 - **Immutable**: Cannot be modified or deleted by individual users
 - **Cataloged**: Organized by category with standardized metadata
 
-System assets enable users to quickly build polished content without requiring proprietary licensing agreements or custom audio production.
+System assets enable users to quickly build polished content without requiring
+proprietary licensing agreements or custom audio production.
 
 ## 13.2 System Asset Identification
 
@@ -54,7 +58,8 @@ URN to ID:  framecast:system:{cat}:{name} â†’ asset_{cat}_{name}
 ID to URN:  asset_{cat}_{name} â†’ framecast:system:{cat}:{name}
 ```
 
-**Note:** In spec JSONB, always use the entity ID format (`asset_sfx_whoosh`), not the URN format. The URN format is for documentation and API discoverability.
+**Note:** In spec JSONB, always use the entity ID format (`asset_sfx_whoosh`),
+not the URN format. The URN format is for documentation and API discoverability.
 
 ## 13.3 System Asset Categories
 
@@ -135,7 +140,8 @@ The system asset catalog has been EXPANDED in v0.4.0 to include a comprehensive 
 
 ## 13.5 System Assets in Spec
 
-System assets are referenced in spec definitions using standard asset reference syntax. Below is an example of how system assets appear in YAML:
+System assets are referenced in spec definitions using standard asset reference syntax.
+Below is an example of how system assets appear in YAML:
 
 ```yaml
 version: 1.0

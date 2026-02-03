@@ -297,7 +297,9 @@ interface EstimateResponse {
 
 ## Appendix F: Deferred Features (Updated in v0.4.1)
 
-The following features are explicitly deferred from v1. Features listed here may be re-evaluated for inclusion in future versions based on user feedback and platform maturity.
+The following features are explicitly deferred from v1.
+Features listed here may be re-evaluated for inclusion in future versions
+based on user feedback and platform maturity.
 
 **Notable Changes in v0.4.1:**
 
@@ -332,13 +334,27 @@ The following features are explicitly deferred from v1. Features listed here may
 
 These features are deferred to maintain focus on core functionality in v1:
 
-- **Team-Level Resource Templates** (SymbolTemplate, TransitionPreset shared): Inline definitions provide sufficient capability; shared templates can be implemented once teams stabilize
-- **History and Versioning** (ProjectVersion): Current `job.spec_snapshot` mechanism provides rendered version tracking; full edit history deferred for UI/UX simplification
-- **Queue Management** (Job Priority): Single FIFO queue adequate for launch; priority queues deferred pending user demand and performance metrics
-- **Content Generation** (TTS, AI Music, Voice Cloning): Asset-based model provides flexibility; procedural generation deferred to reduce complexity and costs
-- **Free Access** (Free tier): Credits-based model from day one ensures fair resource allocation; free tier evaluation for future versions
-- **Cleanup Automation** (AssetFile orphan cleanup): Explicit asset management required for v1 billing accuracy; automation deferred pending lifecycle policies
-- **Ownership Transfer**: Manual support via customer success team sufficient for v1; automated transfer deferred pending user access policy maturity
+- **Team-Level Resource Templates** (SymbolTemplate, TransitionPreset shared):
+  Inline definitions provide sufficient capability;
+  shared templates can be implemented once teams stabilize
+- **History and Versioning** (ProjectVersion):
+  Current `job.spec_snapshot` mechanism provides rendered version tracking;
+  full edit history deferred for UI/UX simplification
+- **Queue Management** (Job Priority):
+  Single FIFO queue adequate for launch;
+  priority queues deferred pending user demand and performance metrics
+- **Content Generation** (TTS, AI Music, Voice Cloning):
+  Asset-based model provides flexibility;
+  procedural generation deferred to reduce complexity and costs
+- **Free Access** (Free tier):
+  Credits-based model from day one ensures fair resource allocation;
+  free tier evaluation for future versions
+- **Cleanup Automation** (AssetFile orphan cleanup):
+  Explicit asset management required for v1 billing accuracy;
+  automation deferred pending lifecycle policies
+- **Ownership Transfer**:
+  Manual support via customer success team sufficient for v1;
+  automated transfer deferred pending user access policy maturity
 
 ---
 

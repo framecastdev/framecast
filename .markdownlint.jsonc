@@ -1,0 +1,44 @@
+{
+  // Markdownlint configuration for Framecast
+  // See: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+  // Disable line length for tables and code blocks
+  // Tables and code blocks often need longer lines for readability
+  "MD013": {
+    "line_length": 120,
+    "tables": false,
+    "code_blocks": false
+  },
+
+  // Allow duplicate headings in different sections
+  // Test strategy documents have repeated section names
+  "MD024": {
+    "siblings_only": true
+  },
+
+  // Disable first-line-heading requirement
+  // Spec documents may start with section headings (##)
+  "MD041": false,
+
+  // Disable table column style requirement
+  // This is too strict for spec tables with variable content
+  "MD060": false,
+
+  // Allow inline HTML for special formatting
+  "MD033": false,
+
+  // Fenced code blocks should have a language
+  // Keep enabled but allow empty for generic examples
+  "MD040": false,
+
+  // Allow emphasis used as headings for stylistic reasons
+  "MD036": false,
+
+  // Allow heading increment jumps (e.g., h1 to h3)
+  // Some documents use different heading levels for structure
+  "MD001": false,
+
+  // Allow multiple top-level headings
+  // Some documents have multiple h1 sections
+  "MD025": false
+}

@@ -96,8 +96,9 @@ repos:
     rev: 1.9.3
     hooks:
       - id: bandit
-        args: ['-r', 'scripts/', '-f', 'json']
+        args: ['-r', 'scripts/']
         files: '^scripts/.*\.py$'
+        pass_filenames: false
 
   # Secret detection with detect-secrets
   - repo: https://github.com/Yelp/detect-secrets

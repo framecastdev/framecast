@@ -21,12 +21,15 @@ if not DATABASE_URL:
 
 
 class FramecastSeeder:
+    """Database seeder for Framecast test data."""
+
     def __init__(self, database_url: str):
+        """Initialize the seeder with database URL."""
         self.database_url = database_url
         self.conn = None
 
     async def connect(self):
-        """Connect to the database"""
+        """Connect to the database."""
         try:
             self.conn = await asyncpg.connect(self.database_url)
             print("✅ Connected to database")
@@ -35,17 +38,18 @@ class FramecastSeeder:
             sys.exit(1)
 
     async def disconnect(self):
-        """Disconnect from the database"""
+        """Disconnect from the database."""
         if self.conn:
             await self.conn.close()
             print("✅ Disconnected from database")
 
     async def clear_existing_data(self):
-        """Clear existing test data (optional)"""
+        """Clear existing test data."""
         try:
             # Clear in dependency order
             await self.conn.execute(
-                "DELETE FROM job_events WHERE job_id IN (SELECT id FROM jobs WHERE owner LIKE 'framecast:%test%')"
+                "DELETE FROM job_events WHERE job_id IN "
+                "(SELECT id FROM jobs WHERE owner LIKE 'framecast:%test%')"
             )
             await self.conn.execute("DELETE FROM webhook_deliveries")
             await self.conn.execute(
@@ -55,19 +59,23 @@ class FramecastSeeder:
                 "DELETE FROM asset_files WHERE owner LIKE 'framecast:%test%'"
             )
             await self.conn.execute(
-                "DELETE FROM webhooks WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE '%test%')"
+                "DELETE FROM webhooks WHERE team_id IN "
+                "(SELECT id FROM teams WHERE slug LIKE '%test%')"
             )
             await self.conn.execute(
-                "DELETE FROM projects WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE '%test%')"
+                "DELETE FROM projects WHERE team_id IN "
+                "(SELECT id FROM teams WHERE slug LIKE '%test%')"
             )
             await self.conn.execute(
-                "DELETE FROM invitations WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE '%test%')"
+                "DELETE FROM invitations WHERE team_id IN "
+                "(SELECT id FROM teams WHERE slug LIKE '%test%')"
             )
             await self.conn.execute(
                 "DELETE FROM api_keys WHERE owner LIKE 'framecast:%test%'"
             )
             await self.conn.execute(
-                "DELETE FROM memberships WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE '%test%')"
+                "DELETE FROM memberships WHERE team_id IN "
+                "(SELECT id FROM teams WHERE slug LIKE '%test%')"
             )
             await self.conn.execute("DELETE FROM teams WHERE slug LIKE '%test%'")
             await self.conn.execute(
@@ -79,7 +87,7 @@ class FramecastSeeder:
             print(f"⚠️ Warning: Failed to clear existing data: {e}")
 
     async def seed_users(self) -> list[str]:
-        """Create test users"""
+        """Create test users."""
         users = [
             {
                 "id": str(uuid.uuid4()),
@@ -127,7 +135,7 @@ class FramecastSeeder:
         return user_ids
 
     async def seed_teams(self, user_ids: list[str]) -> list[str]:
-        """Create test teams"""
+        """Create test teams."""
         teams = [
             {
                 "id": str(uuid.uuid4()),
@@ -192,7 +200,7 @@ class FramecastSeeder:
     async def seed_projects(
         self, team_ids: list[str], user_ids: list[str]
     ) -> list[str]:
-        """Create test projects"""
+        """Create test projects."""
         projects = [
             {
                 "id": str(uuid.uuid4()),
@@ -246,7 +254,7 @@ class FramecastSeeder:
     async def seed_jobs(
         self, team_ids: list[str], user_ids: list[str], project_ids: list[str]
     ):
-        """Create test jobs"""
+        """Create test jobs."""
         jobs = [
             {
                 "id": str(uuid.uuid4()),
@@ -307,7 +315,7 @@ class FramecastSeeder:
         print(f"✅ Created {len(jobs)} test jobs")
 
     async def seed_api_keys(self, user_ids: list[str], team_ids: list[str]):
-        """Create test API keys"""
+        """Create test API keys."""
         import hashlib
 
         api_keys = [
@@ -332,7 +340,8 @@ class FramecastSeeder:
         for key in api_keys:
             await self.conn.execute(
                 """
-                INSERT INTO api_keys (id, user_id, owner, name, key_prefix, key_hash, scopes)
+                INSERT INTO api_keys
+                    (id, user_id, owner, name, key_prefix, key_hash, scopes)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
             """,
                 key["id"],
@@ -347,7 +356,7 @@ class FramecastSeeder:
         print(f"✅ Created {len(api_keys)} test API keys")
 
     async def seed_system_assets(self):
-        """Create test system assets"""
+        """Create test system assets."""
         system_assets = [
             {
                 "id": "asset_music_corporate_upbeat",
@@ -387,8 +396,9 @@ class FramecastSeeder:
         for asset in system_assets:
             await self.conn.execute(
                 """
-                INSERT INTO system_assets (id, category, name, description, duration_seconds,
-                                        s3_key, content_type, size_bytes, tags)
+                INSERT INTO system_assets
+                    (id, category, name, description, duration_seconds,
+                     s3_key, content_type, size_bytes, tags)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """,
                 asset["id"],
@@ -405,7 +415,7 @@ class FramecastSeeder:
         print(f"✅ Created {len(system_assets)} system assets")
 
     async def seed_all(self, clear_existing: bool = False):
-        """Seed all test data"""
+        """Seed all test data."""
         await self.connect()
 
         try:
@@ -422,9 +432,7 @@ class FramecastSeeder:
 
             print("\n🌱 Database seeding completed successfully!")
             print("\nTest Data Created:")
-            print(
-                "  👥 Users: alice@test.framecast.dev (creator), bob@test.framecast.dev (starter), charlie@test.framecast.dev (creator)"
-            )
+            print("  👥 Users: alice, bob, charlie @test.framecast.dev")
             print("  🏢 Teams: acme-studios-test, creative-lab-test")
             print("  📋 Projects: Product Demo Video, Social Media Campaign")
             print("  ⚙️ Jobs: completed, queued, and failed examples")
@@ -439,7 +447,7 @@ class FramecastSeeder:
 
 
 async def main():
-    """Main entry point"""
+    """Run database seeding as main entry point."""
     import argparse
 
     parser = argparse.ArgumentParser(

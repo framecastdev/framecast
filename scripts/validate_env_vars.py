@@ -79,7 +79,7 @@ def validate_env_vars(file_paths):
 
 
 def main():
-    """Main entry point for environment variable validation."""
+    """Run environment variable validation as main entry point."""
     if len(sys.argv) < 2:
         return 0
 

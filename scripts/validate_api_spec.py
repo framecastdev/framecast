@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-API specification validation script
-Ensures API specification files are consistent and well-formed
+"""API specification validation script.
+
+Ensures API specification files are consistent and well-formed.
 """
 
 import os
@@ -10,7 +10,7 @@ import sys
 
 
 def validate_api_spec(file_paths):
-    """Validate API specification consistency"""
+    """Validate API specification consistency."""
     errors = []
 
     for file_path in file_paths:
@@ -55,6 +55,7 @@ def validate_api_spec(file_paths):
 
 
 def main():
+    """Run API specification validation as main entry point."""
     if len(sys.argv) < 2:
         return 0
 

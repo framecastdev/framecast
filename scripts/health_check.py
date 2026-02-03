@@ -24,7 +24,10 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 
 class HealthChecker:
+    """Health checker for Framecast backing services."""
+
     def __init__(self):
+        """Initialize the health checker."""
         self.results = {
             "timestamp": datetime.utcnow().isoformat(),
             "overall_status": "unknown",
@@ -32,7 +35,7 @@ class HealthChecker:
         }
 
     async def check_database(self) -> bool:
-        """Check PostgreSQL database connectivity"""
+        """Check PostgreSQL database connectivity."""
         print("🗃️ Checking database...")
 
         if not DATABASE_URL:
@@ -79,7 +82,7 @@ class HealthChecker:
             return False
 
     async def check_localstack(self) -> bool:
-        """Check LocalStack S3 services"""
+        """Check LocalStack S3 services."""
         print("🪣 Checking LocalStack...")
 
         try:
@@ -88,8 +91,8 @@ class HealthChecker:
                 "s3",
                 endpoint_url=LOCALSTACK_ENDPOINT,
                 region_name=AWS_REGION,
-                aws_access_key_id="test",  # noqa: S106
-                aws_secret_access_key="test",  # noqa: S106
+                aws_access_key_id="test",  # noqa: S106  # nosec B106
+                aws_secret_access_key="test",  # noqa: S106  # nosec B106
             )
 
             # Check if buckets exist
@@ -122,9 +125,8 @@ class HealthChecker:
             )
 
             print(f"  {'✅' if status == 'healthy' else '⚠️'} LocalStack S3")
-            print(
-                f"    Outputs bucket: {'✅' if outputs_exists else '❌'} {S3_BUCKET_OUTPUTS}"
-            )
+            out_icon = "✅" if outputs_exists else "❌"
+            print(f"    Outputs bucket: {out_icon} {S3_BUCKET_OUTPUTS}")
             print(
                 f"    Assets bucket: {'✅' if assets_exists else '❌'} {S3_BUCKET_ASSETS}"
             )
@@ -151,7 +153,7 @@ class HealthChecker:
             return False
 
     async def check_inngest(self) -> bool:
-        """Check Inngest service"""
+        """Check Inngest service."""
         print("⚙️ Checking Inngest...")
 
         try:
@@ -183,7 +185,7 @@ class HealthChecker:
             return False
 
     async def check_external_apis(self) -> bool:
-        """Check external API connectivity (without credentials)"""
+        """Check external API connectivity without credentials."""
         print("🌐 Checking external APIs...")
 
         external_status = True
@@ -220,7 +222,7 @@ class HealthChecker:
         return external_status
 
     async def run_all_checks(self) -> dict:
-        """Run all health checks"""
+        """Run all health checks."""
         print("🏥 Running Framecast health checks...\n")
 
         checks = [
@@ -254,7 +256,7 @@ class HealthChecker:
         return self.results
 
     def print_detailed_report(self):
-        """Print detailed health report"""
+        """Print detailed health report."""
         print("\n📋 Detailed Health Report:")
         print(f"   Timestamp: {self.results['timestamp']}")
         print(f"   Overall Status: {self.results['overall_status']}")
@@ -275,7 +277,7 @@ class HealthChecker:
 
 
 async def main():
-    """Main entry point"""
+    """Run health checks as main entry point."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Check Framecast service health")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-Migration file naming validation script
-Ensures migration files follow the proper naming convention
+"""Migration file naming validation script.
+
+Ensures migration files follow the proper naming convention.
 """
 
 import os
@@ -10,7 +10,7 @@ import sys
 
 
 def validate_migration_naming(file_paths):
-    """Validate migration file naming convention"""
+    """Validate migration file naming convention."""
     errors = []
 
     # Expected pattern: YYYYMMDDHHMMSS_description.sql
@@ -28,6 +28,7 @@ def validate_migration_naming(file_paths):
 
 
 def main():
+    """Run migration naming validation as main entry point."""
     if len(sys.argv) < 2:
         return 0
 

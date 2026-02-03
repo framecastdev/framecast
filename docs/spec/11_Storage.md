@@ -76,7 +76,8 @@ Credits are debited and refunded based on the job's `owner` URN:
 
 1. **Debit on job creation**: Credits are reserved from the source identified by `owner` URN
 2. **Refund on failure/cancel**: Credits are returned to the same source
-3. **Creator personal jobs**: When a Creator uses `framecast:user:X`, their personal `User.credits` are used (not any team's credits)
+3. **Creator personal jobs**: When a Creator uses `framecast:user:X`,
+   their personal `User.credits` are used (not any team's credits)
 4. **Membership URN jobs**: The team pays for member's work; useful for tracking individual output while billing the team
 5. **Insufficient credits**: Job creation fails with `INSUFFICIENT_CREDITS` error
 
