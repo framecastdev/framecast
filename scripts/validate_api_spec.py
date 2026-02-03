@@ -29,7 +29,6 @@ def validate_api_spec(file_paths):
                 # Check for broken internal links
                 link_pattern = r"\[([^\]]+)\]\(([^)]+)\)"
                 for match in re.finditer(link_pattern, line):
-                    link_text = match.group(1)
                     link_url = match.group(2)
 
                     # Check internal markdown links
@@ -44,11 +43,10 @@ def validate_api_spec(file_paths):
                             )
 
                 # Check for consistent heading format
-                if line.startswith("#"):
-                    if not re.match(r"^#+\s+\S", line):
-                        errors.append(
-                            f"{file_path}:{line_num}: Heading should have space after #"
-                        )
+                if line.startswith("#") and not re.match(r"^#+\s+\S", line):
+                    errors.append(
+                        f"{file_path}:{line_num}: Heading should have space after #"
+                    )
 
         except Exception as e:
             errors.append(f"Error reading {file_path}: {e}")

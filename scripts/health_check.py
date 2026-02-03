@@ -47,7 +47,7 @@ class HealthChecker:
             conn = await asyncpg.connect(DATABASE_URL)
 
             # Test basic query
-            result = await conn.fetchval("SELECT 1")
+            await conn.fetchval("SELECT 1")
 
             # Check migration status
             try:
@@ -55,7 +55,7 @@ class HealthChecker:
                     "SELECT * FROM _sqlx_migrations ORDER BY version"
                 )
                 migration_count = len(migrations)
-            except:
+            except Exception:
                 migration_count = 0
 
             await conn.close()
@@ -88,8 +88,8 @@ class HealthChecker:
                 "s3",
                 endpoint_url=LOCALSTACK_ENDPOINT,
                 region_name=AWS_REGION,
-                aws_access_key_id="test",
-                aws_secret_access_key="test",
+                aws_access_key_id="test",  # noqa: S106
+                aws_secret_access_key="test",  # noqa: S106
             )
 
             # Check if buckets exist
@@ -155,26 +155,27 @@ class HealthChecker:
         print("⚙️ Checking Inngest...")
 
         try:
-            async with aiohttp.ClientSession() as session:
-                # Check Inngest health endpoint
-                async with session.get(f"{INNGEST_ENDPOINT}/health") as response:
-                    if response.status == 200:
-                        health_data = await response.json()
-                        print("  ✅ Inngest healthy")
-
-                        self.results["services"]["inngest"] = {
-                            "status": "healthy",
-                            "endpoint": INNGEST_ENDPOINT,
-                            "health_data": health_data,
-                        }
-                        return True
-                    print(f"  ❌ Inngest health check failed: {response.status}")
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(f"{INNGEST_ENDPOINT}/health") as response,
+            ):
+                if response.status == 200:
+                    health_data = await response.json()
+                    print("  ✅ Inngest healthy")
 
                     self.results["services"]["inngest"] = {
-                        "status": "error",
-                        "message": f"Health endpoint returned {response.status}",
+                        "status": "healthy",
+                        "endpoint": INNGEST_ENDPOINT,
+                        "health_data": health_data,
                     }
-                    return False
+                    return True
+                print(f"  ❌ Inngest health check failed: {response.status}")
+
+                self.results["services"]["inngest"] = {
+                    "status": "error",
+                    "message": f"Health endpoint returned {response.status}",
+                }
+                return False
 
         except Exception as e:
             print(f"  ❌ Inngest connection failed: {e}")
@@ -191,7 +192,7 @@ class HealthChecker:
         try:
             async with (
                 aiohttp.ClientSession() as session,
-                session.get("https://api.anthropic.com", timeout=5) as response,
+                session.get("https://api.anthropic.com", timeout=5),
             ):
                 # Any response (even 401) means the service is reachable
                 print("  ✅ Anthropic API reachable")
@@ -201,9 +202,11 @@ class HealthChecker:
 
         # RunPod API (just check if endpoint is reachable)
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get("https://api.runpod.ai", timeout=5) as response:
-                    print("  ✅ RunPod API reachable")
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get("https://api.runpod.ai", timeout=5),
+            ):
+                print("  ✅ RunPod API reachable")
         except Exception as e:
             print(f"  ⚠️ RunPod API unreachable: {e}")
             external_status = False
