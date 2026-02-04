@@ -14,6 +14,8 @@ jobs:
   ci:
     name: CI Pipeline
     runs-on: ubuntu-latest
+    container:
+      image: 192.168.68.77:3000/thiago/framecast-ci:latest
     services:
       postgres:
         image: postgres:16-alpine
@@ -32,19 +34,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Install just
-        run: |
-          # Install just via cargo (works without GitHub API token)
-          cargo install just
-
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -71,6 +60,8 @@ jobs:
   sam-tests:
     name: SAM Local Tests
     runs-on: ubuntu-latest
+    container:
+      image: 192.168.68.77:3000/thiago/framecast-ci:latest
     needs: [ci]  # Run after main CI passes
     services:
       postgres:
@@ -106,34 +97,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Install just
-        run: cargo install just
-
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres
-
-      - name: Install cargo-lambda
-        run: cargo install cargo-lambda
-
-      - name: Install SAM CLI
-        run: |
-          # Use pipx to avoid PEP 668 externally-managed-environment error
-          pipx install aws-sam-cli
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Install uv
-        run: |
-          # Use pipx to avoid PEP 668 externally-managed-environment error
-          pipx install uv
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
       - name: Install Python E2E dependencies
-        run: cd tests/e2e && ~/.local/bin/uv sync
+        run: cd tests/e2e && uv sync
 
       - name: Setup LocalStack S3 buckets
         run: |
