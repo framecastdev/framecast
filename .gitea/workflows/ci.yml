@@ -46,6 +46,7 @@ jobs:
       - name: Wait for PostgreSQL to be ready
         env:
           DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+        shell: bash
         run: |
           echo "Waiting for PostgreSQL to be fully initialized..."
           for i in {1..30}; do
