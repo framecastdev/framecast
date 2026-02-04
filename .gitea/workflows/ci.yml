@@ -43,6 +43,22 @@ jobs:
           SQLX_OFFLINE: "true"
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Wait for PostgreSQL to be ready
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+        run: |
+          echo "Waiting for PostgreSQL to be fully initialized..."
+          for i in {1..30}; do
+            if psql "$DATABASE_URL" -c "SELECT 1" >/dev/null 2>&1; then
+              echo "PostgreSQL is ready!"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+          echo "PostgreSQL failed to become ready"
+          exit 1
+
       - name: Run migrations
         env:
           DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
