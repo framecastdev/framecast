@@ -118,11 +118,12 @@ jobs:
         run: cd tests/e2e && uv sync
 
       - name: Setup LocalStack S3 buckets
+        shell: bash
         run: |
           # Wait for LocalStack to be fully ready
           echo "Waiting for LocalStack to be ready..."
           for i in {1..30}; do
-            if curl -s http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+            if curl -s http://localstack:4566/_localstack/health | grep -q '"s3": "available"'; then
               echo "LocalStack is ready!"
               break
             fi
@@ -131,24 +132,43 @@ jobs:
           done
 
           # Create S3 buckets
-          aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-outputs-dev || true
-          aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-assets-dev || true
+          aws --endpoint-url=http://localstack:4566 s3 mb s3://framecast-outputs-dev || true
+          aws --endpoint-url=http://localstack:4566 s3 mb s3://framecast-assets-dev || true
         env:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
           AWS_DEFAULT_REGION: us-east-1
 
+      - name: Wait for PostgreSQL to be ready
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+        shell: bash
+        run: |
+          echo "Waiting for PostgreSQL to be fully initialized..."
+          for i in {1..30}; do
+            if psql "$DATABASE_URL" -c "SELECT 1" >/dev/null 2>&1; then
+              echo "PostgreSQL is ready!"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+          echo "PostgreSQL failed to become ready"
+          exit 1
+
       - name: Run database migrations
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
         run: sqlx migrate run
 
       - name: Build SAM
         run: sam build --beta-features
 
       - name: Start SAM local
+        shell: bash
         run: |  # pragma: allowlist secret
           # Create env.json for CI (test credentials only)
+          # Note: SAM runs Lambda in Docker, so it needs host.docker.internal to reach services
           cat > env-ci.json << 'EOF'
           {
             "FramecastApiFunction": {
