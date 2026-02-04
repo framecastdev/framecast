@@ -14,9 +14,6 @@ jobs:
   ci:
     name: CI Pipeline
     runs-on: ubuntu-latest
-    container:
-      image: 192.168.68.77:3000/thiago/framecast-ci:latest
-      options: --network host
 
     steps:
       - name: Checkout
@@ -67,9 +64,6 @@ jobs:
   sam-tests:
     name: SAM Local Tests
     runs-on: ubuntu-latest
-    container:
-      image: 192.168.68.77:3000/thiago/framecast-ci:latest
-      options: --network host
     needs: [ci]  # Run after main CI passes
 
     steps:
