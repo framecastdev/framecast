@@ -64,3 +64,158 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
           TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
         run: cargo test --workspace
+
+  # ===========================================================================
+  # SAM LOCAL TESTS
+  # ===========================================================================
+  sam-tests:
+    name: SAM Local Tests
+    runs-on: ubuntu-latest
+    needs: [ci]  # Run after main CI passes
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
+          POSTGRES_DB: framecast_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      localstack:
+        image: localstack/localstack:latest
+        env:
+          SERVICES: s3,ses,lambda,apigateway
+          DEBUG: 0
+          PERSISTENCE: 0
+        ports:
+          - 4566:4566
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install just
+        run: cargo install just
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: Install cargo-lambda
+        run: cargo install cargo-lambda
+
+      - name: Install SAM CLI
+        run: pip install aws-sam-cli
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install Python E2E dependencies
+        run: cd tests/e2e && uv sync
+
+      - name: Setup LocalStack S3 buckets
+        run: |
+          # Wait for LocalStack to be fully ready
+          echo "Waiting for LocalStack to be ready..."
+          for i in {1..30}; do
+            if curl -s http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+              echo "LocalStack is ready!"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+
+          # Create S3 buckets
+          aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-outputs-dev || true
+          aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-assets-dev || true
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
+        run: sqlx migrate run
+
+      - name: Build SAM
+        run: sam build --beta-features
+
+      - name: Start SAM local
+        run: |  # pragma: allowlist secret
+          # Create env.json for CI (test credentials only)
+          cat > env-ci.json << 'EOF'
+          {
+            "FramecastApiFunction": {
+              "DATABASE_URL": "postgresql://postgres:postgres@host.docker.internal:5432/framecast_test",
+              "JWT_SECRET": "ci-test-jwt-secret-do-not-use-in-production",
+              "S3_BUCKET_OUTPUTS": "framecast-outputs-dev",
+              "S3_BUCKET_ASSETS": "framecast-assets-dev",
+              "AWS_ENDPOINT_URL": "http://host.docker.internal:4566",
+              "RUST_LOG": "debug,sqlx=warn",
+              "ENVIRONMENT": "test"
+            }
+          }
+          EOF
+
+          # Start SAM local in background
+          echo "Starting SAM local..."
+          nohup sam local start-api \
+            --host 0.0.0.0 \
+            --port 3001 \
+            --env-vars env-ci.json \
+            --warm-containers EAGER \
+            > /tmp/sam-local.log 2>&1 &
+
+          # Wait for SAM local to be ready (with longer timeout for cold start)
+          echo "Waiting for SAM local to be ready..."
+          for i in {1..30}; do
+            if curl -s http://localhost:3001/health >/dev/null 2>&1; then
+              echo "SAM local is ready!"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 4
+          done
+
+          echo "SAM local failed to start. Logs:"
+          cat /tmp/sam-local.log
+          exit 1
+
+      - name: Run SAM Rust integration tests
+        env:
+          SAM_LOCAL_API_URL: http://localhost:3001
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
+        run: cargo test --test sam_local_test -- --nocapture
+
+      - name: Run SAM E2E tests
+        env:
+          TEST_USE_SAM_LOCAL: "true"
+          TEST_SAM_API_URL: http://localhost:3001
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
+        run: cd tests/e2e && uv run pytest tests/test_sam_e2e.py -v --tb=short
+
+      - name: Upload SAM logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sam-local-logs
+          path: /tmp/sam-local.log
+          retention-days: 7

@@ -26,13 +26,31 @@ from utils.localstack_email import LocalStackEmailClient
 
 # Test environment configuration
 class E2EConfig(BaseSettings):
-    """Configuration for E2E tests loaded from environment variables."""
+    """Configuration for E2E tests loaded from environment variables.
+
+    Supports SAM local testing via USE_SAM_LOCAL=true environment variable.
+    When enabled, tests will target the SAM local API at http://localhost:3001
+    instead of the local development server at http://localhost:3000.
+    """
 
     # Test mode: "mocked" or "real"
     test_mode: str = "mocked"
 
-    # API base URL
-    api_base_url: str = "http://localhost:3000"
+    # API base URL (for local development server)
+    local_api_url: str = "http://localhost:3000"
+
+    # SAM Local settings
+    sam_api_url: str = "http://localhost:3001"
+    use_sam_local: bool = False
+
+    @property
+    def api_base_url(self) -> str:
+        """Return the appropriate API URL based on configuration.
+
+        When USE_SAM_LOCAL=true, returns SAM local URL (port 3001).
+        Otherwise, returns local development server URL (port 3000).
+        """
+        return self.sam_api_url if self.use_sam_local else self.local_api_url
 
     # Database settings
     database_url: str = "postgresql://postgres:password@localhost:5432/framecast_test"  # pragma: allowlist secret

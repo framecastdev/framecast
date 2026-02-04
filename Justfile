@@ -473,6 +473,108 @@ sam-outputs env="dev":
     @echo "📊 Stack outputs for framecast-api-{{env}}:"
     aws cloudformation describe-stacks --stack-name framecast-api-{{env}} --query 'Stacks[0].Outputs' --output table
 
+# ============================================================================
+# SAM LOCAL TESTING
+# ============================================================================
+
+# Build and start SAM local API in background for testing
+sam-local-start:
+    @echo "🚀 Starting SAM local API for testing..."
+    @echo "📋 Prerequisites: Docker, LocalStack, PostgreSQL"
+    just start-backing-services
+    just sam-build
+    @echo "⏳ Starting SAM local in background..."
+    @nohup sam local start-api --config-env dev > /tmp/sam-local.log 2>&1 &
+    @echo "⏳ Waiting for SAM local to be ready..."
+    @for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
+        if curl -s http://localhost:3001/health >/dev/null 2>&1; then \
+            echo "✅ SAM local is ready on port 3001"; \
+            exit 0; \
+        fi; \
+        echo "  Waiting... ($$i/15)"; \
+        sleep 4; \
+    done; \
+    echo "❌ SAM local failed to start within 60 seconds"; \
+    echo "📋 Last 50 lines of log:"; \
+    tail -50 /tmp/sam-local.log; \
+    exit 1
+
+# Stop SAM local API
+sam-local-stop:
+    @echo "🛑 Stopping SAM local..."
+    @pkill -f "sam local start-api" 2>/dev/null || true
+    @sleep 2
+    @echo "✅ SAM local stopped"
+
+# Check if SAM local is running
+sam-local-status:
+    @echo "🔍 Checking SAM local status..."
+    @if curl -s http://localhost:3001/health >/dev/null 2>&1; then \
+        echo "✅ SAM local is running on port 3001"; \
+    else \
+        echo "❌ SAM local is not running"; \
+    fi
+
+# View SAM local logs
+sam-local-logs:
+    @echo "📋 SAM local logs:"
+    @if [ -f /tmp/sam-local.log ]; then \
+        tail -100 /tmp/sam-local.log; \
+    else \
+        echo "No log file found at /tmp/sam-local.log"; \
+    fi
+
+# Run E2E tests against SAM local
+test-e2e-sam:
+    @echo "🧪 Running E2E tests against SAM local..."
+    @echo "📋 Make sure SAM local is running: just sam-local-start"
+    @if ! curl -s http://localhost:3001/health >/dev/null 2>&1; then \
+        echo "❌ SAM local is not running. Run 'just sam-local-start' first."; \
+        exit 1; \
+    fi
+    cd tests/e2e && TEST_USE_SAM_LOCAL=true uv run pytest tests/test_sam_e2e.py -v --tb=short
+
+# Run Rust integration tests for SAM local
+test-integration-sam:
+    @echo "🧪 Running Rust SAM local integration tests..."
+    @echo "📋 Make sure SAM local is running: just sam-local-start"
+    @if ! curl -s http://localhost:3001/health >/dev/null 2>&1; then \
+        echo "❌ SAM local is not running. Run 'just sam-local-start' first."; \
+        exit 1; \
+    fi
+    SAM_LOCAL_API_URL=http://localhost:3001 cargo test --test sam_local_test -- --nocapture
+
+# Full SAM test suite (start, test, stop)
+test-sam-full:
+    @echo "🧪 Running full SAM test suite..."
+    @echo ""
+    @echo "Phase 1: Starting SAM local..."
+    just sam-local-start
+    @echo ""
+    @echo "Phase 2: Running Rust integration tests..."
+    just test-integration-sam || (just sam-local-stop && exit 1)
+    @echo ""
+    @echo "Phase 3: Running Python E2E tests..."
+    just test-e2e-sam || (just sam-local-stop && exit 1)
+    @echo ""
+    @echo "Phase 4: Cleaning up..."
+    just sam-local-stop
+    @echo ""
+    @echo "✅ Full SAM test suite completed successfully!"
+
+# Quick SAM test (assumes SAM local is already running)
+test-sam-quick:
+    @echo "🧪 Running quick SAM tests (SAM local must be running)..."
+    @if ! curl -s http://localhost:3001/health >/dev/null 2>&1; then \
+        echo "❌ SAM local is not running. Run 'just sam-local-start' first."; \
+        exit 1; \
+    fi
+    @echo "Running Rust tests..."
+    SAM_LOCAL_API_URL=http://localhost:3001 cargo test --test sam_local_test -- --nocapture
+    @echo "Running Python tests..."
+    cd tests/e2e && TEST_USE_SAM_LOCAL=true uv run pytest tests/test_sam_e2e.py -v --tb=short
+    @echo "✅ Quick SAM tests completed!"
+
 # Create release artifacts with version tag
 release version:
     @echo "🚀 Creating release {{version}}..."
