@@ -121,13 +121,19 @@ jobs:
         run: cargo install cargo-lambda
 
       - name: Install SAM CLI
-        run: pip install aws-sam-cli
+        run: |
+          # Use pipx to avoid PEP 668 externally-managed-environment error
+          pipx install aws-sam-cli
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install uv
-        run: pip install uv
+        run: |
+          # Use pipx to avoid PEP 668 externally-managed-environment error
+          pipx install uv
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Python E2E dependencies
-        run: cd tests/e2e && uv sync
+        run: cd tests/e2e && ~/.local/bin/uv sync
 
       - name: Setup LocalStack S3 buckets
         run: |
