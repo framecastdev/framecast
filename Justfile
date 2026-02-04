@@ -586,23 +586,31 @@ release version:
 # CI BASE IMAGE
 # ============================================================================
 
-# Build CI base image (contains all tools pre-installed)
+# Build CI base image for amd64 (contains all tools pre-installed)
 ci-image-build:
-    @echo "🐳 Building CI base image..."
-    docker build -t 192.168.68.77:3000/thiago/framecast-ci:latest -f infra/ci/Dockerfile .
+    @echo "🐳 Building CI base image for linux/amd64..."
+    docker buildx build --platform linux/amd64 \
+        -t 192.168.68.77:3000/thiago/framecast-ci:latest \
+        -f infra/ci/Dockerfile \
+        --load .
     @echo "✅ CI image built: 192.168.68.77:3000/thiago/framecast-ci:latest"
 
 # Push CI base image to Gitea registry
-ci-image-push: ci-image-build
-    @echo "📤 Pushing CI image to registry..."
-    docker push 192.168.68.77:3000/thiago/framecast-ci:latest
+ci-image-push:
+    @echo "🐳 Building and pushing CI base image for linux/amd64..."
+    docker buildx build --platform linux/amd64 \
+        -t 192.168.68.77:3000/thiago/framecast-ci:latest \
+        -f infra/ci/Dockerfile \
+        --push .
     @echo "✅ CI image pushed to 192.168.68.77:3000/thiago/framecast-ci:latest"
 
 # Build and push CI image with a specific tag
 ci-image-release tag:
-    @echo "🐳 Building CI image with tag: {{tag}}..."
-    docker build -t 192.168.68.77:3000/thiago/framecast-ci:{{tag}} -f infra/ci/Dockerfile .
-    docker push 192.168.68.77:3000/thiago/framecast-ci:{{tag}}
+    @echo "🐳 Building and pushing CI image with tag: {{tag}}..."
+    docker buildx build --platform linux/amd64 \
+        -t 192.168.68.77:3000/thiago/framecast-ci:{{tag}} \
+        -f infra/ci/Dockerfile \
+        --push .
     @echo "✅ CI image pushed: 192.168.68.77:3000/thiago/framecast-ci:{{tag}}"
 
 # ============================================================================
