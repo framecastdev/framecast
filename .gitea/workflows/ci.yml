@@ -16,24 +16,31 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: 192.168.68.77:3000/thiago/framecast-ci:latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
-          POSTGRES_DB: framecast_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      options: --network host
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Start PostgreSQL
+        shell: bash
+        run: |
+          docker run -d --name postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=framecast_test \
+            -p 5432:5432 \
+            postgres:16-alpine
+
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if docker exec postgres pg_isready -U postgres; then
+              echo "PostgreSQL is ready!"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -43,32 +50,15 @@ jobs:
           SQLX_OFFLINE: "true"
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Wait for PostgreSQL to be ready
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-        shell: bash
-        run: |
-          echo "Waiting for PostgreSQL to be fully initialized..."
-          for i in {1..30}; do
-            if psql "$DATABASE_URL" -c "SELECT 1" >/dev/null 2>&1; then
-              echo "PostgreSQL is ready!"
-              exit 0
-            fi
-            echo "Waiting... ($i/30)"
-            sleep 2
-          done
-          echo "PostgreSQL failed to become ready"
-          exit 1
-
       - name: Run migrations
         env:
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
         run: sqlx migrate run
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-          TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
         run: cargo test --workspace
 
   # ===========================================================================
@@ -79,51 +69,46 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: 192.168.68.77:3000/thiago/framecast-ci:latest
+      options: --network host
     needs: [ci]  # Run after main CI passes
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
-          POSTGRES_DB: framecast_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      localstack:
-        image: localstack/localstack:latest
-        env:
-          SERVICES: s3,ses,lambda,apigateway
-          DEBUG: 0
-          PERSISTENCE: 0
-        ports:
-          - 4566:4566
-        options: >-
-          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-          --health-start-period 30s
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Python E2E dependencies
-        run: cd tests/e2e && uv sync
-
-      - name: Setup LocalStack S3 buckets
+      - name: Start PostgreSQL
         shell: bash
         run: |
-          # Wait for LocalStack to be fully ready
+          docker run -d --name postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=framecast_test \
+            -p 5432:5432 \
+            postgres:16-alpine
+
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if docker exec postgres pg_isready -U postgres; then
+              echo "PostgreSQL is ready!"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+
+      - name: Start LocalStack
+        shell: bash
+        run: |
+          docker run -d --name localstack \
+            -e SERVICES=s3,ses,lambda,apigateway \
+            -e DEBUG=0 \
+            -e PERSISTENCE=0 \
+            -p 4566:4566 \
+            localstack/localstack:latest
+
           echo "Waiting for LocalStack to be ready..."
           for i in {1..30}; do
-            if curl -s http://localstack:4566/_localstack/health | grep -q '"s3": "available"'; then
+            if curl -s http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
               echo "LocalStack is ready!"
               break
             fi
@@ -131,34 +116,23 @@ jobs:
             sleep 2
           done
 
+      - name: Install Python E2E dependencies
+        run: cd tests/e2e && uv sync
+
+      - name: Setup LocalStack S3 buckets
+        shell: bash
+        run: |
           # Create S3 buckets
-          aws --endpoint-url=http://localstack:4566 s3 mb s3://framecast-outputs-dev || true
-          aws --endpoint-url=http://localstack:4566 s3 mb s3://framecast-assets-dev || true
+          aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-outputs-dev || true
+          aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-assets-dev || true
         env:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
           AWS_DEFAULT_REGION: us-east-1
 
-      - name: Wait for PostgreSQL to be ready
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-        shell: bash
-        run: |
-          echo "Waiting for PostgreSQL to be fully initialized..."
-          for i in {1..30}; do
-            if psql "$DATABASE_URL" -c "SELECT 1" >/dev/null 2>&1; then
-              echo "PostgreSQL is ready!"
-              exit 0
-            fi
-            echo "Waiting... ($i/30)"
-            sleep 2
-          done
-          echo "PostgreSQL failed to become ready"
-          exit 1
-
       - name: Run database migrations
         env:
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
         run: sqlx migrate run
 
       - name: Build SAM
