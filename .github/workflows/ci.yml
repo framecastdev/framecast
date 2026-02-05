@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,9 +19,6 @@ jobs:
     runs-on: self-hosted
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
 
     services:
       postgres:
@@ -66,9 +62,6 @@ jobs:
     needs: [ci]
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
 
     services:
       postgres:
