@@ -86,6 +86,9 @@ module "s3" {
   outputs_expiration_days = var.outputs_expiration_days
   tags                    = local.common_tags
 
+  # LocalStack configuration
+  localstack_enabled = var.localstack_enabled
+
   # Disable versioning for LocalStack (not fully supported)
   versioning_enabled = !var.localstack_enabled
 }

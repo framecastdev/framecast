@@ -29,12 +29,25 @@ variable "versioning_enabled" {
   default     = true
 }
 
-# Get AWS account ID for unique bucket names
-data "aws_caller_identity" "current" {}
+variable "localstack_enabled" {
+  description = "Whether deploying to LocalStack (skips AWS-specific features)"
+  type        = bool
+  default     = false
+}
+
+# Get AWS account ID for unique bucket names (only for real AWS)
+data "aws_caller_identity" "current" {
+  count = var.localstack_enabled ? 0 : 1
+}
+
+locals {
+  # For LocalStack, use simple bucket names; for AWS, include account ID for uniqueness
+  bucket_suffix = var.localstack_enabled ? "" : "-${data.aws_caller_identity.current[0].account_id}"
+}
 
 # Outputs Bucket - for generated videos
 resource "aws_s3_bucket" "outputs" {
-  bucket = "${var.name_prefix}-outputs-${data.aws_caller_identity.current.account_id}"
+  bucket = "${var.name_prefix}-outputs${local.bucket_suffix}"
 
   tags = var.tags
 }
@@ -56,11 +69,16 @@ resource "aws_s3_bucket_versioning" "outputs" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "outputs" {
+  count  = var.localstack_enabled ? 0 : 1
   bucket = aws_s3_bucket.outputs.id
 
   rule {
     id     = "cleanup-old-outputs"
     status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
 
     expiration {
       days = var.outputs_expiration_days
@@ -74,7 +92,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "outputs" {
 
 # Assets Bucket - for user uploads
 resource "aws_s3_bucket" "assets" {
-  bucket = "${var.name_prefix}-assets-${data.aws_caller_identity.current.account_id}"
+  bucket = "${var.name_prefix}-assets${local.bucket_suffix}"
 
   tags = var.tags
 }

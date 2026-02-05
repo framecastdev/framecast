@@ -199,10 +199,11 @@ jobs:
         run: |
           cd infra/opentofu
           tofu init -reconfigure
-          TF_VAR_database_url="postgresql://postgres:postgres@postgres:5432/framecast_test" \
-          TF_VAR_jwt_secret="ci-test-jwt-secret" \
-          TF_VAR_localstack_endpoint="http://localstack:4566" \
-          tofu apply -var-file=environments/localstack.tfvars -auto-approve
+          tofu apply -var-file=environments/localstack.tfvars \
+            -var="localstack_endpoint=http://localstack:4566" \
+            -var="database_url=postgresql://postgres:postgres@postgres:5432/framecast_test" \
+            -var="jwt_secret=ci-test-jwt-secret" \
+            -auto-approve
 
       - name: Get API endpoint
         id: get-endpoint
