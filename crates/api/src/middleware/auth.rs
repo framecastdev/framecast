@@ -4,7 +4,6 @@
 //! and context extraction for protected endpoints.
 
 use axum::{
-    async_trait,
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, request::Parts, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
@@ -126,7 +125,6 @@ pub struct AppState {
 #[derive(Debug)]
 pub struct AuthUser(pub AuthContext);
 
-#[async_trait]
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = AuthError;
 
@@ -177,7 +175,6 @@ impl FromRequestParts<AppState> for AuthUser {
 #[derive(Debug)]
 pub struct ApiKeyUser(pub AuthContext);
 
-#[async_trait]
 impl FromRequestParts<AppState> for ApiKeyUser {
     type Rejection = AuthError;
 

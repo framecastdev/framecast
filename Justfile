@@ -318,6 +318,45 @@ test-performance:
     cd tests/e2e && uv run pytest tests/test_performance.py -v
 
 # ============================================================================
+# CI PIPELINE (GitHub Actions)
+# ============================================================================
+
+# Run CI pipeline (formatting, linting, tests) - used by GitHub Actions
+ci: fmt-check ci-clippy ci-test
+    @echo "✅ CI pipeline passed"
+
+# Run clippy in CI mode (with SQLX_OFFLINE)
+ci-clippy:
+    @echo "📎 Running Clippy linter (CI mode)..."
+    SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings
+
+# Run tests in CI mode
+ci-test:
+    @echo "🧪 Running tests (CI mode)..."
+    cargo test --workspace
+
+# Run migrations in CI mode (requires DATABASE_URL)
+ci-migrate:
+    @echo "🗃️ Running migrations (CI mode)..."
+    sqlx migrate run
+
+# Run SAM Rust integration tests (CI mode)
+ci-sam-integration-test:
+    @echo "🧪 Running SAM Rust integration tests (CI mode)..."
+    cargo test --test sam_local_test -- --nocapture
+
+# Run SAM E2E tests (CI mode)
+ci-sam-e2e-test:
+    @echo "🧪 Running SAM E2E tests (CI mode)..."
+    cd tests/e2e && uv run pytest tests/test_sam_e2e.py -v --tb=short
+
+# Setup LocalStack S3 buckets for CI
+ci-setup-localstack endpoint="http://localstack:4566":
+    @echo "🪣 Setting up LocalStack S3 buckets (CI mode)..."
+    aws --endpoint-url={{endpoint}} s3 mb s3://framecast-outputs-dev || true
+    aws --endpoint-url={{endpoint}} s3 mb s3://framecast-assets-dev || true
+
+# ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)
 # ============================================================================
 

@@ -28,13 +28,18 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Zig (required by cargo-lambda for cross-compilation)
+RUN npm install -g @ziglang/cli
+
 # Ensure pipx bin is in PATH
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Install Rust toolchain
+# Install Rust toolchain to a shared location (works for any user)
+ENV RUSTUP_HOME=/opt/rust/rustup
+ENV CARGO_HOME=/opt/rust/cargo
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     --default-toolchain stable
-ENV PATH="/root/.cargo/bin:${PATH}"
+ENV PATH="/opt/rust/cargo/bin:${PATH}"
 
 # Add Rust components
 RUN rustup component add rustfmt clippy
@@ -56,7 +61,8 @@ RUN just --version && \
     sqlx --version && \
     cargo lambda --version && \
     sam --version && \
-    uv --version
+    uv --version && \
+    zig version
 
 # Set working directory
 WORKDIR /workspace

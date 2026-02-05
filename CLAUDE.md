@@ -37,6 +37,8 @@ If a Just target doesn't exist: **CREATE IT FIRST**, then run `just <task>`.
 **YOU MUST** brainstorm test cases BEFORE writing implementation code.
 Cover: happy path, edge cases, error conditions, invariants.
 
+**Reference:** See `TEST_STRATEGY.md` for comprehensive test planning examples.
+
 ### Rule 3: No .unwrap() in Production
 
 **NEVER** use `.unwrap()` or `.expect()` in production Rust code.
@@ -165,7 +167,6 @@ just check        # Run all quality checks (fmt, clippy, tests, pre-commit)
 # Running specific tests
 just test domain              # Test specific crate
 just test "job"               # Test matching pattern
-cargo test -p framecast-domain test_job_status  # Single test (when Just insufficient)
 
 # E2E tests (Python)
 just test-e2e-mocked          # Fast E2E tests (CI-friendly)
@@ -183,6 +184,24 @@ just fmt                      # Format all code
 just clippy                   # Run linter
 just fix                      # Auto-fix linting issues
 ```
+
+---
+
+## Local Development Services
+
+`just dev` starts:
+
+| Service     | Port  | Purpose                    |
+|-------------|-------|----------------------------|
+| API         | 3000  | Framecast API server       |
+| PostgreSQL  | 5432  | Database                   |
+| LocalStack  | 4566  | AWS S3/Lambda emulation    |
+| Inngest     | 8288  | Job orchestration UI       |
+
+Additional commands:
+- `just health-check` - Verify all services are running
+- `just logs` - View aggregated service logs
+- `just stop` - Stop all services
 
 ---
 
@@ -253,6 +272,7 @@ framecast/
 │   ├── api/                # Lambda handlers (VI, VII)
 │   ├── domain/             # Business logic
 │   ├── db/                 # Database layer (IV)
+│   ├── email/              # AWS SES email service (IV)
 │   ├── inngest/            # Job orchestration (IV)
 │   ├── comfyui/            # RunPod client (IV)
 │   └── common/             # Shared utilities
