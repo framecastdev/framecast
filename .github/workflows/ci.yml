@@ -12,6 +12,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Rust toolchain location in CI image
+  RUSTUP_HOME: /opt/rust/rustup
+  CARGO_HOME: /opt/rust/cargo
 
 jobs:
   ci:
@@ -33,28 +36,25 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+      TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: just fmt-check
 
       - name: Run clippy
-        env:
-          SQLX_OFFLINE: "true"
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: just ci-clippy
 
       - name: Run migrations
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-        run: sqlx migrate run
+        run: just ci-migrate
 
       - name: Run tests
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-          TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-        run: cargo test --workspace
+        run: just ci-test
 
   sam-tests:
     name: SAM Local Tests
@@ -89,29 +89,28 @@ jobs:
           --health-retries 10
           --health-start-period 30s
 
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+      TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
+      AWS_DEFAULT_REGION: us-east-1
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Python E2E dependencies
-        run: cd tests/e2e && uv sync
+        run: just install-python-deps
 
       - name: Setup LocalStack S3 buckets
-        run: |
-          aws --endpoint-url=http://localstack:4566 s3 mb s3://framecast-outputs-dev || true
-          aws --endpoint-url=http://localstack:4566 s3 mb s3://framecast-assets-dev || true
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
-          AWS_DEFAULT_REGION: us-east-1
+        run: just ci-setup-localstack
 
       - name: Run database migrations
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-        run: sqlx migrate run
+        run: just ci-migrate
 
       - name: Build SAM
-        run: sam build --beta-features
+        run: just sam-build
 
       - name: Start SAM local
         run: |  # pragma: allowlist secret
@@ -156,15 +155,13 @@ jobs:
       - name: Run SAM Rust integration tests
         env:
           SAM_LOCAL_API_URL: http://localhost:3001
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-        run: cargo test --test sam_local_test -- --nocapture
+        run: just ci-sam-integration-test
 
       - name: Run SAM E2E tests
         env:
           TEST_USE_SAM_LOCAL: "true"
           TEST_SAM_API_URL: http://localhost:3001
-          TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-        run: cd tests/e2e && uv run pytest tests/test_sam_e2e.py -v --tb=short
+        run: just ci-sam-e2e-test
 
       - name: Upload SAM logs on failure
         if: failure()

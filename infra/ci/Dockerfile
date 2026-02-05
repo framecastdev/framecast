@@ -31,10 +31,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Ensure pipx bin is in PATH
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Install Rust toolchain
+# Install Rust toolchain to a shared location (works for any user)
+ENV RUSTUP_HOME=/opt/rust/rustup
+ENV CARGO_HOME=/opt/rust/cargo
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     --default-toolchain stable
-ENV PATH="/root/.cargo/bin:${PATH}"
+ENV PATH="/opt/rust/cargo/bin:${PATH}"
 
 # Add Rust components
 RUN rustup component add rustfmt clippy
