@@ -144,7 +144,7 @@ jobs:
         run: just sam-build
 
       - name: Pre-pull SAM Lambda emulation image
-        run: docker pull public.ecr.aws/lambda/provided:al2023
+        run: docker pull public.ecr.aws/sam/emulation-provided.al2
 
       - name: Start SAM local
         run: |  # pragma: allowlist secret
