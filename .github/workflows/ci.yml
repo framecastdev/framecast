@@ -14,6 +14,8 @@ jobs:
   ci:
     name: CI Pipeline
     runs-on: self-hosted
+    container:
+      image: ghcr.io/framecastdev/framecast-ci:latest
 
     services:
       postgres:
@@ -22,8 +24,6 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
           POSTGRES_DB: framecast_test
-        ports:
-          - 5433:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -44,19 +44,21 @@ jobs:
 
       - name: Run migrations
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/framecast_test  # pragma: allowlist secret
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
         run: sqlx migrate run
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/framecast_test  # pragma: allowlist secret
-          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/framecast_test  # pragma: allowlist secret
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+          TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
         run: cargo test --workspace
 
   sam-tests:
     name: SAM Local Tests
     runs-on: self-hosted
     needs: [ci]
+    container:
+      image: ghcr.io/framecastdev/framecast-ci:latest
 
     services:
       postgres:
@@ -65,8 +67,6 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
           POSTGRES_DB: framecast_test
-        ports:
-          - 5433:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -79,8 +79,6 @@ jobs:
           SERVICES: s3,ses,lambda,apigateway
           DEBUG: "0"
           PERSISTENCE: "0"
-        ports:
-          - 4567:4566
         options: >-
           --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
           --health-interval 10s
@@ -97,8 +95,8 @@ jobs:
 
       - name: Setup LocalStack S3 buckets
         run: |
-          aws --endpoint-url=http://localhost:4567 s3 mb s3://framecast-outputs-dev || true
-          aws --endpoint-url=http://localhost:4567 s3 mb s3://framecast-assets-dev || true
+          aws --endpoint-url=http://localstack:4566 s3 mb s3://framecast-outputs-dev || true
+          aws --endpoint-url=http://localstack:4566 s3 mb s3://framecast-assets-dev || true
         env:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
@@ -106,7 +104,7 @@ jobs:
 
       - name: Run database migrations
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/framecast_test  # pragma: allowlist secret
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
         run: sqlx migrate run
 
       - name: Build SAM
@@ -114,26 +112,33 @@ jobs:
 
       - name: Start SAM local
         run: |  # pragma: allowlist secret
+          # Get the GitHub Actions job container network
+          NETWORK_ID=$(docker network ls --filter name=github_network -q | head -1)
+          if [ -z "$NETWORK_ID" ]; then
+            # Fallback: find network that the job container is attached to
+            NETWORK_ID=$(docker inspect $(hostname) --format '{{range .NetworkSettings.Networks}}{{.NetworkID}}{{end}}' 2>/dev/null | head -c 12 || echo "")
+          fi
+
           cat > env-ci.json << 'EOF'
           {
             "FramecastApiFunction": {
-              "DATABASE_URL": "postgresql://postgres:postgres@host.docker.internal:5433/framecast_test",
+              "DATABASE_URL": "postgresql://postgres:postgres@postgres:5432/framecast_test",
               "JWT_SECRET": "ci-test-jwt-secret-do-not-use-in-production",
               "S3_BUCKET_OUTPUTS": "framecast-outputs-dev",
               "S3_BUCKET_ASSETS": "framecast-assets-dev",
-              "AWS_ENDPOINT_URL": "http://host.docker.internal:4567",
+              "AWS_ENDPOINT_URL": "http://localstack:4566",
               "RUST_LOG": "debug,sqlx=warn",
               "ENVIRONMENT": "test"
             }
           }
           EOF
 
-          nohup sam local start-api \
-            --host 0.0.0.0 \
-            --port 3001 \
-            --env-vars env-ci.json \
-            --warm-containers EAGER \
-            > /tmp/sam-local.log 2>&1 &
+          SAM_ARGS="--host 0.0.0.0 --port 3001 --env-vars env-ci.json --warm-containers EAGER"
+          if [ -n "$NETWORK_ID" ]; then
+            SAM_ARGS="$SAM_ARGS --docker-network $NETWORK_ID"
+          fi
+
+          nohup sam local start-api $SAM_ARGS > /tmp/sam-local.log 2>&1 &
 
           for i in {1..30}; do
             if curl -s http://localhost:3001/health >/dev/null 2>&1; then
@@ -148,14 +153,14 @@ jobs:
       - name: Run SAM Rust integration tests
         env:
           SAM_LOCAL_API_URL: http://localhost:3001
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/framecast_test  # pragma: allowlist secret
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
         run: cargo test --test sam_local_test -- --nocapture
 
       - name: Run SAM E2E tests
         env:
           TEST_USE_SAM_LOCAL: "true"
           TEST_SAM_API_URL: http://localhost:3001
-          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/framecast_test  # pragma: allowlist secret
+          TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
         run: cd tests/e2e && uv run pytest tests/test_sam_e2e.py -v --tb=short
 
       - name: Upload SAM logs on failure
