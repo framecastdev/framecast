@@ -138,108 +138,70 @@ jobs:
     name: LocalStack Integration
     runs-on: self-hosted
     needs: [pull-image, ci, build-lambda]
-    # Run directly on self-hosted runner (not in container) to access Docker socket
+    container:
+      image: ghcr.io/framecastdev/framecast-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
+          POSTGRES_DB: framecast_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      localstack:
+        image: localstack/localstack:latest
+        env:
+          SERVICES: s3,lambda,iam,logs
+          DEBUG: "0"
+          DOCKER_HOST: unix:///var/run/docker.sock
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+          -v /var/run/docker.sock:/var/run/docker.sock
+
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/framecast_test  # pragma: allowlist secret
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
       AWS_DEFAULT_REGION: us-east-1
-      RUSTUP_HOME: /opt/rust/rustup
-      CARGO_HOME: /opt/rust/cargo
-      PATH: /opt/rust/cargo/bin:/usr/local/bin:/usr/bin:/bin
 
     steps:
-      - name: Fix workspace permissions
-        run: |
-          # Previous container-based jobs may have created files as root
-          sudo chown -R $(whoami):$(id -gn) $GITHUB_WORKSPACE || true
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Start services with Docker Compose
-        run: |
-          # Create a docker-compose for CI services with Docker socket mounted
-          cat > docker-compose.ci.yml << 'EOF'
-          services:
-            postgres:
-              image: postgres:16-alpine
-              ports:
-                - "5433:5432"
-              environment:
-                POSTGRES_USER: postgres
-                POSTGRES_PASSWORD: postgres
-                POSTGRES_DB: framecast_test
-              healthcheck:
-                test: pg_isready -U postgres
-                interval: 5s
-                timeout: 5s
-                retries: 10
-
-            localstack:
-              image: localstack/localstack:latest
-              ports:
-                - "4566:4566"
-              environment:
-                SERVICES: s3,lambda,iam,logs
-                DEBUG: "0"
-                DOCKER_HOST: unix:///var/run/docker.sock
-              volumes:
-                - /var/run/docker.sock:/var/run/docker.sock
-              healthcheck:
-                test: curl -f http://localhost:4566/_localstack/health || exit 1
-                interval: 10s
-                timeout: 5s
-                retries: 10
-                start_period: 30s
-          EOF
-
-          docker compose -f docker-compose.ci.yml up -d
-          echo "Waiting for services to be healthy..."
-          sleep 30
-
-          # Wait for LocalStack to be ready
-          for i in {1..30}; do
-            if curl -sf http://localhost:4566/_localstack/health >/dev/null 2>&1; then
-              echo "LocalStack is ready!"
-              break
-            fi
-            echo "Waiting for LocalStack... attempt $i"
-            sleep 5
-          done
-
-          # Wait for PostgreSQL to be ready
-          for i in {1..20}; do
-            if docker compose -f docker-compose.ci.yml exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
-              echo "PostgreSQL is ready!"
-              break
-            fi
-            echo "Waiting for PostgreSQL... attempt $i"
-            sleep 3
-          done
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci"
 
       - name: Build Lambda
-        run: |
-          export PATH="/opt/rust/cargo/bin:$PATH"
-          SQLX_OFFLINE=true cargo lambda build --release --bin lambda --output-format zip
+        run: just lambda-build
 
       - name: Setup LocalStack S3 buckets
-        run: |
-          aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-outputs-dev || true
-          aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-assets-dev || true
+        run: just ci-setup-localstack endpoint="http://localstack:4566"
 
       - name: Run database migrations
-        run: |
-          export PATH="/opt/rust/cargo/bin:$PATH"
-          sqlx migrate run --database-url "postgresql://postgres:postgres@localhost:5433/framecast_test"
+        run: just ci-migrate
 
       - name: Deploy to LocalStack
         run: |
           cd infra/opentofu
           tofu init -reconfigure
           tofu apply -var-file=environments/localstack.tfvars \
-            -var="localstack_endpoint=http://localhost:4566" \
-            -var="database_url=postgresql://postgres:postgres@localhost:5433/framecast_test" \
+            -var="localstack_endpoint=http://localstack:4566" \
+            -var="database_url=postgresql://postgres:postgres@postgres:5432/framecast_test" \
             -var="jwt_secret=ci-test-jwt-secret" \
             -auto-approve
 
@@ -270,7 +232,7 @@ jobs:
           # Invoke Lambda and check response
           for i in {1..15}; do
             echo "Attempt $i: Invoking Lambda..."
-            RESPONSE=$(aws --endpoint-url=http://localhost:4566 lambda invoke \
+            RESPONSE=$(aws --endpoint-url=http://localstack:4566 lambda invoke \
               --function-name framecast-dev-api \
               --payload file:///tmp/event.json \
               /tmp/response.json 2>&1 || echo "INVOKE_FAILED")
@@ -292,10 +254,4 @@ jobs:
           done
 
           echo "Lambda health check failed"
-          docker compose -f docker-compose.ci.yml logs localstack
           exit 1
-
-      - name: Cleanup
-        if: always()
-        run: |
-          docker compose -f docker-compose.ci.yml down -v || true
