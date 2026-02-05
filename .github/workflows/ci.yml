@@ -26,7 +26,9 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Pull latest CI image
-        run: docker pull ghcr.io/framecastdev/framecast-ci:latest
+        run: |
+          docker rmi ghcr.io/framecastdev/framecast-ci:latest || true
+          docker pull ghcr.io/framecastdev/framecast-ci:latest
 
   ci:
     name: CI Pipeline
