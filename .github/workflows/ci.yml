@@ -13,31 +13,26 @@ env:
 jobs:
   ci:
     name: CI Pipeline
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
+          POSTGRES_DB: framecast_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Start PostgreSQL
-        shell: bash
-        run: |
-          docker run -d --name postgres \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=postgres \
-            -e POSTGRES_DB=framecast_test \
-            -p 5432:5432 \
-            postgres:16-alpine
-
-          echo "Waiting for PostgreSQL to be ready..."
-          for i in {1..30}; do
-            if docker exec postgres pg_isready -U postgres; then
-              echo "PostgreSQL is ready!"
-              break
-            fi
-            echo "Waiting... ($i/30)"
-            sleep 2
-          done
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -58,65 +53,50 @@ jobs:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
         run: cargo test --workspace
 
-  # ===========================================================================
-  # SAM LOCAL TESTS
-  # ===========================================================================
   sam-tests:
     name: SAM Local Tests
-    runs-on: ubuntu-latest
-    needs: [ci]  # Run after main CI passes
+    runs-on: self-hosted
+    needs: [ci]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
+          POSTGRES_DB: framecast_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      localstack:
+        image: localstack/localstack:latest
+        env:
+          SERVICES: s3,ses,lambda,apigateway
+          DEBUG: "0"
+          PERSISTENCE: "0"
+        ports:
+          - 4566:4566
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Start PostgreSQL
-        shell: bash
-        run: |
-          docker run -d --name postgres \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=postgres \
-            -e POSTGRES_DB=framecast_test \
-            -p 5432:5432 \
-            postgres:16-alpine
-
-          echo "Waiting for PostgreSQL to be ready..."
-          for i in {1..30}; do
-            if docker exec postgres pg_isready -U postgres; then
-              echo "PostgreSQL is ready!"
-              break
-            fi
-            echo "Waiting... ($i/30)"
-            sleep 2
-          done
-
-      - name: Start LocalStack
-        shell: bash
-        run: |
-          docker run -d --name localstack \
-            -e SERVICES=s3,ses,lambda,apigateway \
-            -e DEBUG=0 \
-            -e PERSISTENCE=0 \
-            -p 4566:4566 \
-            localstack/localstack:latest
-
-          echo "Waiting for LocalStack to be ready..."
-          for i in {1..30}; do
-            if curl -s http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
-              echo "LocalStack is ready!"
-              break
-            fi
-            echo "Waiting... ($i/30)"
-            sleep 2
-          done
-
       - name: Install Python E2E dependencies
         run: cd tests/e2e && uv sync
 
       - name: Setup LocalStack S3 buckets
-        shell: bash
         run: |
-          # Create S3 buckets
           aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-outputs-dev || true
           aws --endpoint-url=http://localhost:4566 s3 mb s3://framecast-assets-dev || true
         env:
@@ -133,10 +113,7 @@ jobs:
         run: sam build --beta-features
 
       - name: Start SAM local
-        shell: bash
         run: |  # pragma: allowlist secret
-          # Create env.json for CI (test credentials only)
-          # Note: SAM runs Lambda in Docker, so it needs host.docker.internal to reach services
           cat > env-ci.json << 'EOF'
           {
             "FramecastApiFunction": {
@@ -151,8 +128,6 @@ jobs:
           }
           EOF
 
-          # Start SAM local in background
-          echo "Starting SAM local..."
           nohup sam local start-api \
             --host 0.0.0.0 \
             --port 3001 \
@@ -160,18 +135,13 @@ jobs:
             --warm-containers EAGER \
             > /tmp/sam-local.log 2>&1 &
 
-          # Wait for SAM local to be ready (with longer timeout for cold start)
-          echo "Waiting for SAM local to be ready..."
           for i in {1..30}; do
             if curl -s http://localhost:3001/health >/dev/null 2>&1; then
               echo "SAM local is ready!"
               exit 0
             fi
-            echo "Waiting... ($i/30)"
             sleep 4
           done
-
-          echo "SAM local failed to start. Logs:"
           cat /tmp/sam-local.log
           exit 1
 

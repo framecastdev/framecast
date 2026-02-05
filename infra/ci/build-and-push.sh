@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-REGISTRY="192.168.68.77:3000"
-IMAGE_NAME="thiago/framecast-ci"
+REGISTRY="ghcr.io"
+IMAGE_NAME="framecastdev/framecast-ci"
 TAG="${1:-latest}"
 
 echo "Building CI image: ${REGISTRY}/${IMAGE_NAME}:${TAG}"

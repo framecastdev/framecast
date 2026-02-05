@@ -590,28 +590,28 @@ release version:
 ci-image-build:
     @echo "🐳 Building CI base image for linux/amd64..."
     docker buildx build --platform linux/amd64 \
-        -t 192.168.68.77:3000/thiago/framecast-ci:latest \
+        -t ghcr.io/framecastdev/framecast-ci:latest \
         -f infra/ci/Dockerfile \
         --load .
-    @echo "✅ CI image built: 192.168.68.77:3000/thiago/framecast-ci:latest"
+    @echo "✅ CI image built: ghcr.io/framecastdev/framecast-ci:latest"
 
-# Push CI base image to Gitea registry
+# Push CI base image to GitHub Container Registry
 ci-image-push:
     @echo "🐳 Building and pushing CI base image for linux/amd64..."
     docker buildx build --platform linux/amd64 \
-        -t 192.168.68.77:3000/thiago/framecast-ci:latest \
+        -t ghcr.io/framecastdev/framecast-ci:latest \
         -f infra/ci/Dockerfile \
         --push .
-    @echo "✅ CI image pushed to 192.168.68.77:3000/thiago/framecast-ci:latest"
+    @echo "✅ CI image pushed to ghcr.io/framecastdev/framecast-ci:latest"
 
 # Build and push CI image with a specific tag
 ci-image-release tag:
     @echo "🐳 Building and pushing CI image with tag: {{tag}}..."
     docker buildx build --platform linux/amd64 \
-        -t 192.168.68.77:3000/thiago/framecast-ci:{{tag}} \
+        -t ghcr.io/framecastdev/framecast-ci:{{tag}} \
         -f infra/ci/Dockerfile \
         --push .
-    @echo "✅ CI image pushed: 192.168.68.77:3000/thiago/framecast-ci:{{tag}}"
+    @echo "✅ CI image pushed: ghcr.io/framecastdev/framecast-ci:{{tag}}"
 
 # ============================================================================
 # INFRASTRUCTURE & DEPLOYMENT (Rules V, XI: Build/Release/Run, Logs)
