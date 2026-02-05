@@ -81,7 +81,7 @@ jobs:
   sam-tests:
     name: SAM Local Tests
     runs-on: self-hosted
-    needs: [ci]
+    needs: [pull-image]  # Run in parallel with CI Pipeline for faster iteration
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
       credentials:
