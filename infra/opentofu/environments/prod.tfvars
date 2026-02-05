@@ -3,7 +3,7 @@
 
 environment     = "prod"
 aws_region      = "us-east-1"
-lambda_zip_path = "../../../target/lambda/lambda/bootstrap.zip"
+lambda_zip_path = "../../target/lambda/lambda/bootstrap.zip"
 
 # Lambda configuration (production tuned)
 lambda_memory_size = 1024

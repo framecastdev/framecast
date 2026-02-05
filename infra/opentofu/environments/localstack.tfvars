@@ -3,7 +3,7 @@
 
 environment     = "dev"
 aws_region      = "us-east-1"
-lambda_zip_path = "../../../target/lambda/lambda/bootstrap.zip"
+lambda_zip_path = "../../target/lambda/lambda/bootstrap.zip"
 
 # LocalStack settings
 localstack_enabled  = true

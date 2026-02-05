@@ -3,7 +3,7 @@
 
 environment     = "staging"
 aws_region      = "us-east-1"
-lambda_zip_path = "../../../target/lambda/lambda/bootstrap.zip"
+lambda_zip_path = "../../target/lambda/lambda/bootstrap.zip"
 
 # Lambda configuration
 lambda_memory_size = 512
