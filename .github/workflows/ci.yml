@@ -142,6 +142,9 @@ jobs:
       - name: Build SAM
         run: just sam-build
 
+      - name: Pre-pull SAM Lambda emulation image
+        run: docker pull public.ecr.aws/sam/emulation-provided.al2023:latest
+
       - name: Start SAM local
         run: |  # pragma: allowlist secret
           # Get the GitHub Actions job container network
@@ -165,7 +168,7 @@ jobs:
           }
           EOF
 
-          SAM_ARGS="--host 0.0.0.0 --port 3001 --env-vars env-ci.json --warm-containers EAGER"
+          SAM_ARGS="--host 0.0.0.0 --port 3001 --env-vars env-ci.json --warm-containers EAGER --skip-pull-image"
           if [ -n "$NETWORK_ID" ]; then
             SAM_ARGS="$SAM_ARGS --docker-network $NETWORK_ID"
           fi
