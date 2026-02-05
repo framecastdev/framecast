@@ -205,29 +205,52 @@ jobs:
             -var="jwt_secret=ci-test-jwt-secret" \
             -auto-approve
 
-      - name: Get API endpoint
-        id: get-endpoint
+      - name: Test Lambda directly
         run: |
-          API_ID=$(aws --endpoint-url=http://localstack:4566 apigatewayv2 get-apis --query 'Items[0].ApiId' --output text)
-          ENDPOINT="http://localstack:4566/restapis/${API_ID}/dev/_user_request_"
-          echo "api_endpoint=${ENDPOINT}" >> $GITHUB_OUTPUT
-          echo "API Endpoint: ${ENDPOINT}"
+          echo "Testing Lambda function directly (LocalStack free tier doesn't support API Gateway V2)..."
 
-      - name: Test health endpoint
-        run: |
-          ENDPOINT="${{ steps.get-endpoint.outputs.api_endpoint }}"
-          echo "Testing: ${ENDPOINT}/health"
+          # Create a test event simulating an API Gateway request to /health
+          cat > /tmp/event.json << 'EVENTEOF'
+          {
+            "version": "2.0",
+            "routeKey": "GET /health",
+            "rawPath": "/health",
+            "rawQueryString": "",
+            "headers": {
+              "content-type": "application/json"
+            },
+            "requestContext": {
+              "http": {
+                "method": "GET",
+                "path": "/health"
+              }
+            },
+            "isBase64Encoded": false
+          }
+          EVENTEOF
 
-          # Wait for Lambda to be ready
+          # Invoke Lambda and check response
           for i in {1..10}; do
-            if curl -sf "${ENDPOINT}/health" >/dev/null 2>&1; then
-              echo "Health check passed!"
-              curl -s "${ENDPOINT}/health" | jq '.'
-              exit 0
+            RESPONSE=$(aws --endpoint-url=http://localstack:4566 lambda invoke \
+              --function-name framecast-dev-api \
+              --payload file:///tmp/event.json \
+              /tmp/response.json 2>&1 || echo "INVOKE_FAILED")
+
+            if [[ "$RESPONSE" != *"INVOKE_FAILED"* ]] && [[ -f /tmp/response.json ]]; then
+              echo "Lambda invocation successful!"
+              cat /tmp/response.json | jq '.'
+
+              # Check if response indicates healthy status
+              STATUS_CODE=$(cat /tmp/response.json | jq -r '.statusCode // empty')
+              if [[ "$STATUS_CODE" == "200" ]]; then
+                echo "Health check passed!"
+                exit 0
+              fi
             fi
-            echo "Attempt $i failed, retrying in 5 seconds..."
+
+            echo "Attempt $i: waiting for Lambda to be ready..."
             sleep 5
           done
 
-          echo "Health check failed"
+          echo "Lambda health check failed"
           exit 1

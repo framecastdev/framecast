@@ -16,12 +16,12 @@ provider "aws" {
   skip_credentials_validation = var.localstack_enabled
   skip_metadata_api_check     = var.localstack_enabled
   skip_requesting_account_id  = var.localstack_enabled
+  s3_use_path_style           = var.localstack_enabled
 
   dynamic "endpoints" {
     for_each = var.localstack_enabled ? [1] : []
     content {
       apigateway     = var.localstack_endpoint
-      apigatewayv2   = var.localstack_endpoint
       cloudwatch     = var.localstack_endpoint
       cloudwatchlogs = var.localstack_endpoint
       iam            = var.localstack_endpoint
@@ -119,11 +119,12 @@ module "lambda" {
 }
 
 # ==============================================================================
-# API GATEWAY
+# API GATEWAY (disabled for LocalStack - free tier doesn't support HTTP APIs)
 # ==============================================================================
 
 module "api_gateway" {
   source = "./modules/api-gateway"
+  count  = var.localstack_enabled ? 0 : 1
 
   name_prefix          = local.name_prefix
   environment          = var.environment
@@ -138,15 +139,16 @@ module "api_gateway" {
 
 module "monitoring" {
   source = "./modules/monitoring"
+  count  = var.localstack_enabled ? 0 : 1
 
   name_prefix          = local.name_prefix
   environment          = var.environment
   lambda_function_name = module.lambda.function_name
-  api_gateway_id       = module.api_gateway.api_id
+  api_gateway_id       = module.api_gateway[0].api_id
   tags                 = local.common_tags
 
   # Only enable monitoring in production (or if explicitly enabled)
-  enabled = local.enable_monitoring && !var.localstack_enabled
+  enabled = local.enable_monitoring
 
   # SNS topic for alarms (if provided)
   alarm_actions = var.alarm_sns_topic_arn != "" ? [var.alarm_sns_topic_arn] : []

@@ -2,8 +2,8 @@
 # These values are used by CI/CD and other automation
 
 output "api_endpoint" {
-  description = "API Gateway endpoint URL"
-  value       = module.api_gateway.api_endpoint
+  description = "API Gateway endpoint URL (empty for LocalStack)"
+  value       = length(module.api_gateway) > 0 ? module.api_gateway[0].api_endpoint : ""
 }
 
 output "lambda_function_name" {
