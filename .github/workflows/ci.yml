@@ -149,6 +149,11 @@ jobs:
       PATH: /opt/rust/cargo/bin:/usr/local/bin:/usr/bin:/bin
 
     steps:
+      - name: Fix workspace permissions
+        run: |
+          # Previous container-based jobs may have created files as root
+          sudo chown -R $(whoami):$(id -gn) $GITHUB_WORKSPACE || true
+
       - name: Checkout
         uses: actions/checkout@v4
 
