@@ -29,8 +29,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Zig (required by cargo-lambda for cross-compilation)
-RUN curl -L https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | tar -xJ -C /opt \
-    && ln -s /opt/zig-linux-x86_64-0.13.0/zig /usr/local/bin/zig
+RUN npm install -g @ziglang/cli
 
 # Ensure pipx bin is in PATH
 ENV PATH="/root/.local/bin:${PATH}"
