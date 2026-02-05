@@ -86,8 +86,8 @@ coverage.xml
 *.tfvars
 *.tfvars.json
 .terraform/
-# Lock file MUST be committed (12-factor Rule II)
-# !.terraform.lock.hcl
+# Allow environment-specific tfvars (secrets come from TF_VAR_* env vars)
+!infra/opentofu/environments/*.tfvars
 
 # === LocalStack ===
 .localstack/
@@ -171,11 +171,8 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
-# === AWS SAM ===
-# Local environment variables (contains secrets)
-env.json
-# SAM build artifacts
-.aws-sam/
+# === cargo-lambda ===
+# Lambda build artifacts are in target/ which is already ignored
 
 # === UV (Python package manager) ===
 # Root-level uv.lock is accidental - the real one is in tests/e2e/

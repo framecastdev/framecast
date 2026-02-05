@@ -32,7 +32,6 @@ jobs:
 
   ci:
     name: CI Pipeline
-    if: false  # Temporarily disabled while debugging SAM tests
     runs-on: self-hosted
     needs: [pull-image]
     container:
@@ -79,10 +78,66 @@ jobs:
       - name: Run tests
         run: just ci-test
 
-  sam-tests:
-    name: SAM Local Tests
+  infra-validate:
+    name: Validate Infrastructure
     runs-on: self-hosted
-    needs: [pull-image]  # Run in parallel with CI Pipeline for faster iteration
+    needs: [pull-image]
+    container:
+      image: ghcr.io/framecastdev/framecast-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Format check OpenTofu
+        run: |
+          cd infra/opentofu
+          tofu fmt -check -recursive
+
+      - name: Initialize OpenTofu
+        run: just infra-init
+
+      - name: Validate OpenTofu configuration
+        run: just infra-validate
+
+  build-lambda:
+    name: Build Lambda
+    runs-on: self-hosted
+    needs: [pull-image]
+    container:
+      image: ghcr.io/framecastdev/framecast-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci"
+
+      - name: Build Lambda
+        run: just lambda-build
+
+      - name: Verify artifact exists
+        run: |
+          if [ ! -f target/lambda/lambda/bootstrap.zip ]; then
+            echo "Lambda artifact not found!"
+            exit 1
+          fi
+          ls -la target/lambda/lambda/bootstrap.zip
+          echo "Lambda artifact size: $(du -h target/lambda/lambda/bootstrap.zip | cut -f1)"
+
+  localstack-test:
+    name: LocalStack Integration
+    runs-on: self-hosted
+    needs: [pull-image, ci, build-lambda]
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
       credentials:
@@ -105,9 +160,10 @@ jobs:
       localstack:
         image: localstack/localstack:latest
         env:
-          SERVICES: s3,ses,lambda,apigateway
+          SERVICES: s3,lambda,apigateway,apigatewayv2,iam,logs
           DEBUG: "0"
           PERSISTENCE: "0"
+          LAMBDA_EXECUTOR: local
         options: >-
           --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
           --health-interval 10s
@@ -117,7 +173,6 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-      TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
       AWS_DEFAULT_REGION: us-east-1
@@ -131,77 +186,47 @@ jobs:
         with:
           shared-key: "ci"
 
-      - name: Install Python E2E dependencies
-        run: just install-python-deps
+      - name: Build Lambda
+        run: just lambda-build
 
       - name: Setup LocalStack S3 buckets
-        run: just ci-setup-localstack
+        run: just ci-setup-localstack endpoint="http://localstack:4566"
 
       - name: Run database migrations
         run: just ci-migrate
 
-      - name: Build SAM
-        run: just sam-build
+      - name: Deploy to LocalStack
+        run: |
+          cd infra/opentofu
+          tofu init -reconfigure
+          TF_VAR_database_url="postgresql://postgres:postgres@postgres:5432/framecast_test" \
+          TF_VAR_jwt_secret="ci-test-jwt-secret" \
+          TF_VAR_localstack_endpoint="http://localstack:4566" \
+          tofu apply -var-file=environments/localstack.tfvars -auto-approve
 
-      - name: Pre-pull SAM Lambda emulation image
-        run: docker pull public.ecr.aws/sam/emulation-provided.al2
+      - name: Get API endpoint
+        id: get-endpoint
+        run: |
+          API_ID=$(aws --endpoint-url=http://localstack:4566 apigatewayv2 get-apis --query 'Items[0].ApiId' --output text)
+          ENDPOINT="http://localstack:4566/restapis/${API_ID}/dev/_user_request_"
+          echo "api_endpoint=${ENDPOINT}" >> $GITHUB_OUTPUT
+          echo "API Endpoint: ${ENDPOINT}"
 
-      - name: Start SAM local
-        run: |  # pragma: allowlist secret
-          # Get the GitHub Actions job container network
-          NETWORK_ID=$(docker network ls --filter name=github_network -q | head -1)
-          if [ -z "$NETWORK_ID" ]; then
-            # Fallback: find network that the job container is attached to
-            NETWORK_ID=$(docker inspect $(hostname) --format '{{range .NetworkSettings.Networks}}{{.NetworkID}}{{end}}' 2>/dev/null | head -c 12 || echo "")
-          fi
+      - name: Test health endpoint
+        run: |
+          ENDPOINT="${{ steps.get-endpoint.outputs.api_endpoint }}"
+          echo "Testing: ${ENDPOINT}/health"
 
-          cat > env-ci.json << 'EOF'
-          {
-            "FramecastApiFunction": {
-              "DATABASE_URL": "postgresql://postgres:postgres@postgres:5432/framecast_test",
-              "JWT_SECRET": "ci-test-jwt-secret-do-not-use-in-production",
-              "S3_BUCKET_OUTPUTS": "framecast-outputs-dev",
-              "S3_BUCKET_ASSETS": "framecast-assets-dev",
-              "AWS_ENDPOINT_URL": "http://localstack:4566",
-              "RUST_LOG": "debug,sqlx=warn",
-              "ENVIRONMENT": "test"
-            }
-          }
-          EOF
-
-          SAM_ARGS="--host 0.0.0.0 --port 3001 --env-vars env-ci.json --warm-containers EAGER --debug"
-          if [ -n "$NETWORK_ID" ]; then
-            SAM_ARGS="$SAM_ARGS --docker-network $NETWORK_ID"
-          fi
-
-          nohup sam local start-api $SAM_ARGS > /tmp/sam-local.log 2>&1 &
-
-          # Wait up to 5 minutes for SAM to start (it may need to build Docker image)
-          for i in {1..60}; do
-            if curl -s http://localhost:3001/health >/dev/null 2>&1; then
-              echo "SAM local is ready!"
+          # Wait for Lambda to be ready
+          for i in {1..10}; do
+            if curl -sf "${ENDPOINT}/health" >/dev/null 2>&1; then
+              echo "Health check passed!"
+              curl -s "${ENDPOINT}/health" | jq '.'
               exit 0
             fi
+            echo "Attempt $i failed, retrying in 5 seconds..."
             sleep 5
           done
-          cat /tmp/sam-local.log
+
+          echo "Health check failed"
           exit 1
-
-      - name: Run SAM Rust integration tests
-        env:
-          SAM_LOCAL_API_URL: http://localhost:3001
-        run: just ci-sam-integration-test
-
-      - name: Run SAM E2E tests
-        env:
-          TEST_USE_SAM_LOCAL: "true"
-          TEST_SAM_API_URL: http://localhost:3001
-        run: just ci-sam-e2e-test
-
-      - name: Upload SAM logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sam-local-logs
-          path: /tmp/sam-local.log
-          retention-days: 7
