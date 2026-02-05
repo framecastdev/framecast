@@ -206,6 +206,7 @@ jobs:
             -auto-approve
 
       - name: Test Lambda directly
+        shell: bash
         run: |
           echo "Testing Lambda function via direct invocation..."
 
