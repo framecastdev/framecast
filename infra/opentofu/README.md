@@ -1,159 +1,205 @@
-# Framecast Infrastructure
+# Framecast Infrastructure - OpenTofu
 
-OpenTofu configuration for AWS infrastructure following 12-Factor principles.
+OpenTofu configuration for deploying Framecast API to AWS.
 
 ## Architecture
 
-- **Lambda Functions**: Stateless API handlers (Rule VI)
-- **API Gateway**: HTTP endpoint exposure (Rule VII)
-- **S3 Buckets**: Object storage for outputs and assets (Rule IV)
-- **RDS PostgreSQL**: Database (optional, can use Supabase instead) (Rule IV)
-- **CloudWatch**: Logging and monitoring (Rule XI)
-- **Secrets Manager**: Sensitive configuration (Rule III)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Local Development                        │
+├─────────────────────────────────────────────────────────────┤
+│  just dev              →  Axum server on localhost:3000     │
+│  just lambda-watch     →  cargo-lambda with hot reload      │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Local Deploy (LocalStack)                      │
+├─────────────────────────────────────────────────────────────┤
+│  just deploy-local     →  Full stack on LocalStack          │
+│  - Lambda function deployed to LocalStack                   │
+│  - API Gateway created on LocalStack                        │
+│  - S3 buckets provisioned                                   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  AWS Deploy (OpenTofu)                      │
+├─────────────────────────────────────────────────────────────┤
+│  just deploy-dev       →  Deploy to AWS dev environment     │
+│  just deploy-staging   →  Deploy to AWS staging             │
+│  just deploy-prod      →  Deploy to AWS production          │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## Environments
+## Structure
 
-- `dev` - Development environment
-- `staging` - Staging environment
-- `prod` - Production environment
+```
+infra/opentofu/
+├── main.tf                    # Root configuration, module imports
+├── variables.tf               # Input variables
+├── outputs.tf                 # Output values (API endpoint, etc.)
+├── versions.tf                # Provider requirements
+├── environments/
+│   ├── dev.tfvars             # Development environment
+│   ├── staging.tfvars         # Staging environment
+│   ├── prod.tfvars            # Production environment
+│   └── localstack.tfvars      # LocalStack (local testing)
+└── modules/
+    ├── lambda/main.tf         # Lambda + IAM + CloudWatch logs
+    ├── api-gateway/main.tf    # HTTP API v2 + CORS + routes
+    ├── s3/main.tf             # Outputs + Assets buckets
+    └── monitoring/main.tf     # CloudWatch Alarms (prod only)
+```
 
-## Configuration
-
-Environment-specific variables are in `environments/` directory.
-
-Sensitive variables (API keys, passwords) should be set via:
-
-- Environment variables (local development)
-- CI/CD secrets (production deployments)
-- AWS Systems Manager Parameter Store
-- External secret management systems
-
-## Usage
+## Quick Start
 
 ### Prerequisites
 
-1. Install OpenTofu: `brew install opentofu` (macOS)
-2. Configure AWS credentials: `aws configure` or set environment variables
-3. Build Lambda deployment packages: `just build-lambda`
+- OpenTofu installed (`just install-tools`)
+- cargo-lambda installed (`cargo install cargo-lambda`)
+- AWS CLI configured (for AWS deployments)
+- Docker running (for LocalStack)
 
-### Deploy Infrastructure
+### Local Development
 
 ```bash
-# Initialize OpenTofu
-cd infra/opentofu
-tofu init
+# Start local API server (no Lambda, direct Axum)
+just dev
 
-# Plan deployment (development)
-tofu plan -var-file=environments/dev.tfvars
-
-# Apply changes (development)
-tofu apply -var-file=environments/dev.tfvars
-
-# Plan for production
-tofu plan -var-file=environments/prod.tfvars \
-  -var="anthropic_api_key=$ANTHROPIC_API_KEY" \
-  -var="inngest_event_key=$INNGEST_EVENT_KEY" \
-  -var="inngest_signing_key=$INNGEST_SIGNING_KEY" \
-  -var="runpod_api_key=$RUNPOD_API_KEY" \
-  -var="supabase_url=$SUPABASE_URL" \
-  -var="supabase_anon_key=$SUPABASE_ANON_KEY" \
-  -var="supabase_service_role_key=$SUPABASE_SERVICE_ROLE_KEY"
+# Or use cargo-lambda watch for Lambda simulation
+just lambda-watch
 ```
 
-### Using Just Commands
+### LocalStack Deployment
 
-The Justfile provides convenient commands:
+Test the full Lambda + API Gateway stack locally:
 
 ```bash
-# Deploy to staging
-just deploy-staging
+# Build Lambda and deploy to LocalStack
+just deploy-local
 
-# Deploy to production
+# Get the API endpoint
+just deploy-local-endpoint
+
+# Test health endpoint
+curl http://localhost:4566/restapis/<api-id>/dev/_user_request_/health
+```
+
+### AWS Deployment
+
+```bash
+# Set required environment variables
+export TF_VAR_database_url="postgresql://..."
+export TF_VAR_jwt_secret="your-jwt-secret"
+# ... other secrets ...
+
+# Deploy to dev
+just deploy-dev
+
+# Deploy to production (runs tests first)
 just deploy-prod
-
-# Plan changes for development
-just infra-plan-dev
-
-# Destroy development environment
-just infra-destroy-dev
 ```
 
-## State Management
+## Environment Variables
 
-For production use, configure remote state backend in `main.tf`:
+Secrets should be passed via `TF_VAR_*` environment variables:
 
-```hcl
-terraform {
-  backend "s3" {
-    bucket = "framecast-terraform-state"
-    key    = "framecast/terraform.tfstate"
-    region = "us-east-1"
-  }
-}
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `TF_VAR_database_url` | PostgreSQL connection URL | Yes |
+| `TF_VAR_jwt_secret` | JWT signing secret | Yes |
+| `TF_VAR_supabase_url` | Supabase project URL | No |
+| `TF_VAR_supabase_anon_key` | Supabase anonymous key | No |
+| `TF_VAR_anthropic_api_key` | Anthropic API key | No |
+| `TF_VAR_inngest_event_key` | Inngest event key | No |
+| `TF_VAR_inngest_signing_key` | Inngest signing key | No |
+| `TF_VAR_runpod_api_key` | RunPod API key | No |
+| `TF_VAR_runpod_endpoint_id` | RunPod endpoint ID | No |
+
+## Modules
+
+### Lambda Module (`modules/lambda/`)
+
+Creates:
+- Lambda function with provided.al2023 runtime
+- IAM execution role with CloudWatch and S3 permissions
+- CloudWatch Log Group
+
+### API Gateway Module (`modules/api-gateway/`)
+
+Creates:
+- HTTP API v2 with Lambda integration
+- CORS configuration
+- Auto-deploy stage
+- Access logging to CloudWatch
+
+### S3 Module (`modules/s3/`)
+
+Creates:
+- Outputs bucket (for generated videos)
+- Assets bucket (for user uploads)
+- Lifecycle policies
+- CORS configuration for assets
+
+### Monitoring Module (`modules/monitoring/`)
+
+Creates (production only):
+- Lambda errors alarm
+- API Gateway 5xx alarm
+- Lambda duration alarm
+- Lambda throttles alarm
+
+## CI/CD
+
+The GitHub Actions workflows handle deployment:
+
+- **ci.yml**: Validates OpenTofu, builds Lambda, runs tests
+- **deploy.yml**: Deploys to AWS environments
+
+### Required Secrets
+
+Set these in GitHub repository settings:
+
+- `AWS_DEPLOY_ROLE_ARN`: IAM role ARN for OIDC authentication
+- `DATABASE_URL`, `JWT_SECRET`, etc.: Environment secrets
+
+## Commands Reference
+
+```bash
+# Infrastructure management
+just infra-init           # Initialize OpenTofu
+just infra-validate       # Validate configuration
+just infra-plan dev       # Plan changes for dev
+just infra-fmt            # Format .tf files
+
+# Local deployment
+just deploy-local         # Full deploy to LocalStack
+just deploy-local-lambda  # Update Lambda only
+just deploy-local-destroy # Tear down LocalStack resources
+just deploy-local-endpoint # Get API endpoint
+
+# AWS deployment
+just deploy-dev           # Deploy to dev
+just deploy-staging       # Deploy to staging
+just deploy-prod          # Deploy to production (with tests)
+just deploy-destroy dev   # Destroy environment
+just deploy-outputs       # Show deployment outputs
+
+# Logs
+just logs-lambda dev      # Tail Lambda logs
 ```
-
-## Database Options
-
-The configuration supports two database options:
-
-### Option 1: Supabase (Recommended)
-
-Set these variables:
-
-- `supabase_url`
-- `supabase_anon_key`
-- `supabase_service_role_key`
-
-Benefits:
-
-- Managed service with built-in auth
-- Real-time subscriptions
-- Automatic backups
-- Built-in REST API
-
-### Option 2: RDS PostgreSQL
-
-If Supabase variables are not set, RDS will be provisioned automatically.
-
-Benefits:
-
-- Full control over database
-- VPC isolation
-- Custom backup schedules
-- Enhanced monitoring
 
 ## Security
 
 - S3 buckets have public access blocked
-- RDS is in private subnets (when used)
 - Lambda functions use least-privilege IAM roles
-- Secrets are stored in AWS Secrets Manager
+- Secrets passed via environment variables
 - All resources are tagged for cost tracking
 
-## Monitoring
-
-Production environment includes:
+## Monitoring (Production)
 
 - CloudWatch alarms for Lambda errors
 - CloudWatch alarms for API Gateway 5xx errors
-- Enhanced RDS monitoring
+- Lambda duration and throttle alarms
 - Structured logging to CloudWatch Logs
-
-## Cost Optimization
-
-- Lambda functions use ARM64 (graviton2) for better price/performance
-- S3 lifecycle policies for output cleanup
-- RDS uses smaller instances for non-production
-- CloudWatch log retention configured per environment
-
-## Cleanup
-
-To destroy infrastructure:
-
-```bash
-# Development
-tofu destroy -var-file=environments/dev.tfvars
-
-# Production (be careful!)
-tofu destroy -var-file=environments/prod.tfvars
-```

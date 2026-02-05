@@ -60,3 +60,11 @@ tracing-subscriber.workspace = true
 tokio-test.workspace = true
 wiremock.workspace = true
 test-log.workspace = true
+
+# cargo-lambda build configuration
+[package.metadata.lambda]
+binary = "lambda"
+arch = "x86_64"
+runtime = "provided.al2023"
+memory = 512
+timeout = 30
