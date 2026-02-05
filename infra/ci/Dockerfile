@@ -28,6 +28,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Zig (required by cargo-lambda for cross-compilation)
+RUN curl -L https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | tar -xJ -C /opt \
+    && ln -s /opt/zig-linux-x86_64-0.13.0/zig /usr/local/bin/zig
+
 # Ensure pipx bin is in PATH
 ENV PATH="/root/.local/bin:${PATH}"
 
@@ -58,7 +62,8 @@ RUN just --version && \
     sqlx --version && \
     cargo lambda --version && \
     sam --version && \
-    uv --version
+    uv --version && \
+    zig version
 
 # Set working directory
 WORKDIR /workspace
