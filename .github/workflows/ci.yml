@@ -18,9 +18,20 @@ env:
   CARGO_HOME: /opt/rust/cargo
 
 jobs:
+  pull-image:
+    name: Pull CI Image
+    runs-on: self-hosted
+    steps:
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Pull latest CI image
+        run: docker pull ghcr.io/framecastdev/framecast-ci:latest
+
   ci:
     name: CI Pipeline
     runs-on: self-hosted
+    needs: [pull-image]
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
       credentials:
