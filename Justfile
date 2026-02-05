@@ -425,7 +425,7 @@ commit-emergency message:
 # Build Lambda deployment package with cargo-lambda
 lambda-build:
     @echo "Building Lambda with cargo-lambda..."
-    cargo lambda build --release --bin lambda --output-format zip
+    SQLX_OFFLINE=true cargo lambda build --release --bin lambda --output-format zip
     @echo "Lambda built: target/lambda/lambda/bootstrap.zip"
 
 # Watch mode for local Lambda development (hot reload)
