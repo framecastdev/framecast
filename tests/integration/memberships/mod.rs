@@ -2996,13 +2996,8 @@ mod test_membership_exotic_inputs {
         let response = router.clone().oneshot(decline_request).await.unwrap();
         assert_eq!(
             response.status(),
-            StatusCode::OK,
-            "Decline should succeed: {}",
-            String::from_utf8_lossy(
-                &axum::body::to_bytes(response.into_body(), usize::MAX)
-                    .await
-                    .unwrap()
-            )
+            StatusCode::NO_CONTENT,
+            "Decline should succeed with 204"
         );
 
         // Step 3: Re-invite the same email — should succeed since previous was declined

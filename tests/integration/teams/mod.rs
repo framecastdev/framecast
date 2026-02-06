@@ -444,15 +444,18 @@ mod test_create_team {
         let creator = UserFixture::creator(&app).await.unwrap();
         let router = create_test_router(&app).await;
 
+        // Unicode name with explicit ASCII slug succeeds
         let request = Request::builder()
             .method(Method::POST)
             .uri("/v1/teams")
             .header("authorization", format!("Bearer {}", creator.jwt_token))
             .header("content-type", "application/json")
-            .body(Body::from(json!({"name": "Café Studio 日本"}).to_string()))
+            .body(Body::from(
+                json!({"name": "Café Studio 日本", "slug": "cafe-studio"}).to_string(),
+            ))
             .unwrap();
 
-        let response = router.oneshot(request).await.unwrap();
+        let response = router.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -461,8 +464,28 @@ mod test_create_team {
         let team: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(team["name"], "Café Studio 日本");
-        // Slug should be auto-generated from name
-        assert!(!team["slug"].as_str().unwrap().is_empty());
+        assert_eq!(team["slug"], "cafe-studio");
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_create_team_unicode_name_without_slug_rejected() {
+        let app = TestApp::new().await.unwrap();
+        let creator = UserFixture::creator(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // Unicode name without slug fails — auto-generated slug can't be ASCII-only
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/teams")
+            .header("authorization", format!("Bearer {}", creator.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(json!({"name": "日本語チーム"}).to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
