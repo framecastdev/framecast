@@ -37,10 +37,18 @@ pub fn membership_routes() -> Router<AppState> {
             "/v1/teams/{team_id}/members/{user_id}",
             delete(memberships::remove_member).patch(memberships::update_member_role),
         )
-        // Team invitation endpoints (spec: POST /v1/teams/:id/invitations)
+        // Team invitation endpoints
         .route(
             "/v1/teams/{team_id}/invitations",
-            post(memberships::invite_member),
+            get(memberships::list_invitations).post(memberships::invite_member),
+        )
+        .route(
+            "/v1/teams/{team_id}/invitations/{invitation_id}",
+            delete(memberships::revoke_invitation),
+        )
+        .route(
+            "/v1/teams/{team_id}/invitations/{invitation_id}/resend",
+            post(memberships::resend_invitation),
         )
         // Leave team
         .route("/v1/teams/{team_id}/leave", post(memberships::leave_team))

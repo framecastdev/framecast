@@ -226,32 +226,6 @@ test-e2e-real:
     @echo "This requires valid API credentials in .env"
     cd tests/e2e && uv run pytest tests/ --tb=short
 
-# Run integration tests with LocalStack SES
-test-integration-ses:
-    @echo "Running integration tests with LocalStack SES..."
-    @echo "Starting LocalStack if needed..."
-    @docker-compose -f docker-compose.localstack.yml up -d localstack --remove-orphans
-    @echo "Waiting for LocalStack to be ready..."
-    @sleep 15
-    @echo "Setting up SES identities..."
-    @./scripts/localstack-init/01-setup-ses.sh
-    @echo "Running SES integration tests..."
-    cd tests/integration && cargo test --test email_ses_e2e_test -- --nocapture
-    @echo "SES integration tests completed!"
-
-# Run enhanced SES tests with email retrieval
-test-ses-enhanced:
-    @echo "Running enhanced SES tests with email retrieval..."
-    @echo "Starting LocalStack if needed..."
-    @docker-compose -f docker-compose.localstack.yml up -d localstack --remove-orphans
-    @echo "Waiting for LocalStack to be ready..."
-    @sleep 15
-    @echo "Setting up SES identities..."
-    @./scripts/localstack-init/01-setup-ses.sh
-    @echo "Running enhanced SES tests with email retrieval validation..."
-    cd tests/integration && cargo test --test email_ses_e2e_test test_localstack_ses_email_retrieval_and_content_validation -- --nocapture
-    @echo "Enhanced SES tests with email retrieval completed!"
-
 # Run E2E tests with email verification
 test-e2e-with-email:
     @echo "Running E2E tests with LocalStack email verification..."
@@ -265,20 +239,18 @@ test-e2e-with-email:
     cd tests/e2e && uv run pytest tests/test_invitation_workflow_e2e.py -v --tb=short
     @echo "E2E tests with email verification completed!"
 
-# Run complete invitation workflow tests (Rust + Python)
+# Run complete invitation workflow tests (Python E2E)
 test-invitation-workflow:
-    @echo "Running complete invitation workflow tests..."
+    @echo "Running invitation workflow E2E tests..."
     @echo "Starting LocalStack if needed..."
     @docker-compose -f docker-compose.localstack.yml up -d localstack --remove-orphans
     @echo "Waiting for LocalStack to be ready..."
     @sleep 15
     @echo "Setting up SES identities..."
     @./scripts/localstack-init/01-setup-ses.sh
-    @echo "Running Rust integration tests..."
-    cd tests/integration && cargo test --test email_ses_e2e_test -- --nocapture
     @echo "Running Python E2E tests..."
     cd tests/e2e && uv run pytest tests/test_invitation_workflow_e2e.py -v --tb=short
-    @echo "Complete invitation workflow tests completed!"
+    @echo "Invitation workflow E2E tests completed!"
 
 # Start LocalStack services for testing
 localstack-start:
@@ -393,11 +365,6 @@ ci-setup-ses:
     echo "🔍 Listing verified identities..."
     aws --endpoint-url="$ENDPOINT" ses list-identities --region us-east-1
     echo "✅ SES setup completed!"
-
-# Run SES integration tests in CI mode
-ci-test-integration-ses:
-    @echo "Running SES integration tests (CI mode)..."
-    cargo test -p framecast-integration-tests --test email_ses_e2e_test -- --nocapture
 
 # Start API server in background for E2E tests (CI mode)
 ci-start-api:

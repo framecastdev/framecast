@@ -396,6 +396,7 @@ impl Membership {
 pub enum InvitationState {
     Pending,
     Accepted,
+    Declined,
     Revoked,
     Expired,
 }
@@ -411,6 +412,7 @@ impl InvitationState {
         match self {
             InvitationState::Pending => StateMachineInvitationState::Pending,
             InvitationState::Accepted => StateMachineInvitationState::Accepted,
+            InvitationState::Declined => StateMachineInvitationState::Declined,
             InvitationState::Revoked => StateMachineInvitationState::Revoked,
             InvitationState::Expired => StateMachineInvitationState::Expired,
         }
@@ -421,6 +423,7 @@ impl InvitationState {
         match state {
             StateMachineInvitationState::Pending => InvitationState::Pending,
             StateMachineInvitationState::Accepted => InvitationState::Accepted,
+            StateMachineInvitationState::Declined => InvitationState::Declined,
             StateMachineInvitationState::Revoked => InvitationState::Revoked,
             StateMachineInvitationState::Expired => InvitationState::Expired,
         }
@@ -447,6 +450,7 @@ pub struct Invitation {
     pub token: String,
     pub expires_at: DateTime<Utc>,
     pub accepted_at: Option<DateTime<Utc>>,
+    pub declined_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
@@ -477,6 +481,7 @@ impl Invitation {
             token,
             expires_at: now + chrono::Duration::days(7),
             accepted_at: None,
+            declined_at: None,
             revoked_at: None,
             created_at: now,
         })
@@ -486,6 +491,8 @@ impl Invitation {
     pub fn state(&self) -> InvitationState {
         if self.accepted_at.is_some() {
             InvitationState::Accepted
+        } else if self.declined_at.is_some() {
+            InvitationState::Declined
         } else if self.revoked_at.is_some() {
             InvitationState::Revoked
         } else if self.expires_at < Utc::now() {
@@ -512,7 +519,14 @@ impl Invitation {
         Ok(())
     }
 
-    /// Revoke the invitation
+    /// Decline the invitation (invitee-initiated)
+    pub fn decline(&mut self) -> Result<()> {
+        self.apply_transition(InvitationEvent::Decline)?;
+        self.declined_at = Some(Utc::now());
+        Ok(())
+    }
+
+    /// Revoke the invitation (admin-initiated)
     pub fn revoke(&mut self) -> Result<()> {
         self.apply_transition(InvitationEvent::Revoke)?;
         self.revoked_at = Some(Utc::now());
@@ -558,10 +572,18 @@ impl Invitation {
         // Note: Role validation for Owner is enforced at the type level -
         // InvitationRole doesn't include Owner variant
 
-        // State validation
-        if self.accepted_at.is_some() && self.revoked_at.is_some() {
+        // State validation: at most one terminal timestamp can be set
+        let terminal_count = [
+            self.accepted_at.is_some(),
+            self.declined_at.is_some(),
+            self.revoked_at.is_some(),
+        ]
+        .iter()
+        .filter(|&&b| b)
+        .count();
+        if terminal_count > 1 {
             return Err(Error::Validation(
-                "Invitation cannot be both accepted and revoked".to_string(),
+                "Invitation cannot have multiple terminal states".to_string(),
             ));
         }
 
@@ -3532,6 +3554,7 @@ mod tests {
     fn test_invitation_state_is_terminal() {
         assert!(!InvitationState::Pending.is_terminal());
         assert!(InvitationState::Accepted.is_terminal());
+        assert!(InvitationState::Declined.is_terminal());
         assert!(InvitationState::Revoked.is_terminal());
         assert!(InvitationState::Expired.is_terminal());
     }
@@ -3542,11 +3565,13 @@ mod tests {
             InvitationState::Pending.valid_transitions(),
             vec![
                 InvitationState::Accepted,
+                InvitationState::Declined,
                 InvitationState::Expired,
                 InvitationState::Revoked
             ]
         );
         assert!(InvitationState::Accepted.valid_transitions().is_empty());
+        assert!(InvitationState::Declined.valid_transitions().is_empty());
         assert!(InvitationState::Revoked.valid_transitions().is_empty());
         assert!(InvitationState::Expired.valid_transitions().is_empty());
     }

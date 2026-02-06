@@ -220,6 +220,19 @@ impl UserRepository {
 // Membership Repository
 // =============================================================================
 
+/// Membership with joined user details for list responses
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct MembershipWithUser {
+    pub id: Uuid,
+    pub team_id: Uuid,
+    pub user_id: Uuid,
+    pub role: MembershipRole,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub user_email: String,
+    pub user_name: Option<String>,
+    pub user_avatar_url: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct MembershipRepository {
     pool: PgPool,
@@ -311,15 +324,17 @@ impl MembershipRepository {
         Ok(membership)
     }
 
-    /// Get all memberships for a team
-    pub async fn find_by_team(&self, team_id: Uuid) -> Result<Vec<Membership>> {
+    /// Get all memberships for a team with user details
+    pub async fn find_by_team(&self, team_id: Uuid) -> Result<Vec<MembershipWithUser>> {
         let memberships = sqlx::query_as!(
-            Membership,
+            MembershipWithUser,
             r#"
-            SELECT id, team_id, user_id, role as "role: MembershipRole", created_at
-            FROM memberships
-            WHERE team_id = $1
-            ORDER BY created_at ASC
+            SELECT m.id, m.team_id, m.user_id, m.role as "role: MembershipRole", m.created_at,
+                   u.email as user_email, u.name as user_name, u.avatar_url as user_avatar_url
+            FROM memberships m
+            INNER JOIN users u ON m.user_id = u.id
+            WHERE m.team_id = $1
+            ORDER BY m.created_at ASC
             "#,
             team_id
         )
@@ -566,7 +581,7 @@ impl InvitationRepository {
             Invitation,
             r#"
             SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
-                   token, expires_at, accepted_at, revoked_at, created_at
+                   token, expires_at, accepted_at, declined_at, revoked_at, created_at
             FROM invitations
             WHERE id = $1
             "#,
@@ -588,7 +603,7 @@ impl InvitationRepository {
             Invitation,
             r#"
             SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
-                   token, expires_at, accepted_at, revoked_at, created_at
+                   token, expires_at, accepted_at, declined_at, revoked_at, created_at
             FROM invitations
             WHERE team_id = $1 AND email = $2
             ORDER BY created_at DESC
@@ -608,10 +623,10 @@ impl InvitationRepository {
         let created_invitation = sqlx::query_as!(
             Invitation,
             r#"
-            INSERT INTO invitations (id, team_id, invited_by, email, role, token, expires_at, accepted_at, revoked_at, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO invitations (id, team_id, invited_by, email, role, token, expires_at, accepted_at, declined_at, revoked_at, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id, team_id, invited_by, email, role as "role: InvitationRole",
-                      token, expires_at, accepted_at, revoked_at, created_at
+                      token, expires_at, accepted_at, declined_at, revoked_at, created_at
             "#,
             invitation.id,
             invitation.team_id,
@@ -621,6 +636,7 @@ impl InvitationRepository {
             invitation.token,
             invitation.expires_at,
             invitation.accepted_at,
+            invitation.declined_at,
             invitation.revoked_at,
             invitation.created_at
         )
@@ -638,6 +654,7 @@ impl InvitationRepository {
             FROM invitations
             WHERE team_id = $1
               AND accepted_at IS NULL
+              AND declined_at IS NULL
               AND revoked_at IS NULL
               AND expires_at > NOW()
             "#,
@@ -665,7 +682,23 @@ impl InvitationRepository {
         Ok(())
     }
 
-    /// Revoke invitation
+    /// Decline invitation (invitee-initiated)
+    pub async fn decline(&self, invitation_id: Uuid) -> Result<()> {
+        sqlx::query!(
+            r#"
+            UPDATE invitations
+            SET declined_at = NOW()
+            WHERE id = $1
+            "#,
+            invitation_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Revoke invitation (admin-initiated)
     pub async fn revoke(&self, invitation_id: Uuid) -> Result<()> {
         sqlx::query!(
             r#"
@@ -679,6 +712,44 @@ impl InvitationRepository {
         .await?;
 
         Ok(())
+    }
+
+    /// Find all invitations for a team
+    pub async fn find_by_team(&self, team_id: Uuid) -> Result<Vec<Invitation>> {
+        let rows = sqlx::query_as!(
+            Invitation,
+            r#"
+            SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
+                   token, expires_at, accepted_at, declined_at, revoked_at, created_at
+            FROM invitations
+            WHERE team_id = $1
+            ORDER BY created_at DESC
+            "#,
+            team_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    /// Extend invitation expiration to 7 days from now
+    pub async fn extend_expiration(&self, invitation_id: Uuid) -> Result<Invitation> {
+        let updated = sqlx::query_as!(
+            Invitation,
+            r#"
+            UPDATE invitations
+            SET expires_at = NOW() + INTERVAL '7 days'
+            WHERE id = $1
+            RETURNING id, team_id, invited_by, email, role as "role: InvitationRole",
+                      token, expires_at, accepted_at, declined_at, revoked_at, created_at
+            "#,
+            invitation_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(updated)
     }
 }
 

@@ -82,7 +82,7 @@ class TestTeamManagementE2E:
         assert invitee_teams[0]["id"] == team_id
         assert invitee_teams[0]["user_role"] == "member"
 
-        # Step 6: Owner lists members — should see 2 members
+        # Step 6: Owner lists members — should see 2 members with enriched user fields
         resp = await http_client.get(
             f"/v1/teams/{team_id}/members", headers=owner.auth_headers()
         )
@@ -94,6 +94,10 @@ class TestTeamManagementE2E:
         member_roles = {m["role"] for m in members}
         assert "owner" in member_roles
         assert "member" in member_roles
+        # Verify enriched user fields are present
+        for m in members:
+            assert "user_email" in m, f"Missing user_email in member response: {m}"
+            assert m["user_email"], "user_email should not be empty"
 
         # Step 7: Invitee also lists members — same result (any role can view)
         resp = await http_client.get(
@@ -104,6 +108,8 @@ class TestTeamManagementE2E:
         )
         members_from_invitee = resp.json()
         assert len(members_from_invitee) == 2
+        for m in members_from_invitee:
+            assert "user_email" in m, f"Missing user_email in member response: {m}"
 
         # Step 8: Invitee leaves team
         resp = await http_client.post(

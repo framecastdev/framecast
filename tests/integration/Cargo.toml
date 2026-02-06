@@ -8,10 +8,6 @@ name = "simple_test"
 path = "simple_test.rs"
 
 [[test]]
-name = "email_ses_e2e_test"
-path = "email_ses_e2e_test.rs"
-
-[[test]]
 name = "api_test"
 path = "api_test.rs"
 

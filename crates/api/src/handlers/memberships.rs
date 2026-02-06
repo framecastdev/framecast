@@ -11,7 +11,7 @@ use axum::{
 };
 use framecast_common::{Error, Result};
 use framecast_db::repositories::{
-    create_membership_tx, mark_invitation_accepted_tx, upgrade_user_tier_tx,
+    create_membership_tx, mark_invitation_accepted_tx, upgrade_user_tier_tx, MembershipWithUser,
 };
 use framecast_domain::entities::{
     Invitation, InvitationRole, InvitationState, Membership, MembershipRole, UserTier,
@@ -29,8 +29,8 @@ pub struct InviteMemberRequest {
     #[validate(email)]
     pub email: String,
 
-    /// Role to assign to the invited user
-    pub role: MembershipRole,
+    /// Role to assign to the invited user (excludes Owner per INV-INV1)
+    pub role: InvitationRole,
 }
 
 /// Request for updating a member's role
@@ -76,16 +76,23 @@ pub struct MembershipResponse {
     pub user_id: Uuid,
     pub role: MembershipRole,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Enriched user fields
+    pub user_email: String,
+    pub user_name: Option<String>,
+    pub user_avatar_url: Option<String>,
 }
 
-impl From<Membership> for MembershipResponse {
-    fn from(membership: Membership) -> Self {
+impl From<MembershipWithUser> for MembershipResponse {
+    fn from(m: MembershipWithUser) -> Self {
         Self {
-            id: membership.id,
-            team_id: membership.team_id,
-            user_id: membership.user_id,
-            role: membership.role,
-            created_at: membership.created_at,
+            id: m.id,
+            team_id: m.team_id,
+            user_id: m.user_id,
+            role: m.role,
+            created_at: m.created_at,
+            user_email: m.user_email,
+            user_name: m.user_name,
+            user_avatar_url: m.user_avatar_url,
         }
     }
 }
@@ -204,10 +211,10 @@ pub async fn invite_member(
 
     let user = &auth_context.0.user;
 
-    // Validate role - cannot invite owners
-    if request.role == MembershipRole::Owner {
+    // INV-I7: Cannot invite yourself
+    if request.email.to_lowercase() == user.email.to_lowercase() {
         return Err(Error::Validation(
-            "Cannot invite users to owner role".to_string(),
+            "Cannot invite yourself to a team".to_string(),
         ));
     }
 
@@ -229,13 +236,6 @@ pub async fn invite_member(
     ) {
         return Err(Error::Authorization(
             "Access denied: Must be owner or admin to invite members".to_string(),
-        ));
-    }
-
-    // Business rule: Admins cannot promote to owner
-    if membership.role == MembershipRole::Admin && request.role == MembershipRole::Owner {
-        return Err(Error::Authorization(
-            "Admins cannot invite users to owner role".to_string(),
         ));
     }
 
@@ -292,13 +292,11 @@ pub async fn invite_member(
         ));
     }
 
-    // Convert MembershipRole to InvitationRole (validates that Owner cannot be invited)
-    let invitation_role = InvitationRole::try_from(request.role)?;
-    let role_display = invitation_role.to_string();
+    let role_display = request.role.to_string();
     let recipient_email = request.email.clone();
 
     // Create invitation
-    let invitation = Invitation::new(team_id, user.id, request.email, invitation_role)?;
+    let invitation = Invitation::new(team_id, user.id, request.email, request.role)?;
 
     let created_invitation = state
         .repos
@@ -370,6 +368,9 @@ pub async fn accept_invitation(
         InvitationState::Accepted => {
             return Err(Error::Conflict("Invitation already accepted".to_string()))
         }
+        InvitationState::Declined => {
+            return Err(Error::Conflict("Invitation has been declined".to_string()))
+        }
         InvitationState::Expired => {
             return Err(Error::Conflict("Invitation has expired".to_string()))
         }
@@ -427,7 +428,16 @@ pub async fn accept_invitation(
         .context("Failed to commit invitation acceptance transaction")
         .map_err(|e| Error::Internal(e.to_string()))?;
 
-    Ok(Json(MembershipResponse::from(created_membership)))
+    Ok(Json(MembershipResponse {
+        id: created_membership.id,
+        team_id: created_membership.team_id,
+        user_id: created_membership.user_id,
+        role: created_membership.role,
+        created_at: created_membership.created_at,
+        user_email: user.email.clone(),
+        user_name: user.name.clone(),
+        user_avatar_url: user.avatar_url.clone(),
+    }))
 }
 
 /// Decline a team invitation
@@ -463,15 +473,212 @@ pub async fn decline_invitation(
         return Err(Error::Conflict("Invitation is not pending".to_string()));
     }
 
-    // Mark invitation as revoked (using revoke since we don't have a "declined" state)
+    // Mark invitation as declined (invitee-initiated, distinct from admin revoke)
+    state
+        .repos
+        .invitations
+        .decline(invitation_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to decline invitation: {}", e)))?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// List team invitations
+///
+/// **GET /v1/teams/{team_id}/invitations**
+///
+/// Returns all invitations for a team. Only owners and admins can view.
+pub async fn list_invitations(
+    auth_context: AuthUser,
+    State(state): State<AppState>,
+    Path(team_id): Path<Uuid>,
+) -> Result<Json<Vec<InvitationResponse>>> {
+    let user = &auth_context.0.user;
+
+    // Check permission: owner or admin only
+    let membership = state
+        .repos
+        .memberships
+        .get_by_team_and_user(team_id, user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get membership: {}", e)))?
+        .ok_or_else(|| {
+            Error::Authorization("Access denied: Not a member of this team".to_string())
+        })?;
+
+    if !matches!(
+        membership.role,
+        MembershipRole::Owner | MembershipRole::Admin
+    ) {
+        return Err(Error::Authorization(
+            "Access denied: Must be owner or admin to view invitations".to_string(),
+        ));
+    }
+
+    let invitations = state
+        .repos
+        .invitations
+        .find_by_team(team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to list invitations: {}", e)))?;
+
+    let responses: Vec<InvitationResponse> = invitations
+        .into_iter()
+        .map(InvitationResponse::from)
+        .collect();
+
+    Ok(Json(responses))
+}
+
+/// Revoke a team invitation
+///
+/// **DELETE /v1/teams/{team_id}/invitations/{invitation_id}**
+///
+/// Revokes a pending invitation. Only owners and admins can revoke.
+pub async fn revoke_invitation(
+    auth_context: AuthUser,
+    State(state): State<AppState>,
+    Path((team_id, invitation_id)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode> {
+    let user = &auth_context.0.user;
+
+    // Check permission: owner or admin only
+    let membership = state
+        .repos
+        .memberships
+        .get_by_team_and_user(team_id, user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get membership: {}", e)))?
+        .ok_or_else(|| {
+            Error::Authorization("Access denied: Not a member of this team".to_string())
+        })?;
+
+    if !matches!(
+        membership.role,
+        MembershipRole::Owner | MembershipRole::Admin
+    ) {
+        return Err(Error::Authorization(
+            "Access denied: Must be owner or admin to revoke invitations".to_string(),
+        ));
+    }
+
+    // Get invitation and validate it belongs to this team
+    let invitation = state
+        .repos
+        .invitations
+        .get_by_id(invitation_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get invitation: {}", e)))?
+        .ok_or_else(|| Error::NotFound("Invitation not found".to_string()))?;
+
+    if invitation.team_id != team_id {
+        return Err(Error::NotFound("Invitation not found".to_string()));
+    }
+
+    // Validate invitation is pending
+    if invitation.state() != InvitationState::Pending {
+        return Err(Error::Conflict(
+            "Only pending invitations can be revoked".to_string(),
+        ));
+    }
+
     state
         .repos
         .invitations
         .revoke(invitation_id)
         .await
-        .map_err(|e| Error::Internal(format!("Failed to decline invitation: {}", e)))?;
+        .map_err(|e| Error::Internal(format!("Failed to revoke invitation: {}", e)))?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Resend a team invitation
+///
+/// **POST /v1/teams/{team_id}/invitations/{invitation_id}/resend**
+///
+/// Resends invitation email and extends expiration. Only owners and admins can resend.
+pub async fn resend_invitation(
+    auth_context: AuthUser,
+    State(state): State<AppState>,
+    Path((team_id, invitation_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<InvitationResponse>> {
+    let user = &auth_context.0.user;
+
+    // Check permission: owner or admin only
+    let membership = state
+        .repos
+        .memberships
+        .get_by_team_and_user(team_id, user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get membership: {}", e)))?
+        .ok_or_else(|| {
+            Error::Authorization("Access denied: Not a member of this team".to_string())
+        })?;
+
+    if !matches!(
+        membership.role,
+        MembershipRole::Owner | MembershipRole::Admin
+    ) {
+        return Err(Error::Authorization(
+            "Access denied: Must be owner or admin to resend invitations".to_string(),
+        ));
+    }
+
+    // Get invitation and validate it belongs to this team
+    let invitation = state
+        .repos
+        .invitations
+        .get_by_id(invitation_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get invitation: {}", e)))?
+        .ok_or_else(|| Error::NotFound("Invitation not found".to_string()))?;
+
+    if invitation.team_id != team_id {
+        return Err(Error::NotFound("Invitation not found".to_string()));
+    }
+
+    // Validate invitation is pending
+    if invitation.state() != InvitationState::Pending {
+        return Err(Error::Conflict(
+            "Only pending invitations can be resent".to_string(),
+        ));
+    }
+
+    // Extend expiration
+    let updated_invitation = state
+        .repos
+        .invitations
+        .extend_expiration(invitation_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to extend invitation: {}", e)))?;
+
+    // Resend email
+    let team = state
+        .repos
+        .teams
+        .get_by_id(team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get team: {}", e)))?
+        .ok_or_else(|| Error::Internal("Team not found".to_string()))?;
+
+    let inviter_name = user.name.clone().unwrap_or_else(|| user.email.clone());
+    let role_display = invitation.role.to_string();
+
+    state
+        .email
+        .send_team_invitation(
+            &team.name,
+            team_id,
+            invitation_id,
+            &invitation.email,
+            &inviter_name,
+            &role_display,
+        )
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to resend invitation email: {}", e)))?;
+
+    Ok(Json(InvitationResponse::from(updated_invitation)))
 }
 
 /// Remove a team member
@@ -491,6 +698,13 @@ pub async fn remove_member(
     Path((team_id, member_user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode> {
     let user = &auth_context.0.user;
+
+    // Cannot remove self — use POST /v1/teams/{id}/leave instead
+    if member_user_id == user.id {
+        return Err(Error::Validation(
+            "Cannot remove yourself. Use the leave endpoint instead.".to_string(),
+        ));
+    }
 
     // Check if acting user has permission (owner or admin)
     let acting_membership = state
@@ -582,6 +796,11 @@ pub async fn update_member_role(
 
     let user = &auth_context.0.user;
 
+    // Cannot change own role
+    if member_user_id == user.id {
+        return Err(Error::Validation("Cannot change your own role".to_string()));
+    }
+
     // Check if acting user has permission (owner or admin)
     let acting_membership = state
         .repos
@@ -643,7 +862,25 @@ pub async fn update_member_role(
         .await
         .map_err(|e| Error::Internal(format!("Failed to update member role: {}", e)))?;
 
-    Ok(Json(MembershipResponse::from(updated_membership)))
+    // Fetch target user info for enriched response
+    let target_user = state
+        .repos
+        .users
+        .find(member_user_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get user: {}", e)))?
+        .ok_or_else(|| Error::Internal("User not found for membership".to_string()))?;
+
+    Ok(Json(MembershipResponse {
+        id: updated_membership.id,
+        team_id: updated_membership.team_id,
+        user_id: updated_membership.user_id,
+        role: updated_membership.role,
+        created_at: updated_membership.created_at,
+        user_email: target_user.email,
+        user_name: target_user.name,
+        user_avatar_url: target_user.avatar_url,
+    }))
 }
 
 #[cfg(test)]
@@ -655,14 +892,14 @@ mod tests {
         // Valid request
         let valid_request = InviteMemberRequest {
             email: "test@example.com".to_string(),
-            role: MembershipRole::Member,
+            role: InvitationRole::Member,
         };
         assert!(valid_request.validate().is_ok());
 
         // Invalid email
         let invalid_email = InviteMemberRequest {
             email: "not-an-email".to_string(),
-            role: MembershipRole::Member,
+            role: InvitationRole::Member,
         };
         assert!(invalid_email.validate().is_err());
     }
@@ -702,10 +939,15 @@ mod tests {
             user_id: Uuid::new_v4(),
             role: MembershipRole::Admin,
             created_at: chrono::Utc::now(),
+            user_email: "member@example.com".to_string(),
+            user_name: Some("Test User".to_string()),
+            user_avatar_url: None,
         };
 
         let json = serde_json::to_string(&membership_response).unwrap();
         assert!(json.contains("admin"));
+        assert!(json.contains("member@example.com"));
+        assert!(json.contains("Test User"));
         assert!(json.contains(&team_id.to_string()));
     }
 }
