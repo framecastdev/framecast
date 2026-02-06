@@ -183,32 +183,34 @@ Transitions:
    [create]──►│ pending  │
               └────┬─────┘
                    │
-         ┌────────┬┴────────┐
-         │        │         │
-    [accept]  [expire]  [revoke]
-         │        │         │
-         ▼        ▼         ▼
-    ┌────────┐ ┌───────┐ ┌───────┐
-    │accepted│ │expired│ │revoked│
-    └────────┘ └───────┘ └───────┘
+         ┌────────┼─────────┬──────────┐
+         │        │         │          │
+    [accept]  [decline] [expire]  [revoke]
+         │        │         │          │
+         ▼        ▼         ▼          ▼
+    ┌────────┐ ┌────────┐ ┌───────┐ ┌───────┐
+    │accepted│ │declined│ │expired│ │revoked│
+    └────────┘ └────────┘ └───────┘ └───────┘
 ```
 
 **Formal Definition:**
 
 ```
-States(Invitation) = {pending, accepted, expired, revoked}
+States(Invitation) = {pending, accepted, declined, expired, revoked}
 Initial = pending
-Terminal = {accepted, expired, revoked}
+Terminal = {accepted, declined, expired, revoked}
 
 Derived state (computed, not stored):
   state =
     IF accepted_at IS NOT NULL THEN accepted
+    ELSE IF declined_at IS NOT NULL THEN declined
     ELSE IF revoked_at IS NOT NULL THEN revoked
     ELSE IF expires_at < now() THEN expired
     ELSE pending
 
 Transitions:
   δ(pending, accept) = accepted    [guard: expires_at > now()]
+  δ(pending, decline) = declined
   δ(pending, expire) = expired     [automatic when expires_at reached]
   δ(pending, revoke) = revoked
 ```

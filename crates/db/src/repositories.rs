@@ -388,6 +388,38 @@ impl MembershipRepository {
         Ok(())
     }
 
+    /// Count all memberships for a user (INV-T8: max 50)
+    pub async fn count_for_user(&self, user_id: Uuid) -> Result<i64> {
+        let count = sqlx::query!(
+            r#"
+            SELECT COUNT(*) as count
+            FROM memberships
+            WHERE user_id = $1
+            "#,
+            user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(count.count.unwrap_or(0))
+    }
+
+    /// Count all memberships for a team
+    pub async fn count_for_team(&self, team_id: Uuid) -> Result<i64> {
+        let count = sqlx::query!(
+            r#"
+            SELECT COUNT(*) as count
+            FROM memberships
+            WHERE team_id = $1
+            "#,
+            team_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(count.count.unwrap_or(0))
+    }
+
     /// Count owners in team
     pub async fn count_owners(&self, team_id: Uuid) -> Result<i64> {
         let count = sqlx::query!(
@@ -714,21 +746,115 @@ impl InvitationRepository {
         Ok(())
     }
 
-    /// Find all invitations for a team
-    pub async fn find_by_team(&self, team_id: Uuid) -> Result<Vec<Invitation>> {
-        let rows = sqlx::query_as!(
-            Invitation,
-            r#"
-            SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
-                   token, expires_at, accepted_at, declined_at, revoked_at, created_at
-            FROM invitations
-            WHERE team_id = $1
-            ORDER BY created_at DESC
-            "#,
-            team_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
+    /// Find all invitations for a team, optionally filtered by derived state
+    pub async fn find_by_team(
+        &self,
+        team_id: Uuid,
+        state_filter: Option<InvitationState>,
+    ) -> Result<Vec<Invitation>> {
+        let rows = match state_filter {
+            Some(InvitationState::Pending) => {
+                sqlx::query_as!(
+                    Invitation,
+                    r#"
+                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
+                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
+                    FROM invitations
+                    WHERE team_id = $1
+                      AND accepted_at IS NULL
+                      AND declined_at IS NULL
+                      AND revoked_at IS NULL
+                      AND expires_at > NOW()
+                    ORDER BY created_at DESC
+                    "#,
+                    team_id
+                )
+                .fetch_all(&self.pool)
+                .await?
+            }
+            Some(InvitationState::Accepted) => {
+                sqlx::query_as!(
+                    Invitation,
+                    r#"
+                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
+                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
+                    FROM invitations
+                    WHERE team_id = $1
+                      AND accepted_at IS NOT NULL
+                    ORDER BY created_at DESC
+                    "#,
+                    team_id
+                )
+                .fetch_all(&self.pool)
+                .await?
+            }
+            Some(InvitationState::Declined) => {
+                sqlx::query_as!(
+                    Invitation,
+                    r#"
+                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
+                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
+                    FROM invitations
+                    WHERE team_id = $1
+                      AND declined_at IS NOT NULL
+                    ORDER BY created_at DESC
+                    "#,
+                    team_id
+                )
+                .fetch_all(&self.pool)
+                .await?
+            }
+            Some(InvitationState::Expired) => {
+                sqlx::query_as!(
+                    Invitation,
+                    r#"
+                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
+                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
+                    FROM invitations
+                    WHERE team_id = $1
+                      AND accepted_at IS NULL
+                      AND declined_at IS NULL
+                      AND revoked_at IS NULL
+                      AND expires_at <= NOW()
+                    ORDER BY created_at DESC
+                    "#,
+                    team_id
+                )
+                .fetch_all(&self.pool)
+                .await?
+            }
+            Some(InvitationState::Revoked) => {
+                sqlx::query_as!(
+                    Invitation,
+                    r#"
+                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
+                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
+                    FROM invitations
+                    WHERE team_id = $1
+                      AND revoked_at IS NOT NULL
+                    ORDER BY created_at DESC
+                    "#,
+                    team_id
+                )
+                .fetch_all(&self.pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as!(
+                    Invitation,
+                    r#"
+                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
+                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
+                    FROM invitations
+                    WHERE team_id = $1
+                    ORDER BY created_at DESC
+                    "#,
+                    team_id
+                )
+                .fetch_all(&self.pool)
+                .await?
+            }
+        };
 
         Ok(rows)
     }

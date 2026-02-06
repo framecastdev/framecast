@@ -299,7 +299,8 @@ Operation: estimate_spec(spec: JSONB, user_id: UUID, owner?: URN) â†’ Estim
 | create_invitation | POST | /v1/teams/:id/invitations |
 | revoke_invitation | DELETE | /v1/teams/:id/invitations/:id |
 | resend_invitation | POST | /v1/teams/:id/invitations/:id/resend |
-| accept_invitation | POST | /v1/invitations/accept |
+| accept_invitation | POST | /v1/invitations/:id/accept |
+| decline_invitation | POST | /v1/invitations/:id/decline |
 | **Project** | | |
 | list_projects | GET | /v1/teams/:id/projects |
 | get_project | GET | /v1/projects/:id |

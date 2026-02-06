@@ -1,7 +1,7 @@
 //! Route definitions for Framecast API
 
 use axum::{
-    routing::{delete, get, patch, post, put},
+    routing::{delete, get, patch, post},
     Router,
 };
 
@@ -59,7 +59,7 @@ pub fn membership_routes() -> Router<AppState> {
         )
         .route(
             "/v1/invitations/{invitation_id}/decline",
-            put(memberships::decline_invitation),
+            post(memberships::decline_invitation),
         )
 }
 

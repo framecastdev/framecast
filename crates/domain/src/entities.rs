@@ -11,6 +11,7 @@ use sqlx::types::Json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use framecast_common::{Error, Result, Urn};
 
 use crate::state::{
@@ -19,6 +20,9 @@ use crate::state::{
     ProjectStateMachine, StateError, WebhookDeliveryEvent, WebhookDeliveryGuardContext,
     WebhookDeliveryState, WebhookDeliveryStateMachine,
 };
+
+/// Maximum number of team memberships a single user can hold (INV-T8)
+pub const MAX_TEAM_MEMBERSHIPS: i64 = 50;
 
 /// User tier levels
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, Default)]
@@ -468,8 +472,11 @@ impl Invitation {
             return Err(Error::Validation("Invalid email format".to_string()));
         }
 
-        // Generate secure token
-        let token = uuid::Uuid::new_v4().to_string().replace('-', "");
+        // Generate secure token: 32 random bytes, URL-safe base64 encoded (43 chars)
+        let mut token_bytes = [0u8; 32];
+        getrandom::getrandom(&mut token_bytes)
+            .map_err(|e| Error::Internal(format!("Failed to generate random bytes: {}", e)))?;
+        let token = URL_SAFE_NO_PAD.encode(token_bytes);
 
         let now = Utc::now();
         Ok(Invitation {

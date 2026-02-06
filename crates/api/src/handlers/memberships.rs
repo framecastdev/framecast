@@ -5,7 +5,7 @@
 
 use anyhow::Context;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -15,6 +15,7 @@ use framecast_db::repositories::{
 };
 use framecast_domain::entities::{
     Invitation, InvitationRole, InvitationState, Membership, MembershipRole, UserTier,
+    MAX_TEAM_MEMBERSHIPS,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -38,6 +39,13 @@ pub struct InviteMemberRequest {
 pub struct UpdateMemberRoleRequest {
     /// New role for the member
     pub role: MembershipRole,
+}
+
+/// Query parameters for listing invitations
+#[derive(Debug, Deserialize, Default)]
+pub struct InvitationListQuery {
+    /// Filter by invitation state (pending, accepted, declined, expired, revoked)
+    pub state: Option<InvitationState>,
 }
 
 /// Response for invitation operations
@@ -159,7 +167,14 @@ pub async fn leave_team(
         .map_err(|e| Error::Internal(format!("Failed to get membership: {}", e)))?
         .ok_or_else(|| Error::NotFound("Not a member of this team".to_string()))?;
 
-    // Business rule: Cannot leave if last owner (INV-T2)
+    // Check member and owner counts for business rules
+    let member_count = state
+        .repos
+        .memberships
+        .count_for_team(team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
+
     if membership.role == MembershipRole::Owner {
         let owner_count = state
             .repos
@@ -169,6 +184,14 @@ pub async fn leave_team(
             .map_err(|e| Error::Internal(format!("Failed to count owners: {}", e)))?;
 
         if owner_count <= 1 {
+            if member_count <= 1 {
+                // Last member AND last owner — auto-delete the team (cascades memberships)
+                state.repos.teams.delete(team_id).await.map_err(|e| {
+                    Error::Internal(format!("Failed to auto-delete empty team: {}", e))
+                })?;
+                return Ok(StatusCode::NO_CONTENT);
+            }
+            // Last owner but other members exist — cannot leave (INV-T2)
             return Err(Error::Conflict(
                 "Cannot leave: you are the last owner of this team".to_string(),
             ));
@@ -182,6 +205,23 @@ pub async fn leave_team(
         .delete(team_id, user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to leave team: {}", e)))?;
+
+    // Auto-delete team if no members remain
+    let remaining_members = state
+        .repos
+        .memberships
+        .count_for_team(team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
+
+    if remaining_members == 0 {
+        state
+            .repos
+            .teams
+            .delete(team_id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to auto-delete empty team: {}", e)))?;
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -393,6 +433,21 @@ pub async fn accept_invitation(
         ));
     }
 
+    // Business rule: Max 50 memberships per user (INV-T8)
+    let user_membership_count = state
+        .repos
+        .memberships
+        .count_for_user(user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
+
+    if user_membership_count >= MAX_TEAM_MEMBERSHIPS {
+        return Err(Error::Conflict(format!(
+            "User has reached maximum team memberships limit ({})",
+            MAX_TEAM_MEMBERSHIPS
+        )));
+    }
+
     // Create membership (convert InvitationRole to MembershipRole)
     let membership = Membership::new(team_id, user.id, invitation.role.to_membership_role());
 
@@ -442,7 +497,7 @@ pub async fn accept_invitation(
 
 /// Decline a team invitation
 ///
-/// **PUT /v1/invitations/{invitation_id}/decline**
+/// **POST /v1/invitations/{invitation_id}/decline**
 ///
 /// Declines an invitation to join a team. The user must be the recipient.
 pub async fn decline_invitation(
@@ -493,6 +548,7 @@ pub async fn list_invitations(
     auth_context: AuthUser,
     State(state): State<AppState>,
     Path(team_id): Path<Uuid>,
+    Query(query): Query<InvitationListQuery>,
 ) -> Result<Json<Vec<InvitationResponse>>> {
     let user = &auth_context.0.user;
 
@@ -519,7 +575,7 @@ pub async fn list_invitations(
     let invitations = state
         .repos
         .invitations
-        .find_by_team(team_id)
+        .find_by_team(team_id, query.state)
         .await
         .map_err(|e| Error::Internal(format!("Failed to list invitations: {}", e)))?;
 
@@ -768,6 +824,23 @@ pub async fn remove_member(
         .delete(team_id, member_user_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to remove member: {}", e)))?;
+
+    // Auto-delete team if no members remain
+    let remaining_members = state
+        .repos
+        .memberships
+        .count_for_team(team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
+
+    if remaining_members == 0 {
+        state
+            .repos
+            .teams
+            .delete(team_id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to auto-delete empty team: {}", e)))?;
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }
