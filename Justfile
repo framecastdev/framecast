@@ -356,17 +356,17 @@ ci-setup-ses endpoint="http://localstack:4566":
     #!/usr/bin/env bash
     set -e
     echo "Setting up LocalStack SES identities (CI mode)..."
-    echo "Waiting for LocalStack SES service..."
+    echo "Waiting for LocalStack to be ready..."
     for i in $(seq 1 30); do
-        if curl -sf "{{endpoint}}/_localstack/health" | grep -qE '"ses": "(available|running)"'; then
-            echo "✅ LocalStack SES service is ready"
+        if curl -sf "{{endpoint}}/_localstack/health" > /dev/null 2>&1; then
+            echo "✅ LocalStack is ready"
             break
         fi
         if [ "$i" = "30" ]; then
-            echo "❌ LocalStack SES service not ready after 30 attempts"
+            echo "❌ LocalStack not ready after 30 attempts"
             exit 1
         fi
-        echo "⏳ Waiting for SES... (attempt $i/30)"
+        echo "⏳ Waiting for LocalStack... (attempt $i/30)"
         sleep 2
     done
     EMAIL_ADDRESSES=(

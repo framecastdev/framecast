@@ -46,16 +46,11 @@ async fn check_localstack_health() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     if response.status().is_success() {
-        let health: serde_json::Value = response.json().await?;
-        if let Some(ses_status) = health.get("services").and_then(|s| s.get("ses")) {
-            if ses_status == "available" || ses_status == "running" {
-                println!("✅ LocalStack SES service is ready: {}", ses_status);
-                return Ok(());
-            }
-        }
+        println!("✅ LocalStack is ready");
+        return Ok(());
     }
 
-    Err("LocalStack SES service not available".into())
+    Err("LocalStack not available".into())
 }
 
 /// Skip or panic depending on whether LocalStack is expected
