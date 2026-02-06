@@ -3,7 +3,6 @@
 //! Provides functionality to retrieve and parse emails sent through LocalStack SES
 //! for comprehensive integration testing of email workflows.
 
-use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -11,28 +10,84 @@ use reqwest::Client;
 use serde::Deserialize;
 use uuid::Uuid;
 
-/// Represents an email retrieved from LocalStack SES API
+/// Raw LocalStack SES message format (matches `/_aws/ses` response)
 #[derive(Debug, Deserialize, Clone)]
-#[allow(dead_code)] // Fields used for deserialization and future extensibility
-pub struct LocalStackEmail {
-    #[serde(default = "default_id")]
-    pub id: String,
-    #[serde(default)]
-    pub subject: String,
-    #[serde(default)]
-    pub body: String,
-    #[serde(default)]
-    pub from: String,
-    #[serde(default)]
-    pub to: Vec<String>,
-    pub timestamp: Option<String>,
-
-    #[serde(flatten)]
-    pub raw_data: HashMap<String, serde_json::Value>,
+#[allow(dead_code)]
+struct RawLocalStackMessage {
+    #[serde(alias = "Id")]
+    id: String,
+    #[serde(alias = "Region")]
+    region: Option<String>,
+    #[serde(alias = "Source")]
+    source: Option<String>,
+    #[serde(alias = "Destination")]
+    destination: Option<RawDestination>,
+    #[serde(alias = "Subject")]
+    subject: Option<String>,
+    #[serde(alias = "Body")]
+    body: Option<RawBody>,
+    #[serde(alias = "Timestamp")]
+    timestamp: Option<String>,
 }
 
-fn default_id() -> String {
-    format!("email_{}", uuid::Uuid::new_v4().simple())
+#[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
+struct RawDestination {
+    #[serde(alias = "ToAddresses", default)]
+    to_addresses: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
+struct RawBody {
+    text_part: Option<String>,
+    html_part: Option<String>,
+}
+
+/// Represents an email retrieved from LocalStack SES API (normalized)
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct LocalStackEmail {
+    pub id: String,
+    pub subject: String,
+    pub body: String,
+    pub from: String,
+    pub to: Vec<String>,
+    pub timestamp: Option<String>,
+}
+
+/// Response wrapper for LocalStack `/_aws/ses` endpoint
+#[derive(Debug, Deserialize)]
+struct SesMessagesResponse {
+    messages: Vec<RawLocalStackMessage>,
+}
+
+impl From<RawLocalStackMessage> for LocalStackEmail {
+    fn from(raw: RawLocalStackMessage) -> Self {
+        let body = raw
+            .body
+            .map(|b| {
+                // Prefer HTML part, fall back to text part
+                b.html_part
+                    .or(b.text_part)
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+
+        let to = raw
+            .destination
+            .map(|d| d.to_addresses)
+            .unwrap_or_default();
+
+        Self {
+            id: raw.id,
+            subject: raw.subject.unwrap_or_default(),
+            body,
+            from: raw.source.unwrap_or_default(),
+            to,
+            timestamp: raw.timestamp,
+        }
+    }
 }
 
 impl LocalStackEmail {
@@ -73,14 +128,26 @@ impl LocalStackEmailClient {
         Self::new(&endpoint)
     }
 
-    /// Get all emails for a specific email address
-    pub async fn get_emails(&self, email: &str) -> Result<Vec<LocalStackEmail>> {
+    /// Get all emails sent to a specific recipient address.
+    ///
+    /// LocalStack's `/_aws/ses` `email` query parameter filters by **sender**,
+    /// so we fetch all messages and filter by destination on the client side.
+    pub async fn get_emails(&self, recipient: &str) -> Result<Vec<LocalStackEmail>> {
+        let all = self.get_all_emails().await?;
+        let filtered = all
+            .into_iter()
+            .filter(|e| e.to.iter().any(|addr| addr == recipient))
+            .collect();
+        Ok(filtered)
+    }
+
+    /// Fetch every email stored in LocalStack SES (no filters).
+    async fn get_all_emails(&self) -> Result<Vec<LocalStackEmail>> {
         let url = format!("{}/_aws/ses", self.base_url);
 
         let response = self
             .client
             .get(&url)
-            .query(&[("email", email)])
             .timeout(Duration::from_secs(10))
             .send()
             .await?;
@@ -93,39 +160,8 @@ impl LocalStackEmailClient {
             );
         }
 
-        let data: serde_json::Value = response.json().await?;
-
-        // Handle different response formats from LocalStack
-        let emails: Vec<LocalStackEmail> = match data {
-            serde_json::Value::Array(emails) => {
-                // Direct array of emails
-                let mut result = Vec::new();
-                for email in emails {
-                    if let Ok(parsed) = serde_json::from_value::<LocalStackEmail>(email) {
-                        result.push(parsed);
-                    }
-                }
-                result
-            }
-            serde_json::Value::Object(obj) if obj.contains_key("emails") => {
-                // Wrapped in "emails" field
-                serde_json::from_value::<Vec<LocalStackEmail>>(obj["emails"].clone())
-                    .unwrap_or_default()
-            }
-            serde_json::Value::Object(obj) if obj.contains_key("messages") => {
-                // LocalStack format: wrapped in "messages" field
-                serde_json::from_value::<Vec<LocalStackEmail>>(obj["messages"].clone())
-                    .unwrap_or_default()
-            }
-            serde_json::Value::Object(obj) => {
-                // Single email object - try to parse it directly
-                serde_json::from_value::<LocalStackEmail>(serde_json::Value::Object(obj))
-                    .map(|email| vec![email])
-                    .unwrap_or_default()
-            }
-            _ => Vec::new(),
-        };
-
+        let data: SesMessagesResponse = response.json().await?;
+        let emails = data.messages.into_iter().map(LocalStackEmail::from).collect();
         Ok(emails)
     }
 
@@ -374,30 +410,23 @@ impl LocalStackEmailClient {
 mod tests {
     use super::*;
 
+    fn make_email(id: &str, subject: &str, body: &str) -> LocalStackEmail {
+        LocalStackEmail {
+            id: id.to_string(),
+            subject: subject.to_string(),
+            body: body.to_string(),
+            from: "noreply@framecast.app".to_string(),
+            to: vec!["user@example.com".to_string()],
+            timestamp: None,
+        }
+    }
+
     #[test]
     fn test_email_is_invitation() {
-        let invitation_email = LocalStackEmail {
-            id: "test".to_string(),
-            subject: "You're invited to join Test Team".to_string(),
-            body: "Click here to accept".to_string(),
-            from: "noreply@framecast.app".to_string(),
-            to: vec!["user@example.com".to_string()],
-            timestamp: None,
-            raw_data: HashMap::new(),
-        };
-
+        let invitation_email = make_email("test", "You're invited to join Test Team", "Click here to accept");
         assert!(invitation_email.is_invitation());
 
-        let regular_email = LocalStackEmail {
-            id: "test2".to_string(),
-            subject: "Welcome to Framecast".to_string(),
-            body: "Welcome message".to_string(),
-            from: "noreply@framecast.app".to_string(),
-            to: vec!["user@example.com".to_string()],
-            timestamp: None,
-            raw_data: HashMap::new(),
-        };
-
+        let regular_email = make_email("test2", "Welcome to Framecast", "Welcome message");
         assert!(!regular_email.is_invitation());
     }
 
@@ -405,15 +434,11 @@ mod tests {
     fn test_extract_invitation_id() {
         let client = LocalStackEmailClient::localhost();
 
-        let email = LocalStackEmail {
-            id: "test".to_string(),
-            subject: "Invitation".to_string(),
-            body: "Accept invitation: https://framecast.app/teams/team123/invitations/12345678-1234-4567-89ab-123456789012/accept".to_string(), // pragma: allowlist secret
-            from: "noreply@framecast.app".to_string(),
-            to: vec!["user@example.com".to_string()],
-            timestamp: None,
-            raw_data: HashMap::new(),
-        };
+        let email = make_email(
+            "test",
+            "Invitation",
+            "Accept invitation: https://framecast.app/teams/team123/invitations/12345678-1234-4567-89ab-123456789012/accept", // pragma: allowlist secret
+        );
 
         let invitation_id = client.extract_invitation_id(&email);
         assert!(invitation_id.is_some());
@@ -427,15 +452,11 @@ mod tests {
     fn test_extract_team_id() {
         let client = LocalStackEmailClient::localhost();
 
-        let email = LocalStackEmail {
-            id: "test".to_string(),
-            subject: "Team Invitation".to_string(),
-            body: "Join team: https://framecast.app/teams/87654321-4321-4654-ba98-876543210987/invitations/12345678-1234-4567-89ab-123456789012/accept".to_string(), // pragma: allowlist secret
-            from: "noreply@framecast.app".to_string(),
-            to: vec!["user@example.com".to_string()],
-            timestamp: None,
-            raw_data: HashMap::new(),
-        };
+        let email = make_email(
+            "test",
+            "Team Invitation",
+            "Join team: https://framecast.app/teams/87654321-4321-4654-ba98-876543210987/invitations/12345678-1234-4567-89ab-123456789012/accept", // pragma: allowlist secret
+        );
 
         let team_id = client.extract_team_id(&email);
         assert!(team_id.is_some());
@@ -449,15 +470,11 @@ mod tests {
     fn test_extract_invitation_url() {
         let client = LocalStackEmailClient::localhost();
 
-        let email = LocalStackEmail {
-            id: "test".to_string(),
-            subject: "Invitation".to_string(),
-            body: r#"<a href="https://framecast.app/teams/team123/invitations/12345678-1234-4567-89ab-123456789012/accept">Accept Invitation</a>"#.to_string(), // pragma: allowlist secret
-            from: "noreply@framecast.app".to_string(),
-            to: vec!["user@example.com".to_string()],
-            timestamp: None,
-            raw_data: HashMap::new(),
-        };
+        let email = make_email(
+            "test",
+            "Invitation",
+            r#"<a href="https://framecast.app/teams/team123/invitations/12345678-1234-4567-89ab-123456789012/accept">Accept Invitation</a>"#, // pragma: allowlist secret
+        );
 
         let url = client.extract_invitation_url(&email);
         assert!(url.is_some());

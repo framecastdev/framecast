@@ -499,7 +499,7 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
 
     // First, try a direct API call to see what's there
     let endpoint = localstack_endpoint();
-    match reqwest::get(&format!("{}/_aws/ses?email={}", endpoint, invitee_email)).await {
+    match reqwest::get(&format!("{}/_aws/ses", endpoint)).await {
         Ok(response) => {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
@@ -510,31 +510,11 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         }
     }
 
-    let retrieved_email = match localstack_client
+    let retrieved_email = localstack_client
         .wait_for_invitation_email(invitee_email, 10)
         .await
-    {
-        Ok(Some(email)) => {
-            println!("✅ Email retrieved successfully!");
-            email
-        }
-        Ok(None) => {
-            println!("⚠️ No invitation email found in LocalStack");
-            println!("   This may be expected if LocalStack SES email storage is not configured");
-            println!("   or if the email format is different than expected.");
-            println!("✅ Email sending test completed successfully (retrieval not available)");
-            return; // Exit the test gracefully
-        }
-        Err(e) => {
-            println!("⚠️ Failed to retrieve email from LocalStack: {}", e);
-            println!("   This may be expected if LocalStack SES email storage is not configured");
-            println!(
-                "✅ Email sending test completed successfully (retrieval failed: {})",
-                e
-            );
-            return; // Exit the test gracefully
-        }
-    };
+        .expect("Failed to retrieve emails from LocalStack SES API")
+        .expect("No invitation email found for recipient in LocalStack SES");
 
     println!("✅ Email successfully retrieved from LocalStack!");
     println!("   🆔 Email ID: {}", retrieved_email.id);
