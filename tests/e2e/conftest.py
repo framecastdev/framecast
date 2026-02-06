@@ -264,23 +264,9 @@ async def seed_users(test_config: E2EConfig):
 
         yield SeededUsers(owner=owner, invitee=invitee)
 
-        # Cleanup: remove memberships, invitations, teams created during test
+        # Cleanup: TRUNCATE bypasses FK constraints and INV-T2 trigger
         await conn.execute(
-            "DELETE FROM invitations WHERE email = $1", invitee_email
-        )
-        await conn.execute(
-            "DELETE FROM memberships WHERE user_id = $1 OR user_id = $2",
-            owner_id,
-            invitee_id,
-        )
-        await conn.execute(
-            "DELETE FROM teams WHERE id IN (SELECT team_id FROM memberships WHERE user_id = $1)",
-            owner_id,
-        )
-        # Clean up any remaining teams created by owner
-        # (memberships already deleted, so this catches orphans)
-        await conn.execute(
-            "DELETE FROM users WHERE id = $1 OR id = $2", owner_id, invitee_id
+            "TRUNCATE invitations, memberships, teams, users CASCADE"
         )
     finally:
         await conn.close()
