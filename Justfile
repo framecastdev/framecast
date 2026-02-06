@@ -345,20 +345,24 @@ ci-migrate:
     @echo "Running migrations (CI mode)..."
     sqlx migrate run
 
-# Setup LocalStack S3 buckets for CI (uses AWS_ENDPOINT_URL env var)
+# Setup LocalStack S3 buckets for CI (reads AWS_ENDPOINT_URL, defaults to localhost)
 ci-setup-localstack:
-    @echo "Setting up LocalStack S3 buckets (CI mode)..."
-    aws s3 mb s3://framecast-outputs-dev || true
-    aws s3 mb s3://framecast-assets-dev || true
+    #!/usr/bin/env bash
+    set -e
+    ENDPOINT="${AWS_ENDPOINT_URL:-http://localhost:4566}"
+    echo "Setting up LocalStack S3 buckets (CI mode) at $ENDPOINT..."
+    aws --endpoint-url="$ENDPOINT" s3 mb s3://framecast-outputs-dev || true
+    aws --endpoint-url="$ENDPOINT" s3 mb s3://framecast-assets-dev || true
 
-# Setup LocalStack SES identities for CI (uses AWS_ENDPOINT_URL env var)
+# Setup LocalStack SES identities for CI (reads AWS_ENDPOINT_URL, defaults to localhost)
 ci-setup-ses:
     #!/usr/bin/env bash
     set -e
-    echo "Setting up LocalStack SES identities (CI mode)..."
+    ENDPOINT="${AWS_ENDPOINT_URL:-http://localhost:4566}"
+    echo "Setting up LocalStack SES identities (CI mode) at $ENDPOINT..."
     echo "Waiting for LocalStack to be ready..."
     for i in $(seq 1 30); do
-        if aws sts get-caller-identity > /dev/null 2>&1; then
+        if aws --endpoint-url="$ENDPOINT" sts get-caller-identity > /dev/null 2>&1; then
             echo "✅ LocalStack is ready"
             break
         fi
@@ -381,12 +385,12 @@ ci-setup-ses:
     )
     for email in "${EMAIL_ADDRESSES[@]}"; do
         echo "✉️ Verifying email identity: $email"
-        aws ses verify-email-identity \
+        aws --endpoint-url="$ENDPOINT" ses verify-email-identity \
             --email-address "$email" \
             --region us-east-1 || echo "Failed to verify $email"
     done
     echo "🔍 Listing verified identities..."
-    aws ses list-identities --region us-east-1
+    aws --endpoint-url="$ENDPOINT" ses list-identities --region us-east-1
     echo "✅ SES setup completed!"
 
 # Run SES integration tests in CI mode
