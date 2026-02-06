@@ -160,8 +160,19 @@ jobs:
       AWS_ENDPOINT_URL: http://localstack:4566
       JWT_SECRET: test-e2e-secret-key
       EMAIL_PROVIDER: ses
-      EMAIL_FROM: invitations@framecast.app
+      FROM_EMAIL: invitations@framecast.app
       EMAIL_ENABLED: "true"
+      # Required by Config::from_env() but unused in E2E context
+      SUPABASE_URL: http://localhost:54321
+      SUPABASE_ANON_KEY: test-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+      ANTHROPIC_API_KEY: test-anthropic-key
+      INNGEST_EVENT_KEY: test-inngest-key
+      INNGEST_SIGNING_KEY: test-inngest-signing-key
+      RUNPOD_API_KEY: test-runpod-key
+      RUNPOD_ENDPOINT_ID: test-endpoint-id
+      S3_BUCKET_OUTPUTS: framecast-outputs-dev
+      S3_BUCKET_ASSETS: framecast-assets-dev
 
     steps:
       - name: Checkout
@@ -192,4 +203,8 @@ jobs:
         run: just install-python-deps
 
       - name: Run Python E2E tests
+        env:
+          TEST_LOCAL_API_URL: http://localhost:3000
+          TEST_LOCALSTACK_SES_URL: http://localstack:4566
+          TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
         run: just ci-test-e2e
