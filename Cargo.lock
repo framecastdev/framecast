@@ -1523,11 +1523,13 @@ name = "framecast-api"
 version = "0.0.1-SNAPSHOT"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "chrono",
  "framecast-common",
  "framecast-db",
  "framecast-domain",
+ "framecast-email",
  "hyper 1.8.1",
  "jsonwebtoken",
  "lambda_http",

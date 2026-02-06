@@ -122,6 +122,7 @@ Secrets should be passed via `TF_VAR_*` environment variables:
 ### Lambda Module (`modules/lambda/`)
 
 Creates:
+
 - Lambda function with provided.al2023 runtime
 - IAM execution role with CloudWatch and S3 permissions
 - CloudWatch Log Group
@@ -129,6 +130,7 @@ Creates:
 ### API Gateway Module (`modules/api-gateway/`)
 
 Creates:
+
 - HTTP API v2 with Lambda integration
 - CORS configuration
 - Auto-deploy stage
@@ -137,6 +139,7 @@ Creates:
 ### S3 Module (`modules/s3/`)
 
 Creates:
+
 - Outputs bucket (for generated videos)
 - Assets bucket (for user uploads)
 - Lifecycle policies
@@ -145,6 +148,7 @@ Creates:
 ### Monitoring Module (`modules/monitoring/`)
 
 Creates (production only):
+
 - Lambda errors alarm
 - API Gateway 5xx alarm
 - Lambda duration alarm

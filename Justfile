@@ -19,34 +19,42 @@ default:
 setup: install-tools install-rust-deps install-python-deps install-pre-commit precommit-install
     @echo "Setup complete! Run 'just dev' to start development environment."
 
-# Install system tools (Rust, uv, OpenTofu, LocalStack, Docker)
+# Install system tools (Rust, uv, OpenTofu, LocalStack, Docker, pipx)
 install-tools:
     @echo "Installing required tools..."
     # Install Rust if not present
     @if ! command -v rustc >/dev/null 2>&1; then \
         echo "Installing Rust..."; \
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; \
-        source ~/.cargo/env; \
+        . ~/.cargo/env; \
     fi
     # Install uv for Python package management
     @if ! command -v uv >/dev/null 2>&1; then \
         echo "Installing uv..."; \
         curl -LsSf https://astral.sh/uv/install.sh | sh; \
     fi
+    # Install pipx for isolated Python tool installs
+    @if ! command -v pipx >/dev/null 2>&1; then \
+        echo "Installing pipx..."; \
+        case "$$(uname -s)" in \
+            Darwin*) brew install pipx ;; \
+            *) sudo apt-get install -y pipx ;; \
+        esac; \
+        pipx ensurepath; \
+    fi
     # Install OpenTofu for Infrastructure as Code
     @if ! command -v tofu >/dev/null 2>&1; then \
         echo "Installing OpenTofu..."; \
-        if [[ "$OSTYPE" == "darwin"* ]]; then \
-            if command -v brew >/dev/null 2>&1; then \
-                brew install opentofu; \
-            else \
-                echo "Please install Homebrew first, then run 'brew install opentofu'"; \
-                exit 1; \
-            fi \
-        else \
-            echo "Please install OpenTofu manually for your platform"; \
-            exit 1; \
-        fi \
+        case "$$(uname -s)" in \
+            Darwin*) \
+                if command -v brew >/dev/null 2>&1; then \
+                    brew install opentofu; \
+                else \
+                    echo "Please install Homebrew first, then run 'brew install opentofu'"; \
+                    exit 1; \
+                fi ;; \
+            *) echo "Please install OpenTofu manually for your platform"; exit 1 ;; \
+        esac \
     fi
     # Install cargo-lambda for Lambda builds
     @if ! command -v cargo-lambda >/dev/null 2>&1; then \
@@ -80,19 +88,10 @@ install-python-deps:
     cd tests/e2e && uv sync
     @echo "Python dependencies installed"
 
-# Install pre-commit hooks
+# Install pre-commit (requires pipx from install-tools)
 install-pre-commit:
     @echo "Installing pre-commit..."
-    @if ! command -v pipx >/dev/null 2>&1; then \
-        echo "Installing pipx first..."; \
-        if [[ "$OSTYPE" == "darwin"* ]]; then \
-            brew install pipx; \
-        else \
-            python3 -m pip install --user pipx; \
-            pipx ensurepath; \
-        fi \
-    fi
-    pipx install pre-commit
+    pipx install pre-commit || pipx upgrade pre-commit
     @echo "Pre-commit installed"
 
 # ============================================================================
@@ -335,21 +334,97 @@ ci-clippy:
     @echo "Running Clippy linter (CI mode)..."
     SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings
 
-# Run tests in CI mode
+# Run tests in CI mode (excludes integration tests that need LocalStack)
 ci-test:
     @echo "Running tests (CI mode)..."
-    cargo test --workspace
+    cargo test --workspace --exclude framecast-integration-tests
 
 # Run migrations in CI mode (requires DATABASE_URL)
 ci-migrate:
     @echo "Running migrations (CI mode)..."
     sqlx migrate run
 
-# Setup LocalStack S3 buckets for CI
-ci-setup-localstack endpoint="http://localstack:4566":
-    @echo "Setting up LocalStack S3 buckets (CI mode)..."
-    aws --endpoint-url={{endpoint}} s3 mb s3://framecast-outputs-dev || true
-    aws --endpoint-url={{endpoint}} s3 mb s3://framecast-assets-dev || true
+# Setup LocalStack S3 buckets for CI (reads AWS_ENDPOINT_URL, defaults to localhost)
+ci-setup-localstack:
+    #!/usr/bin/env bash
+    set -e
+    ENDPOINT="${AWS_ENDPOINT_URL:-http://localhost:4566}"
+    echo "Setting up LocalStack S3 buckets (CI mode) at $ENDPOINT..."
+    aws --endpoint-url="$ENDPOINT" s3 mb s3://framecast-outputs-dev || true
+    aws --endpoint-url="$ENDPOINT" s3 mb s3://framecast-assets-dev || true
+
+# Setup LocalStack SES identities for CI (reads AWS_ENDPOINT_URL, defaults to localhost)
+ci-setup-ses:
+    #!/usr/bin/env bash
+    set -e
+    ENDPOINT="${AWS_ENDPOINT_URL:-http://localhost:4566}"
+    echo "Setting up LocalStack SES identities (CI mode) at $ENDPOINT..."
+    echo "Waiting for LocalStack to be ready..."
+    for i in $(seq 1 30); do
+        if aws --endpoint-url="$ENDPOINT" ses list-identities --region us-east-1 > /dev/null 2>&1; then
+            echo "✅ LocalStack is ready"
+            break
+        fi
+        if [ "$i" = "30" ]; then
+            echo "❌ LocalStack not ready after 30 attempts"
+            exit 1
+        fi
+        echo "⏳ Waiting for LocalStack... (attempt $i/30)"
+        sleep 2
+    done
+    EMAIL_ADDRESSES=(
+        "invitations@framecast.app"
+        "noreply@framecast.app"
+        "support@framecast.app"
+        "test@framecast.app"
+        "invitee@example.com"
+        "developer@example.com"
+        "admin@example.com"
+        "user@test.com"
+        "owner-e2e@test.com"
+        "invitee-e2e@test.com"
+    )
+    for email in "${EMAIL_ADDRESSES[@]}"; do
+        echo "✉️ Verifying email identity: $email"
+        aws --endpoint-url="$ENDPOINT" ses verify-email-identity \
+            --email-address "$email" \
+            --region us-east-1 || echo "Failed to verify $email"
+    done
+    echo "🔍 Listing verified identities..."
+    aws --endpoint-url="$ENDPOINT" ses list-identities --region us-east-1
+    echo "✅ SES setup completed!"
+
+# Run SES integration tests in CI mode
+ci-test-integration-ses:
+    @echo "Running SES integration tests (CI mode)..."
+    cargo test -p framecast-integration-tests --test email_ses_e2e_test -- --nocapture
+
+# Start API server in background for E2E tests (CI mode)
+ci-start-api:
+    #!/usr/bin/env bash
+    set -e
+    echo "Building API server..."
+    cargo build --bin local
+    echo "Starting API server in background..."
+    cargo run --bin local &
+    echo "Waiting for API server to be ready..."
+    for i in $(seq 1 30); do
+        if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+            echo "✅ API server is ready"
+            exit 0
+        fi
+        echo "⏳ Waiting for API server... (attempt $i/30)"
+        sleep 2
+    done
+    echo "❌ API server did not start within 60 seconds"
+    exit 1
+
+# Run Python E2E tests in CI mode
+ci-test-e2e:
+    #!/usr/bin/env bash
+    set -e
+    echo "Running Python E2E tests (CI mode)..."
+    cd tests/e2e && uv run pytest tests/test_invitation_workflow_e2e.py -v --tb=short
 
 # ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)

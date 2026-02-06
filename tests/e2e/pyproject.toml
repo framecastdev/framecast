@@ -18,6 +18,8 @@ dependencies = [
     "respx>=0.20.0",         # HTTP request mocking
     "tenacity>=8.2.0",       # Retry utilities
     "pillow>=10.0.0",        # Image processing for asset tests
+    "PyJWT>=2.8.0",          # JWT token generation for E2E auth
+    "asyncpg>=0.29.0",       # Direct database access for test seeding
 ]
 
 [build-system]

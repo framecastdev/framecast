@@ -8,8 +8,10 @@ pub mod validation;
 use axum::Router;
 use framecast_common::config::Config;
 use framecast_db::repositories::Repositories;
+use framecast_email::{EmailConfig, EmailServiceFactory};
 use middleware::{AppState, AuthConfig};
 use sqlx::PgPool;
+use std::sync::Arc;
 
 /// Create the main application router with all routes and middleware
 pub async fn create_app(_config: Config, pool: PgPool) -> Result<Router, anyhow::Error> {
@@ -23,8 +25,16 @@ pub async fn create_app(_config: Config, pool: PgPool) -> Result<Router, anyhow:
         audience: std::env::var("JWT_AUDIENCE").ok(),
     };
 
+    // Create email service from environment
+    let email_config = EmailConfig::from_env()?;
+    let email_service = EmailServiceFactory::create(email_config).await?;
+
     // Create application state
-    let state = AppState { repos, auth_config };
+    let state = AppState {
+        repos,
+        auth_config,
+        email: Arc::from(email_service),
+    };
 
     // Build router with all routes
     let app = Router::new()

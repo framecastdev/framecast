@@ -10,14 +10,16 @@ Supports two modes:
 """
 
 import asyncio
-import tempfile
+import os
+import time
+import uuid
 from collections.abc import AsyncGenerator
-from pathlib import Path
 from typing import Any
 
+import asyncpg
 import httpx
+import jwt
 import pytest
-import respx
 from faker import Faker
 from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings
@@ -26,31 +28,18 @@ from utils.localstack_email import LocalStackEmailClient
 
 # Test environment configuration
 class E2EConfig(BaseSettings):
-    """Configuration for E2E tests loaded from environment variables.
-
-    Supports SAM local testing via USE_SAM_LOCAL=true environment variable.
-    When enabled, tests will target the SAM local API at http://localhost:3001
-    instead of the local development server at http://localhost:3000.
-    """
+    """Configuration for E2E tests loaded from environment variables."""
 
     # Test mode: "mocked" or "real"
     test_mode: str = "mocked"
 
-    # API base URL (for local development server)
+    # API base URL
     local_api_url: str = "http://localhost:3000"
-
-    # SAM Local settings
-    sam_api_url: str = "http://localhost:3001"
-    use_sam_local: bool = False
 
     @property
     def api_base_url(self) -> str:
-        """Return the appropriate API URL based on configuration.
-
-        When USE_SAM_LOCAL=true, returns SAM local URL (port 3001).
-        Otherwise, returns local development server URL (port 3000).
-        """
-        return self.sam_api_url if self.use_sam_local else self.local_api_url
+        """Return the API URL."""
+        return self.local_api_url
 
     # Database settings
     database_url: str = "postgresql://postgres:password@localhost:5432/framecast_test"  # pragma: allowlist secret
@@ -83,63 +72,44 @@ class E2EConfig(BaseSettings):
 class UserPersona(BaseModel):
     """Represents a test user with specific characteristics."""
 
-    id: str
+    user_id: str  # UUID string
     email: str
     name: str
-    tier: str  # "visitor", "starter", "creator"
+    tier: str  # "starter", "creator"
     credits: int = 0
     team_memberships: list[str] = []
     owned_teams: list[str] = []
     api_keys: list[str] = []
 
     def to_auth_token(self) -> str:
-        """Generate a mock JWT token for this user."""
-        import base64
-        import json
-
+        """Generate a proper HS256 JWT token for this user."""
         payload = {
-            "sub": self.id,
+            "sub": self.user_id,
             "email": self.email,
             "aud": "authenticated",
             "role": "authenticated",
-            "framecast_tier": self.tier,
-            "exp": 9999999999,  # Far future expiry
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 3600,
         }
+        secret = os.environ.get("JWT_SECRET", "test-e2e-secret-key-for-ci-only-0")
+        return jwt.encode(payload, secret, algorithm="HS256")
 
-        # Simple mock JWT (not cryptographically valid, for testing only)
-        header = base64.b64encode(
-            json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
-        ).decode()
-        payload_encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-        signature = "mock-signature"
-
-        return f"{header}.{payload_encoded}.{signature}"
+    def auth_headers(self) -> dict[str, str]:
+        """Return authorization headers for HTTP requests."""
+        return {"Authorization": f"Bearer {self.to_auth_token()}"}
 
 
 # Standard user personas for testing
-@pytest.fixture
-def visitor_user() -> UserPersona:
-    """A visitor user (not authenticated)."""
-    fake = Faker()
-    return UserPersona(
-        id="usr_visitor_test",
-        email=fake.email(),
-        name=fake.name(),
-        tier="visitor",
-    )
-
-
 @pytest.fixture
 def starter_user() -> UserPersona:
     """A starter tier user with some credits."""
     fake = Faker()
     return UserPersona(
-        id="usr_starter_test",
+        user_id=str(uuid.uuid4()),
         email=fake.email(),
         name=fake.name(),
         tier="starter",
-        credits=1000,  # 10 dollars worth
-        api_keys=["ak_starter_test_key"],
+        credits=1000,
     )
 
 
@@ -148,14 +118,11 @@ def creator_user() -> UserPersona:
     """A creator tier user with team memberships."""
     fake = Faker()
     return UserPersona(
-        id="usr_creator_test",
+        user_id=str(uuid.uuid4()),
         email=fake.email(),
         name=fake.name(),
         tier="creator",
-        credits=5000,  # 50 dollars worth
-        team_memberships=["tm_test_team_1"],
-        owned_teams=["tm_test_team_owned"],
-        api_keys=["ak_creator_test_key"],
+        credits=5000,
     )
 
 
@@ -164,13 +131,11 @@ def team_owner() -> UserPersona:
     """A creator user who owns multiple teams."""
     fake = Faker()
     return UserPersona(
-        id="usr_team_owner_test",
+        user_id=str(uuid.uuid4()),
         email=fake.email(),
         name=fake.name(),
         tier="creator",
-        credits=10000,  # 100 dollars worth
-        owned_teams=["tm_team_1", "tm_team_2"],
-        api_keys=["ak_team_owner_key"],
+        credits=10000,
     )
 
 
@@ -179,13 +144,11 @@ def team_member() -> UserPersona:
     """A creator user who is a member of teams but doesn't own any."""
     fake = Faker()
     return UserPersona(
-        id="usr_team_member_test",
+        user_id=str(uuid.uuid4()),
         email=fake.email(),
         name=fake.name(),
         tier="creator",
-        credits=2000,  # 20 dollars worth
-        team_memberships=["tm_team_1", "tm_team_2"],
-        api_keys=["ak_team_member_key"],
+        credits=2000,
     )
 
 
@@ -202,6 +165,90 @@ def event_loop():
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+
+# Database seeding for E2E tests
+class SeededUsers:
+    """Container for seeded test users."""
+
+    def __init__(self, owner: UserPersona, invitee: UserPersona):
+        self.owner = owner
+        self.invitee = invitee
+
+
+@pytest.fixture
+async def seed_users(test_config: E2EConfig):
+    """Seed test users directly into the database for E2E tests."""
+    database_url = os.environ.get("DATABASE_URL", test_config.database_url)
+    conn = await asyncpg.connect(database_url)
+    try:
+        owner_id = uuid.uuid4()
+        owner_email = "owner-e2e@test.com"
+        invitee_id = uuid.uuid4()
+        invitee_email = "invitee-e2e@test.com"
+
+        from datetime import UTC, datetime
+
+        now_dt = datetime.now(UTC)
+
+        # Upsert owner (Creator tier)
+        await conn.execute(
+            """
+            INSERT INTO users (id, email, name, tier, credits,
+                               ephemeral_storage_bytes, upgraded_at, created_at, updated_at)
+            VALUES ($1, $2, $3, 'creator', 5000, 0, $4, $4, $4)
+            ON CONFLICT (email) DO UPDATE SET
+                id = $1, tier = 'creator', credits = 5000, upgraded_at = $4, updated_at = $4
+            """,
+            owner_id,
+            owner_email,
+            "Test Owner",
+            now_dt,
+        )
+        # Re-read the actual ID in case it was an existing row
+        row = await conn.fetchrow("SELECT id FROM users WHERE email = $1", owner_email)
+        owner_id = row["id"]
+
+        # Upsert invitee (Starter tier — will be auto-upgraded on accept)
+        await conn.execute(
+            """
+            INSERT INTO users (id, email, name, tier, credits,
+                               ephemeral_storage_bytes, created_at, updated_at)
+            VALUES ($1, $2, $3, 'starter', 1000, 0, $4, $4)
+            ON CONFLICT (email) DO UPDATE SET
+                id = $1, tier = 'starter', credits = 1000, upgraded_at = NULL, updated_at = $4
+            """,
+            invitee_id,
+            invitee_email,
+            "Test Invitee",
+            now_dt,
+        )
+        row = await conn.fetchrow(
+            "SELECT id FROM users WHERE email = $1", invitee_email
+        )
+        invitee_id = row["id"]
+
+        owner = UserPersona(
+            user_id=str(owner_id),
+            email=owner_email,
+            name="Test Owner",
+            tier="creator",
+            credits=5000,
+        )
+        invitee = UserPersona(
+            user_id=str(invitee_id),
+            email=invitee_email,
+            name="Test Invitee",
+            tier="starter",
+            credits=1000,
+        )
+
+        yield SeededUsers(owner=owner, invitee=invitee)
+
+        # Cleanup: TRUNCATE bypasses FK constraints and INV-T2 trigger
+        await conn.execute("TRUNCATE invitations, memberships, teams, users CASCADE")
+    finally:
+        await conn.close()
 
 
 # HTTP client for API testing
@@ -256,134 +303,6 @@ async def email_cleanup(localstack_email_client: LocalStackEmailClient):
     # Cleanup after test
     for _email_address, msg_id in collected_emails:
         await localstack_email_client.delete_email(msg_id)
-
-
-# Mock service infrastructure
-@pytest.fixture
-def mock_runpod(test_config: E2EConfig):
-    """Mock RunPod API for video generation testing."""
-    if test_config.test_mode != "mocked":
-        yield None
-        return
-
-    with respx.mock:
-        # Mock job submission
-        respx.post(
-            f"https://api.runpod.ai/v2/{test_config.runpod_endpoint_id}/run"
-        ).mock(
-            return_value=httpx.Response(
-                200, json={"id": "mock-job-id", "status": "IN_QUEUE"}
-            )
-        )
-
-        # Mock job status polling
-        respx.get(
-            f"https://api.runpod.ai/v2/{test_config.runpod_endpoint_id}/status/mock-job-id"
-        ).mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "id": "mock-job-id",
-                    "status": "COMPLETED",
-                    "output": {
-                        "video_url": "https://mock-storage.runpod.ai/video.mp4",
-                        "metadata": {
-                            "duration": 30.5,
-                            "resolution": "1920x1080",
-                            "format": "mp4",
-                        },
-                    },
-                },
-            )
-        )
-
-        yield
-
-
-@pytest.fixture
-def mock_anthropic(test_config: E2EConfig):
-    """Mock Anthropic Claude API for AI interactions."""
-    if test_config.test_mode != "mocked":
-        yield None
-        return
-
-    with respx.mock:
-        respx.post("https://api.anthropic.com/v1/messages").mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "id": "msg_mock",
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "This is a mock response from Claude for testing purposes.",
-                        }
-                    ],
-                    "model": "claude-3-sonnet-20240229",
-                    "stop_reason": "end_turn",
-                    "stop_sequence": None,
-                    "usage": {"input_tokens": 10, "output_tokens": 15},
-                },
-            )
-        )
-        yield
-
-
-@pytest.fixture
-def mock_inngest(test_config: E2EConfig):
-    """Mock Inngest event API for job orchestration."""
-    if test_config.test_mode != "mocked":
-        yield None
-        return
-
-    with respx.mock:
-        respx.post("https://inn.gs/e/test-inngest-key").mock(
-            return_value=httpx.Response(200, json={"status": "ok"})
-        )
-        yield
-
-
-@pytest.fixture
-async def mock_s3(test_config: E2EConfig):
-    """Mock S3 operations using LocalStack."""
-    if test_config.test_mode != "mocked":
-        # In real mode, we use actual LocalStack
-        yield None
-        return
-
-    # For mocked mode, simulate S3 operations
-    with respx.mock:
-        # Mock presigned URL generation
-        respx.get(f"{test_config.s3_endpoint_url}/{test_config.s3_bucket_assets}").mock(
-            return_value=httpx.Response(
-                200, json={"presigned_url": "https://mock-s3-url"}
-            )
-        )
-
-        # Mock file uploads
-        respx.put("https://mock-s3-url").mock(return_value=httpx.Response(200))
-
-        yield
-
-
-# Temporary file management
-@pytest.fixture
-def temp_asset_file():
-    """Create a temporary test asset file."""
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
-        # Create a simple test image
-        from PIL import Image
-
-        img = Image.new("RGB", (100, 100), color="red")
-        img.save(f, format="JPEG")
-        f.flush()
-
-        yield Path(f.name)
-
-        # Cleanup
-        Path(f.name).unlink(missing_ok=True)
 
 
 # Test data factories
@@ -483,21 +402,17 @@ def assert_credits_non_negative(credits: int) -> None:
 __all__ = [
     "E2EConfig",
     "UserPersona",
+    "SeededUsers",
     "test_config",
     "http_client",
     "authenticated_client",
     "localstack_email_client",
     "email_cleanup",
-    "visitor_user",
+    "seed_users",
     "starter_user",
     "creator_user",
     "team_owner",
     "team_member",
-    "mock_runpod",
-    "mock_anthropic",
-    "mock_inngest",
-    "mock_s3",
-    "temp_asset_file",
     "test_data_factory",
     "TestDataFactory",
     "assert_valid_urn",

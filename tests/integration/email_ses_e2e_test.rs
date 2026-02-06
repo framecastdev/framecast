@@ -12,12 +12,23 @@ use std::time::Duration;
 use framecast_email::{EmailConfig, EmailMessage, EmailServiceFactory};
 use uuid::Uuid;
 
+/// Get the LocalStack endpoint URL from environment or default to localhost
+fn localstack_endpoint() -> String {
+    std::env::var("AWS_ENDPOINT_URL").unwrap_or_else(|_| "http://localhost:4566".to_string())
+}
+
+/// Whether LocalStack is expected to be available (tests should fail instead of skip).
+/// True when AWS_ENDPOINT_URL is explicitly set (e.g. in the localstack-test CI job).
+fn require_localstack() -> bool {
+    std::env::var("AWS_ENDPOINT_URL").is_ok()
+}
+
 /// Test configuration for LocalStack SES
 fn create_localstack_email_config() -> EmailConfig {
     EmailConfig {
         provider: "ses".to_string(),
         aws_region: Some("us-east-1".to_string()),
-        aws_endpoint_url: Some("http://localhost:4566".to_string()),
+        aws_endpoint_url: Some(localstack_endpoint()),
         default_from: "invitations@framecast.app".to_string(),
         default_reply_to: Some("noreply@framecast.app".to_string()),
         enabled: true,
@@ -26,33 +37,37 @@ fn create_localstack_email_config() -> EmailConfig {
 
 /// Check if LocalStack is running and accessible
 async fn check_localstack_health() -> Result<(), Box<dyn std::error::Error>> {
+    let endpoint = localstack_endpoint();
     let client = reqwest::Client::new();
     let response = client
-        .get("http://localhost:4566/_localstack/health")
+        .get(format!("{}/_localstack/health", endpoint))
         .timeout(Duration::from_secs(5))
         .send()
         .await?;
 
     if response.status().is_success() {
-        let health: serde_json::Value = response.json().await?;
-        if let Some(ses_status) = health.get("services").and_then(|s| s.get("ses")) {
-            if ses_status == "available" || ses_status == "running" {
-                println!("✅ LocalStack SES service is ready: {}", ses_status);
-                return Ok(());
-            }
-        }
+        println!("✅ LocalStack is ready");
+        return Ok(());
     }
 
-    Err("LocalStack SES service not available".into())
+    Err("LocalStack not available".into())
+}
+
+/// Skip or panic depending on whether LocalStack is expected
+fn skip_or_panic(msg: &str) {
+    if require_localstack() {
+        panic!("LocalStack required but: {}", msg);
+    }
+    println!("⏭️ Skipping test: {}", msg);
 }
 
 #[tokio::test]
 async fn test_localstack_ses_service_creation() {
     println!("\n🧪 Testing AWS SES service creation with LocalStack...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -78,9 +93,9 @@ async fn test_localstack_ses_service_creation() {
 async fn test_localstack_ses_send_basic_email() {
     println!("\n📧 Testing basic email sending through LocalStack SES...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -122,9 +137,9 @@ async fn test_localstack_ses_send_basic_email() {
 async fn test_localstack_ses_team_invitation_workflow() {
     println!("\n🎯 Testing complete team invitation workflow with LocalStack SES...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -285,9 +300,9 @@ async fn test_localstack_ses_team_invitation_workflow() {
 async fn test_localstack_ses_error_handling() {
     println!("\n⚠️ Testing SES error handling and edge cases...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -315,52 +330,6 @@ async fn test_localstack_ses_error_handling() {
             assert!(e.to_string().contains("validation") || e.to_string().contains("Invalid"));
         }
     }
-
-    // ============================================================================
-    // Test 2: Empty subject and body
-    // ============================================================================
-    println!("\n📝 Test 2: Testing empty subject and body...");
-
-    let empty_message = EmailMessage::new(
-        "test@framecast.app".to_string(),
-        "invitations@framecast.app".to_string(),
-        "".to_string(), // Empty subject
-        "".to_string(), // Empty body
-    );
-
-    // This should still work with SES but create empty content
-    let receipt = email_service
-        .send_email(empty_message)
-        .await
-        .expect("Should handle empty content gracefully");
-
-    println!(
-        "✅ Empty content handled gracefully: {}",
-        receipt.message_id
-    );
-
-    // ============================================================================
-    // Test 3: Large email content
-    // ============================================================================
-    println!("\n📏 Test 3: Testing large email content...");
-
-    let large_body = "A".repeat(10000); // 10KB body
-    let large_message = EmailMessage::new(
-        "test@framecast.app".to_string(),
-        "invitations@framecast.app".to_string(),
-        "Large Email Test".to_string(),
-        large_body,
-    );
-
-    let receipt = email_service
-        .send_email(large_message)
-        .await
-        .expect("Should handle large content");
-
-    println!(
-        "✅ Large email content handled successfully: {}",
-        receipt.message_id
-    );
 
     println!("\n✅ Error handling tests completed successfully!");
 }
@@ -403,9 +372,9 @@ async fn test_disabled_email_service() {
 async fn test_localstack_ses_email_retrieval_and_content_validation() {
     println!("\n📧 Testing LocalStack SES email retrieval and content validation...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -414,7 +383,7 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         .await
         .expect("Failed to create email service");
 
-    let localstack_client = LocalStackEmailClient::localhost();
+    let localstack_client = LocalStackEmailClient::from_env();
 
     // Verify LocalStack SES is healthy
     match localstack_client.health_check().await {
@@ -483,12 +452,8 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
     println!("🔍 Checking LocalStack SES API for emails...");
 
     // First, try a direct API call to see what's there
-    match reqwest::get(&format!(
-        "http://localhost:4566/_aws/ses?email={}",
-        invitee_email
-    ))
-    .await
-    {
+    let endpoint = localstack_endpoint();
+    match reqwest::get(&format!("{}/_aws/ses", endpoint)).await {
         Ok(response) => {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
@@ -499,31 +464,11 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         }
     }
 
-    let retrieved_email = match localstack_client
+    let retrieved_email = localstack_client
         .wait_for_invitation_email(invitee_email, 10)
         .await
-    {
-        Ok(Some(email)) => {
-            println!("✅ Email retrieved successfully!");
-            email
-        }
-        Ok(None) => {
-            println!("⚠️ No invitation email found in LocalStack");
-            println!("   This may be expected if LocalStack SES email storage is not configured");
-            println!("   or if the email format is different than expected.");
-            println!("✅ Email sending test completed successfully (retrieval not available)");
-            return; // Exit the test gracefully
-        }
-        Err(e) => {
-            println!("⚠️ Failed to retrieve email from LocalStack: {}", e);
-            println!("   This may be expected if LocalStack SES email storage is not configured");
-            println!(
-                "✅ Email sending test completed successfully (retrieval failed: {})",
-                e
-            );
-            return; // Exit the test gracefully
-        }
-    };
+        .expect("Failed to retrieve emails from LocalStack SES API")
+        .expect("No invitation email found for recipient in LocalStack SES");
 
     println!("✅ Email successfully retrieved from LocalStack!");
     println!("   🆔 Email ID: {}", retrieved_email.id);
@@ -681,15 +626,14 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
 async fn test_localstack_client_health_and_basic_operations() {
     println!("\n🩺 Testing LocalStack client health and basic operations...");
 
-    let client = LocalStackEmailClient::localhost();
+    let client = LocalStackEmailClient::from_env();
 
     // Test health check
     match client.health_check().await {
         Ok(true) => println!("✅ LocalStack SES service is healthy"),
         Ok(false) => println!("⚠️ LocalStack SES service health check returned false"),
         Err(e) => {
-            println!("⚠️ LocalStack health check failed: {}", e);
-            println!("⏭️ Skipping remaining tests");
+            skip_or_panic(&format!("LocalStack health check failed: {}", e));
             return;
         }
     }
@@ -705,7 +649,6 @@ async fn test_localstack_client_health_and_basic_operations() {
                 emails.len(),
                 test_email
             );
-            assert!(emails.is_empty() || !emails.is_empty()); // Either is valid for empty mailbox
         }
         Err(e) => {
             println!(

@@ -16,13 +16,34 @@ class LocalStackEmail:
     """Represents an email retrieved from LocalStack SES."""
 
     def __init__(self, data: dict[str, Any]):
-        """Initialize email from LocalStack response data."""
-        self.id = data.get("id", "")
-        self.subject = data.get("subject", "")
-        self.body = data.get("body", "")
-        self.from_address = data.get("from", "")
-        self.to = data.get("to", [])
-        self.timestamp = data.get("timestamp", "")
+        """Initialize email from LocalStack response data.
+
+        Handles both old and new LocalStack response formats:
+        - Old: {"id", "subject", "body", "from", "to", "timestamp"}
+        - New: {"Id", "Source", "Destination": {"ToAddresses": [...]},
+                "Subject", "Body": {"text_part", "html_part"}, "Timestamp"}
+        """
+        # Handle both camelCase (new) and lowercase (old) field names
+        self.id = data.get("Id", data.get("id", ""))
+        self.subject = data.get("Subject", data.get("subject", ""))
+
+        # Body can be a string or a dict with text_part/html_part
+        body_raw = data.get("Body", data.get("body", ""))
+        if isinstance(body_raw, dict):
+            self.body = body_raw.get("html_part", body_raw.get("text_part", ""))
+        else:
+            self.body = body_raw
+
+        self.from_address = data.get("Source", data.get("from", ""))
+
+        # Destination can be a dict with ToAddresses or a plain list/string
+        destination = data.get("Destination", data.get("destination"))
+        if isinstance(destination, dict):
+            self.to = destination.get("ToAddresses", [])
+        else:
+            self.to = data.get("to", [])
+
+        self.timestamp = data.get("Timestamp", data.get("timestamp", ""))
         self.raw_data = data
 
     def __repr__(self) -> str:
@@ -59,13 +80,17 @@ class LocalStackEmailClient:
 
     async def get_emails(self, email_address: str) -> list[LocalStackEmail]:
         """
-        Get all emails for a specific email address.
+        Get all emails where the given address appears as a recipient.
+
+        LocalStack's `/_aws/ses?email=` param filters by **sender**, not
+        recipient.  To find emails *to* a specific address we must fetch all
+        messages and filter client-side by ``ToAddresses``.
 
         Args:
-            email_address: Email address to retrieve emails for
+            email_address: Recipient email address to filter for
 
         Returns:
-            List of LocalStackEmail objects
+            List of LocalStackEmail objects addressed to ``email_address``
 
         Raises:
             httpx.RequestError: If request fails
@@ -74,26 +99,40 @@ class LocalStackEmailClient:
         url = f"{self.base_url}/_aws/ses"
 
         try:
-            response = await self.client.get(url, params={"email": email_address})
+            response = await self.client.get(url)
             response.raise_for_status()
 
             data = response.json()
 
-            # Handle case where LocalStack returns different response formats
+            # Handle various LocalStack response formats
             if isinstance(data, list):
                 emails = data
+            elif isinstance(data, dict) and "messages" in data:
+                emails = data["messages"]
             elif isinstance(data, dict) and "emails" in data:
                 emails = data["emails"]
             elif isinstance(data, dict) and data:
                 # Single email object - check if it has required fields
-                if data.get("id") or data.get("subject") or data.get("body"):
+                if (
+                    data.get("id")
+                    or data.get("Id")
+                    or data.get("subject")
+                    or data.get("Subject")
+                ):
                     emails = [data]
                 else:
                     emails = []
             else:
                 emails = []
 
-            return [LocalStackEmail(email) for email in emails if email]
+            all_emails = [LocalStackEmail(email) for email in emails if email]
+
+            # Filter by recipient (ToAddresses)
+            return [
+                e
+                for e in all_emails
+                if email_address in (e.to if isinstance(e.to, list) else [e.to])
+            ]
 
         except httpx.RequestError as e:
             raise httpx.RequestError(

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE users SET\n            tier = $2,\n            upgraded_at = $3,\n            updated_at = NOW()\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "user_tier",
+            "kind": {
+              "Enum": [
+                "starter",
+                "creator"
+              ]
+            }
+          }
+        },
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "74df35ed968569e53a7f8d5ab25c50393282f42faff14cd10153c4b9244880b1"
+}

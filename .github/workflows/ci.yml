@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: read
-  packages: read  # Required for GHCR image pull
+  packages: read  # Required for GHCR container auth
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,22 +16,9 @@ env:
   CARGO_HOME: /opt/rust/cargo
 
 jobs:
-  pull-image:
-    name: Pull CI Image
-    runs-on: self-hosted
-    steps:
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Pull latest CI image
-        run: |
-          docker rmi ghcr.io/framecastdev/framecast-ci:latest || true
-          docker pull ghcr.io/framecastdev/framecast-ci:latest
-
   ci:
     name: CI Pipeline
     runs-on: self-hosted
-    needs: [pull-image]
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
       credentials:
@@ -51,9 +38,20 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      localstack:
+        image: localstack/localstack:latest
+        env:
+          SERVICES: ses
+          DEBUG: "0"
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
     env:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-      TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
 
     steps:
       - name: Checkout
@@ -76,10 +74,28 @@ jobs:
       - name: Run tests
         run: just ci-test
 
+      - name: Setup LocalStack SES identities
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ENDPOINT_URL: http://localstack:4566
+        run: just ci-setup-ses
+
+      - name: Run SES integration tests
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ENDPOINT_URL: http://localstack:4566
+          EMAIL_PROVIDER: ses
+          FROM_EMAIL: invitations@framecast.app
+          EMAIL_ENABLED: "true"
+        run: just ci-test-integration-ses
+
   infra-validate:
     name: Validate Infrastructure
     runs-on: self-hosted
-    needs: [pull-image]
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
       credentials:
@@ -104,7 +120,6 @@ jobs:
   build-lambda:
     name: Build Lambda
     runs-on: self-hosted
-    needs: [pull-image]
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
       credentials:
@@ -132,10 +147,10 @@ jobs:
           ls -la target/lambda/lambda/bootstrap.zip
           echo "Lambda artifact size: $(du -h target/lambda/lambda/bootstrap.zip | cut -f1)"
 
-  localstack-test:
-    name: LocalStack Integration
+  e2e-tests:
+    name: E2E Tests
     runs-on: self-hosted
-    needs: [pull-image, ci, build-lambda]
+    needs: [ci]
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
       credentials:
@@ -158,22 +173,36 @@ jobs:
       localstack:
         image: localstack/localstack:latest
         env:
-          SERVICES: s3,lambda,iam,logs
+          SERVICES: ses
           DEBUG: "0"
-          DOCKER_HOST: unix:///var/run/docker.sock
         options: >-
           --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
           --health-start-period 30s
-          -v /var/run/docker.sock:/var/run/docker.sock
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
       AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://localstack:4566
+      JWT_SECRET: test-e2e-secret-key-for-ci-only-0  # pragma: allowlist secret
+      EMAIL_PROVIDER: ses
+      FROM_EMAIL: invitations@framecast.app
+      EMAIL_ENABLED: "true"
+      # Required by Config::from_env() but unused in E2E context
+      SUPABASE_URL: http://localhost:54321
+      SUPABASE_ANON_KEY: test-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+      ANTHROPIC_API_KEY: test-anthropic-key
+      INNGEST_EVENT_KEY: test-inngest-key
+      INNGEST_SIGNING_KEY: test-inngest-signing-key
+      RUNPOD_API_KEY: test-runpod-key
+      RUNPOD_ENDPOINT_ID: test-endpoint-id
+      S3_BUCKET_OUTPUTS: framecast-outputs-dev
+      S3_BUCKET_ASSETS: framecast-assets-dev
 
     steps:
       - name: Checkout
@@ -184,28 +213,22 @@ jobs:
         with:
           shared-key: "ci"
 
-      - name: Build Lambda
-        run: just lambda-build
-
-      - name: Setup LocalStack S3 buckets
-        run: just ci-setup-localstack endpoint="http://localstack:4566"
+      - name: Setup LocalStack SES identities
+        run: just ci-setup-ses
 
       - name: Run database migrations
         run: just ci-migrate
 
-      - name: Deploy to LocalStack
-        run: |
-          cd infra/opentofu
-          tofu init -reconfigure
-          tofu apply -var-file=environments/localstack.tfvars \
-            -var="localstack_endpoint=http://localstack:4566" \
-            -var="database_url=postgresql://postgres:postgres@postgres:5432/framecast_test" \
-            -var="jwt_secret=ci-test-jwt-secret" \
-            -auto-approve
+      - name: Build and start API server
+        shell: bash
+        run: just ci-start-api
 
-      - name: Verify deployment
-        run: |
-          echo "Verifying LocalStack deployment..."
-          aws --endpoint-url=http://localstack:4566 lambda get-function --function-name framecast-dev-api --query 'Configuration.{Name:FunctionName,Runtime:Runtime,State:State}' --output table
-          aws --endpoint-url=http://localstack:4566 s3 ls --output table
-          echo "LocalStack deployment verified successfully"
+      - name: Install Python E2E dependencies
+        run: just install-python-deps
+
+      - name: Run Python E2E tests
+        env:
+          TEST_LOCAL_API_URL: http://localhost:3000
+          TEST_LOCALSTACK_SES_URL: http://localstack:4566
+          TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+        run: just ci-test-e2e

@@ -22,6 +22,7 @@ path = "src/bin/local.rs"
 framecast-common.workspace = true
 framecast-domain.workspace = true
 framecast-db.workspace = true
+framecast-email.workspace = true
 
 # Core dependencies
 serde.workspace = true
@@ -51,6 +52,7 @@ sqlx.workspace = true
 # Additional dependencies
 regex.workspace = true
 lazy_static.workspace = true
+async-trait.workspace = true
 
 # Logging
 tracing.workspace = true

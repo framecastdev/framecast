@@ -5,7 +5,7 @@
 
 use framecast_common::{Error, Result};
 use framecast_domain::entities::*;
-use sqlx::{types::Json, PgPool};
+use sqlx::{types::Json, PgPool, Postgres, Transaction};
 use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
@@ -869,6 +869,7 @@ impl ApiKeyRepository {
 /// Combined repository access
 #[derive(Clone)]
 pub struct Repositories {
+    pool: PgPool,
     pub users: UserRepository,
     pub teams: TeamRepository,
     pub memberships: MembershipRepository,
@@ -885,9 +886,84 @@ impl Repositories {
             memberships: MembershipRepository::new(pool.clone()),
             invitations: InvitationRepository::new(pool.clone()),
             jobs: JobRepository::new(pool.clone()),
-            api_keys: ApiKeyRepository::new(pool),
+            api_keys: ApiKeyRepository::new(pool.clone()),
+            pool,
         }
     }
+
+    /// Begin a new database transaction.
+    pub async fn begin(&self) -> std::result::Result<Transaction<'static, Postgres>, sqlx::Error> {
+        self.pool.begin().await
+    }
+}
+
+// =============================================================================
+// Transactional Free Functions (Zero2Prod pattern)
+// =============================================================================
+
+/// Upgrade a user's tier within an existing transaction.
+pub async fn upgrade_user_tier_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+    new_tier: UserTier,
+) -> std::result::Result<(), sqlx::Error> {
+    let now = chrono::Utc::now();
+    sqlx::query!(
+        r#"
+        UPDATE users SET
+            tier = $2,
+            upgraded_at = $3,
+            updated_at = NOW()
+        WHERE id = $1
+        "#,
+        user_id,
+        new_tier as UserTier,
+        now
+    )
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+/// Create a membership within an existing transaction.
+pub async fn create_membership_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    membership: &Membership,
+) -> std::result::Result<Membership, sqlx::Error> {
+    let created = sqlx::query_as!(
+        Membership,
+        r#"
+        INSERT INTO memberships (id, team_id, user_id, role, created_at)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, team_id, user_id, role as "role: MembershipRole", created_at
+        "#,
+        membership.id,
+        membership.team_id,
+        membership.user_id,
+        membership.role.clone() as MembershipRole,
+        membership.created_at
+    )
+    .fetch_one(&mut **transaction)
+    .await?;
+    Ok(created)
+}
+
+/// Mark an invitation as accepted within an existing transaction.
+pub async fn mark_invitation_accepted_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    invitation_id: Uuid,
+) -> std::result::Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE invitations
+        SET accepted_at = NOW()
+        WHERE id = $1
+        "#,
+        invitation_id
+    )
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]
