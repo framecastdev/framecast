@@ -19,34 +19,42 @@ default:
 setup: install-tools install-rust-deps install-python-deps install-pre-commit precommit-install
     @echo "Setup complete! Run 'just dev' to start development environment."
 
-# Install system tools (Rust, uv, OpenTofu, LocalStack, Docker)
+# Install system tools (Rust, uv, OpenTofu, LocalStack, Docker, pipx)
 install-tools:
     @echo "Installing required tools..."
     # Install Rust if not present
     @if ! command -v rustc >/dev/null 2>&1; then \
         echo "Installing Rust..."; \
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; \
-        source ~/.cargo/env; \
+        . ~/.cargo/env; \
     fi
     # Install uv for Python package management
     @if ! command -v uv >/dev/null 2>&1; then \
         echo "Installing uv..."; \
         curl -LsSf https://astral.sh/uv/install.sh | sh; \
     fi
+    # Install pipx for isolated Python tool installs
+    @if ! command -v pipx >/dev/null 2>&1; then \
+        echo "Installing pipx..."; \
+        case "$$(uname -s)" in \
+            Darwin*) brew install pipx ;; \
+            *) sudo apt-get install -y pipx ;; \
+        esac; \
+        pipx ensurepath; \
+    fi
     # Install OpenTofu for Infrastructure as Code
     @if ! command -v tofu >/dev/null 2>&1; then \
         echo "Installing OpenTofu..."; \
-        if [[ "$OSTYPE" == "darwin"* ]]; then \
-            if command -v brew >/dev/null 2>&1; then \
-                brew install opentofu; \
-            else \
-                echo "Please install Homebrew first, then run 'brew install opentofu'"; \
-                exit 1; \
-            fi \
-        else \
-            echo "Please install OpenTofu manually for your platform"; \
-            exit 1; \
-        fi \
+        case "$$(uname -s)" in \
+            Darwin*) \
+                if command -v brew >/dev/null 2>&1; then \
+                    brew install opentofu; \
+                else \
+                    echo "Please install Homebrew first, then run 'brew install opentofu'"; \
+                    exit 1; \
+                fi ;; \
+            *) echo "Please install OpenTofu manually for your platform"; exit 1 ;; \
+        esac \
     fi
     # Install cargo-lambda for Lambda builds
     @if ! command -v cargo-lambda >/dev/null 2>&1; then \
@@ -80,19 +88,10 @@ install-python-deps:
     cd tests/e2e && uv sync
     @echo "Python dependencies installed"
 
-# Install pre-commit hooks
+# Install pre-commit (requires pipx from install-tools)
 install-pre-commit:
     @echo "Installing pre-commit..."
-    @if ! command -v pipx >/dev/null 2>&1; then \
-        echo "Installing pipx first..."; \
-        if [[ "$OSTYPE" == "darwin"* ]]; then \
-            brew install pipx; \
-        else \
-            python3 -m pip install --user pipx; \
-            pipx ensurepath; \
-        fi \
-    fi
-    pipx install pre-commit
+    pipx install pre-commit || pipx upgrade pre-commit
     @echo "Pre-commit installed"
 
 # ============================================================================

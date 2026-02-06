@@ -52,7 +52,6 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-      TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
 
     steps:
       - name: Checkout

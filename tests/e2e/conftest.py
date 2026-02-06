@@ -11,18 +11,15 @@ Supports two modes:
 
 import asyncio
 import os
-import tempfile
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from pathlib import Path
 from typing import Any
 
 import asyncpg
 import httpx
 import jwt
 import pytest
-import respx
 from faker import Faker
 from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings
@@ -31,31 +28,18 @@ from utils.localstack_email import LocalStackEmailClient
 
 # Test environment configuration
 class E2EConfig(BaseSettings):
-    """Configuration for E2E tests loaded from environment variables.
-
-    Supports SAM local testing via USE_SAM_LOCAL=true environment variable.
-    When enabled, tests will target the SAM local API at http://localhost:3001
-    instead of the local development server at http://localhost:3000.
-    """
+    """Configuration for E2E tests loaded from environment variables."""
 
     # Test mode: "mocked" or "real"
     test_mode: str = "mocked"
 
-    # API base URL (for local development server)
+    # API base URL
     local_api_url: str = "http://localhost:3000"
-
-    # SAM Local settings
-    sam_api_url: str = "http://localhost:3001"
-    use_sam_local: bool = False
 
     @property
     def api_base_url(self) -> str:
-        """Return the appropriate API URL based on configuration.
-
-        When USE_SAM_LOCAL=true, returns SAM local URL (port 3001).
-        Otherwise, returns local development server URL (port 3000).
-        """
-        return self.sam_api_url if self.use_sam_local else self.local_api_url
+        """Return the API URL."""
+        return self.local_api_url
 
     # Database settings
     database_url: str = "postgresql://postgres:password@localhost:5432/framecast_test"  # pragma: allowlist secret
@@ -203,10 +187,9 @@ async def seed_users(test_config: E2EConfig):
         invitee_id = uuid.uuid4()
         invitee_email = "invitee-e2e@test.com"
 
-        now = asyncio.get_event_loop().time()
-        from datetime import datetime, timezone
+        from datetime import UTC, datetime
 
-        now_dt = datetime.now(timezone.utc)
+        now_dt = datetime.now(UTC)
 
         # Upsert owner (Creator tier)
         await conn.execute(
@@ -223,9 +206,7 @@ async def seed_users(test_config: E2EConfig):
             now_dt,
         )
         # Re-read the actual ID in case it was an existing row
-        row = await conn.fetchrow(
-            "SELECT id FROM users WHERE email = $1", owner_email
-        )
+        row = await conn.fetchrow("SELECT id FROM users WHERE email = $1", owner_email)
         owner_id = row["id"]
 
         # Upsert invitee (Starter tier — will be auto-upgraded on accept)
@@ -265,9 +246,7 @@ async def seed_users(test_config: E2EConfig):
         yield SeededUsers(owner=owner, invitee=invitee)
 
         # Cleanup: TRUNCATE bypasses FK constraints and INV-T2 trigger
-        await conn.execute(
-            "TRUNCATE invitations, memberships, teams, users CASCADE"
-        )
+        await conn.execute("TRUNCATE invitations, memberships, teams, users CASCADE")
     finally:
         await conn.close()
 
@@ -324,134 +303,6 @@ async def email_cleanup(localstack_email_client: LocalStackEmailClient):
     # Cleanup after test
     for _email_address, msg_id in collected_emails:
         await localstack_email_client.delete_email(msg_id)
-
-
-# Mock service infrastructure
-@pytest.fixture
-def mock_runpod(test_config: E2EConfig):
-    """Mock RunPod API for video generation testing."""
-    if test_config.test_mode != "mocked":
-        yield None
-        return
-
-    with respx.mock:
-        # Mock job submission
-        respx.post(
-            f"https://api.runpod.ai/v2/{test_config.runpod_endpoint_id}/run"
-        ).mock(
-            return_value=httpx.Response(
-                200, json={"id": "mock-job-id", "status": "IN_QUEUE"}
-            )
-        )
-
-        # Mock job status polling
-        respx.get(
-            f"https://api.runpod.ai/v2/{test_config.runpod_endpoint_id}/status/mock-job-id"
-        ).mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "id": "mock-job-id",
-                    "status": "COMPLETED",
-                    "output": {
-                        "video_url": "https://mock-storage.runpod.ai/video.mp4",
-                        "metadata": {
-                            "duration": 30.5,
-                            "resolution": "1920x1080",
-                            "format": "mp4",
-                        },
-                    },
-                },
-            )
-        )
-
-        yield
-
-
-@pytest.fixture
-def mock_anthropic(test_config: E2EConfig):
-    """Mock Anthropic Claude API for AI interactions."""
-    if test_config.test_mode != "mocked":
-        yield None
-        return
-
-    with respx.mock:
-        respx.post("https://api.anthropic.com/v1/messages").mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "id": "msg_mock",
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "This is a mock response from Claude for testing purposes.",
-                        }
-                    ],
-                    "model": "claude-3-sonnet-20240229",
-                    "stop_reason": "end_turn",
-                    "stop_sequence": None,
-                    "usage": {"input_tokens": 10, "output_tokens": 15},
-                },
-            )
-        )
-        yield
-
-
-@pytest.fixture
-def mock_inngest(test_config: E2EConfig):
-    """Mock Inngest event API for job orchestration."""
-    if test_config.test_mode != "mocked":
-        yield None
-        return
-
-    with respx.mock:
-        respx.post("https://inn.gs/e/test-inngest-key").mock(
-            return_value=httpx.Response(200, json={"status": "ok"})
-        )
-        yield
-
-
-@pytest.fixture
-async def mock_s3(test_config: E2EConfig):
-    """Mock S3 operations using LocalStack."""
-    if test_config.test_mode != "mocked":
-        # In real mode, we use actual LocalStack
-        yield None
-        return
-
-    # For mocked mode, simulate S3 operations
-    with respx.mock:
-        # Mock presigned URL generation
-        respx.get(f"{test_config.s3_endpoint_url}/{test_config.s3_bucket_assets}").mock(
-            return_value=httpx.Response(
-                200, json={"presigned_url": "https://mock-s3-url"}
-            )
-        )
-
-        # Mock file uploads
-        respx.put("https://mock-s3-url").mock(return_value=httpx.Response(200))
-
-        yield
-
-
-# Temporary file management
-@pytest.fixture
-def temp_asset_file():
-    """Create a temporary test asset file."""
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
-        # Create a simple test image
-        from PIL import Image
-
-        img = Image.new("RGB", (100, 100), color="red")
-        img.save(f, format="JPEG")
-        f.flush()
-
-        yield Path(f.name)
-
-        # Cleanup
-        Path(f.name).unlink(missing_ok=True)
 
 
 # Test data factories
@@ -562,11 +413,6 @@ __all__ = [
     "creator_user",
     "team_owner",
     "team_member",
-    "mock_runpod",
-    "mock_anthropic",
-    "mock_inngest",
-    "mock_s3",
-    "temp_asset_file",
     "test_data_factory",
     "TestDataFactory",
     "assert_valid_urn",
