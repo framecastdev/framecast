@@ -209,9 +209,9 @@ class TestInvitationWorkflowE2E:
         assert resp.status_code == 200
         invitation_id = resp.json()["id"]
 
-        # Owner revokes the invitation
-        resp = await http_client.post(
-            f"/v1/teams/{team_id}/invitations/{invitation_id}/revoke",
+        # Owner revokes the invitation (DELETE, not POST)
+        resp = await http_client.delete(
+            f"/v1/teams/{team_id}/invitations/{invitation_id}",
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 204, f"Revoke failed: {resp.status_code} {resp.text}"
@@ -320,20 +320,32 @@ class TestInvitationWorkflowE2E:
         )
         assert resp.status_code == 200
 
-        # Wait for and retrieve the invitation email
-        email = await localstack_email_client.wait_for_invitation_email(
-            invitee.email, timeout=15
-        )
-        assert email is not None, f"Invitation email not found for {invitee.email}"
+        # Wait for and retrieve invitation emails for the invitee
+        import asyncio
 
-        # Verify email content contains team name
-        assert (
-            "Verification Test Studio" in email.subject
-            or "Verification Test Studio" in email.body
-        ), f"Email should reference team name. Subject: {email.subject}"
+        team_name = "Verification Test Studio"
+        target_email = None
+        start = asyncio.get_event_loop().time()
+        timeout = 15
+
+        while (asyncio.get_event_loop().time() - start) < timeout:
+            emails = await localstack_email_client.get_emails(invitee.email)
+            for e in emails:
+                if team_name in (e.subject or "") or team_name in (e.body or ""):
+                    target_email = e
+                    break
+            if target_email:
+                break
+            await asyncio.sleep(0.5)
+
+        assert target_email is not None, (
+            f"Invitation email with team name '{team_name}' not found for {invitee.email}"
+        )
 
         # Verify email contains an invitation URL
-        invitation_url = localstack_email_client.extract_invitation_url(email.body)
+        invitation_url = localstack_email_client.extract_invitation_url(
+            target_email.body
+        )
         assert invitation_url is not None, (
-            f"Email should contain invitation URL. Body: {email.body[:200]}"
+            f"Email should contain invitation URL. Body: {target_email.body[:200]}"
         )

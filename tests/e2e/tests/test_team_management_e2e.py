@@ -246,7 +246,7 @@ class TestTeamManagementE2E:
         # Upgrade invitee to creator first
         resp = await http_client.post(
             "/v1/account/upgrade",
-            json={"tier": "creator"},
+            json={"target_tier": "creator"},
             headers=other_user.auth_headers(),
         )
         # May already be creator from previous test, so 200 or 409 are both ok
