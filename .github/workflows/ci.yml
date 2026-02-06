@@ -133,9 +133,9 @@ jobs:
           echo "Lambda artifact size: $(du -h target/lambda/lambda/bootstrap.zip | cut -f1)"
 
   localstack-test:
-    name: LocalStack Integration
+    name: LocalStack SES Integration
     runs-on: self-hosted
-    needs: [pull-image, ci, build-lambda]
+    needs: [pull-image, ci]
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
       credentials:
@@ -158,22 +158,22 @@ jobs:
       localstack:
         image: localstack/localstack:latest
         env:
-          SERVICES: s3,lambda,iam,logs
+          SERVICES: s3,ses,iam,logs
           DEBUG: "0"
-          DOCKER_HOST: unix:///var/run/docker.sock
         options: >-
           --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
           --health-start-period 30s
-          -v /var/run/docker.sock:/var/run/docker.sock
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
       AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://localstack:4566
+      CI: "true"
 
     steps:
       - name: Checkout
@@ -184,28 +184,14 @@ jobs:
         with:
           shared-key: "ci"
 
-      - name: Build Lambda
-        run: just lambda-build
-
       - name: Setup LocalStack S3 buckets
         run: just ci-setup-localstack endpoint="http://localstack:4566"
+
+      - name: Setup LocalStack SES identities
+        run: just ci-setup-ses endpoint="http://localstack:4566"
 
       - name: Run database migrations
         run: just ci-migrate
 
-      - name: Deploy to LocalStack
-        run: |
-          cd infra/opentofu
-          tofu init -reconfigure
-          tofu apply -var-file=environments/localstack.tfvars \
-            -var="localstack_endpoint=http://localstack:4566" \
-            -var="database_url=postgresql://postgres:postgres@postgres:5432/framecast_test" \
-            -var="jwt_secret=ci-test-jwt-secret" \
-            -auto-approve
-
-      - name: Verify deployment
-        run: |
-          echo "Verifying LocalStack deployment..."
-          aws --endpoint-url=http://localstack:4566 lambda get-function --function-name framecast-dev-api --query 'Configuration.{Name:FunctionName,Runtime:Runtime,State:State}' --output table
-          aws --endpoint-url=http://localstack:4566 s3 ls --output table
-          echo "LocalStack deployment verified successfully"
+      - name: Run SES integration tests
+        run: just ci-test-integration-ses

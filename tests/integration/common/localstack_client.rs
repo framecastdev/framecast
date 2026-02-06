@@ -65,6 +65,14 @@ impl LocalStackEmailClient {
         Self::new("http://localhost:4566")
     }
 
+    /// Create a LocalStack client from environment variables
+    /// Reads `AWS_ENDPOINT_URL` with fallback to `http://localhost:4566`
+    pub fn from_env() -> Self {
+        let endpoint = std::env::var("AWS_ENDPOINT_URL")
+            .unwrap_or_else(|_| "http://localhost:4566".to_string());
+        Self::new(&endpoint)
+    }
+
     /// Get all emails for a specific email address
     pub async fn get_emails(&self, email: &str) -> Result<Vec<LocalStackEmail>> {
         let url = format!("{}/_aws/ses", self.base_url);

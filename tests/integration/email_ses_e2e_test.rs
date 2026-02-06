@@ -12,12 +12,22 @@ use std::time::Duration;
 use framecast_email::{EmailConfig, EmailMessage, EmailServiceFactory};
 use uuid::Uuid;
 
+/// Get the LocalStack endpoint URL from environment or default to localhost
+fn localstack_endpoint() -> String {
+    std::env::var("AWS_ENDPOINT_URL").unwrap_or_else(|_| "http://localhost:4566".to_string())
+}
+
+/// Whether we're running in CI (tests should fail instead of skip)
+fn is_ci() -> bool {
+    std::env::var("CI").is_ok()
+}
+
 /// Test configuration for LocalStack SES
 fn create_localstack_email_config() -> EmailConfig {
     EmailConfig {
         provider: "ses".to_string(),
         aws_region: Some("us-east-1".to_string()),
-        aws_endpoint_url: Some("http://localhost:4566".to_string()),
+        aws_endpoint_url: Some(localstack_endpoint()),
         default_from: "invitations@framecast.app".to_string(),
         default_reply_to: Some("noreply@framecast.app".to_string()),
         enabled: true,
@@ -26,9 +36,10 @@ fn create_localstack_email_config() -> EmailConfig {
 
 /// Check if LocalStack is running and accessible
 async fn check_localstack_health() -> Result<(), Box<dyn std::error::Error>> {
+    let endpoint = localstack_endpoint();
     let client = reqwest::Client::new();
     let response = client
-        .get("http://localhost:4566/_localstack/health")
+        .get(format!("{}/_localstack/health", endpoint))
         .timeout(Duration::from_secs(5))
         .send()
         .await?;
@@ -46,13 +57,21 @@ async fn check_localstack_health() -> Result<(), Box<dyn std::error::Error>> {
     Err("LocalStack SES service not available".into())
 }
 
+/// Skip or panic depending on CI mode
+fn skip_or_panic(msg: &str) {
+    if is_ci() {
+        panic!("CI mode: {}", msg);
+    }
+    println!("⏭️ Skipping test: {}", msg);
+}
+
 #[tokio::test]
 async fn test_localstack_ses_service_creation() {
     println!("\n🧪 Testing AWS SES service creation with LocalStack...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -78,9 +97,9 @@ async fn test_localstack_ses_service_creation() {
 async fn test_localstack_ses_send_basic_email() {
     println!("\n📧 Testing basic email sending through LocalStack SES...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -122,9 +141,9 @@ async fn test_localstack_ses_send_basic_email() {
 async fn test_localstack_ses_team_invitation_workflow() {
     println!("\n🎯 Testing complete team invitation workflow with LocalStack SES...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -285,9 +304,9 @@ async fn test_localstack_ses_team_invitation_workflow() {
 async fn test_localstack_ses_error_handling() {
     println!("\n⚠️ Testing SES error handling and edge cases...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -403,9 +422,9 @@ async fn test_disabled_email_service() {
 async fn test_localstack_ses_email_retrieval_and_content_validation() {
     println!("\n📧 Testing LocalStack SES email retrieval and content validation...");
 
-    // Skip test if LocalStack is not running
+    // Skip test if LocalStack is not running (panic in CI)
     if check_localstack_health().await.is_err() {
-        println!("⏭️ Skipping test: LocalStack SES not available");
+        skip_or_panic("LocalStack SES not available");
         return;
     }
 
@@ -414,7 +433,7 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
         .await
         .expect("Failed to create email service");
 
-    let localstack_client = LocalStackEmailClient::localhost();
+    let localstack_client = LocalStackEmailClient::from_env();
 
     // Verify LocalStack SES is healthy
     match localstack_client.health_check().await {
@@ -483,12 +502,8 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
     println!("🔍 Checking LocalStack SES API for emails...");
 
     // First, try a direct API call to see what's there
-    match reqwest::get(&format!(
-        "http://localhost:4566/_aws/ses?email={}",
-        invitee_email
-    ))
-    .await
-    {
+    let endpoint = localstack_endpoint();
+    match reqwest::get(&format!("{}/_aws/ses?email={}", endpoint, invitee_email)).await {
         Ok(response) => {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
@@ -681,15 +696,14 @@ async fn test_localstack_ses_email_retrieval_and_content_validation() {
 async fn test_localstack_client_health_and_basic_operations() {
     println!("\n🩺 Testing LocalStack client health and basic operations...");
 
-    let client = LocalStackEmailClient::localhost();
+    let client = LocalStackEmailClient::from_env();
 
     // Test health check
     match client.health_check().await {
         Ok(true) => println!("✅ LocalStack SES service is healthy"),
         Ok(false) => println!("⚠️ LocalStack SES service health check returned false"),
         Err(e) => {
-            println!("⚠️ LocalStack health check failed: {}", e);
-            println!("⏭️ Skipping remaining tests");
+            skip_or_panic(&format!("LocalStack health check failed: {}", e));
             return;
         }
     }

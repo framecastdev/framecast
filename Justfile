@@ -351,6 +351,50 @@ ci-setup-localstack endpoint="http://localstack:4566":
     aws --endpoint-url={{endpoint}} s3 mb s3://framecast-outputs-dev || true
     aws --endpoint-url={{endpoint}} s3 mb s3://framecast-assets-dev || true
 
+# Setup LocalStack SES identities for CI
+ci-setup-ses endpoint="http://localstack:4566":
+    #!/usr/bin/env bash
+    set -e
+    echo "Setting up LocalStack SES identities (CI mode)..."
+    echo "Waiting for LocalStack SES service..."
+    for i in $(seq 1 30); do
+        if curl -sf "{{endpoint}}/_localstack/health" | grep -qE '"ses": "(available|running)"'; then
+            echo "✅ LocalStack SES service is ready"
+            break
+        fi
+        if [ "$i" = "30" ]; then
+            echo "❌ LocalStack SES service not ready after 30 attempts"
+            exit 1
+        fi
+        echo "⏳ Waiting for SES... (attempt $i/30)"
+        sleep 2
+    done
+    EMAIL_ADDRESSES=(
+        "invitations@framecast.app"
+        "noreply@framecast.app"
+        "support@framecast.app"
+        "test@framecast.app"
+        "invitee@example.com"
+        "developer@example.com"
+        "admin@example.com"
+        "user@test.com"
+    )
+    for email in "${EMAIL_ADDRESSES[@]}"; do
+        echo "✉️ Verifying email identity: $email"
+        aws ses verify-email-identity \
+            --email-address "$email" \
+            --endpoint-url "{{endpoint}}" \
+            --region us-east-1 || echo "Failed to verify $email"
+    done
+    echo "🔍 Listing verified identities..."
+    aws ses list-identities --endpoint-url "{{endpoint}}" --region us-east-1
+    echo "✅ SES setup completed!"
+
+# Run SES integration tests in CI mode
+ci-test-integration-ses:
+    @echo "Running SES integration tests (CI mode)..."
+    cargo test -p framecast-integration-tests --test email_ses_e2e_test -- --nocapture
+
 # ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)
 # ============================================================================
