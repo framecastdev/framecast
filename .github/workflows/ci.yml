@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  packages: read  # Required for GHCR container auth
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,6 +21,9 @@ jobs:
     runs-on: self-hosted
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     services:
       postgres:
@@ -64,6 +68,9 @@ jobs:
     runs-on: self-hosted
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout
@@ -85,6 +92,9 @@ jobs:
     runs-on: self-hosted
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout
@@ -113,6 +123,9 @@ jobs:
     needs: [ci]
     container:
       image: ghcr.io/framecastdev/framecast-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     services:
       postgres:
