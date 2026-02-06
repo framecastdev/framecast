@@ -66,6 +66,9 @@ jobs:
       - name: Run integration tests
         run: just ci-test-integration
 
+      - name: Build API binary for E2E tests
+        run: cargo build --bin local
+
       - name: Upload API binary for E2E tests
         uses: actions/upload-artifact@v4
         with:
