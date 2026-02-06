@@ -136,17 +136,9 @@ mod test_invite_member {
 
         let response = router.oneshot(request).await.unwrap();
 
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let error: Value = serde_json::from_slice(&body).unwrap();
-
-        assert!(error["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Cannot invite"));
+        // "owner" is not a valid InvitationRole variant, so Axum's JSON
+        // deserializer rejects it before the handler runs → 422
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
         app.cleanup().await.unwrap();
     }
@@ -478,7 +470,9 @@ mod test_invite_member {
 
         let response2 = router.oneshot(request2).await.unwrap();
 
-        assert_eq!(response2.status(), StatusCode::BAD_REQUEST);
+        // "owner" is not a valid InvitationRole variant, so Axum's JSON
+        // deserializer rejects it before the handler runs → 422
+        assert_eq!(response2.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
         app.cleanup().await.unwrap();
     }
@@ -525,13 +519,14 @@ mod test_accept_invitation {
         assert_eq!(membership["role"], "member");
 
         // Verify membership exists in database
-        let db_membership: (String,) =
-            sqlx::query_as("SELECT role FROM memberships WHERE team_id = $1 AND user_id = $2")
-                .bind(scenario.team.id)
-                .bind(invitee_fixture.user.id)
-                .fetch_one(&scenario.app.pool)
-                .await
-                .unwrap();
+        let db_membership: (String,) = sqlx::query_as(
+            "SELECT role::text FROM memberships WHERE team_id = $1 AND user_id = $2",
+        )
+        .bind(scenario.team.id)
+        .bind(invitee_fixture.user.id)
+        .fetch_one(&scenario.app.pool)
+        .await
+        .unwrap();
 
         assert_eq!(db_membership.0, "member");
 
@@ -940,13 +935,14 @@ mod test_update_member_role {
         assert_eq!(membership["role"], "admin");
 
         // Verify in database
-        let db_membership: (String,) =
-            sqlx::query_as("SELECT role FROM memberships WHERE team_id = $1 AND user_id = $2")
-                .bind(team.id)
-                .bind(member_fixture.user.id)
-                .fetch_one(&app.pool)
-                .await
-                .unwrap();
+        let db_membership: (String,) = sqlx::query_as(
+            "SELECT role::text FROM memberships WHERE team_id = $1 AND user_id = $2",
+        )
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
 
         assert_eq!(db_membership.0, "admin");
 
@@ -1110,7 +1106,10 @@ mod test_update_member_role {
             .unwrap();
 
         let response3 = router.oneshot(request3).await.unwrap();
-        assert_eq!(response3.status(), StatusCode::FORBIDDEN);
+
+        // INV-T2: Cannot demote the last owner — this is a business invariant
+        // (409 Conflict), not a permission error (403 Forbidden)
+        assert_eq!(response3.status(), StatusCode::CONFLICT);
 
         app.cleanup().await.unwrap();
     }
@@ -1598,13 +1597,14 @@ mod test_invitation_lifecycle_with_email {
         assert_eq!(membership["user_id"], invitee_fixture.user.id.to_string());
 
         // Step 5: Verify membership exists
-        let membership_check: (String,) =
-            sqlx::query_as("SELECT role FROM memberships WHERE team_id = $1 AND user_id = $2")
-                .bind(scenario.team.id)
-                .bind(invitee_fixture.user.id)
-                .fetch_one(&scenario.app.pool)
-                .await
-                .unwrap();
+        let membership_check: (String,) = sqlx::query_as(
+            "SELECT role::text FROM memberships WHERE team_id = $1 AND user_id = $2",
+        )
+        .bind(scenario.team.id)
+        .bind(invitee_fixture.user.id)
+        .fetch_one(&scenario.app.pool)
+        .await
+        .unwrap();
 
         assert_eq!(membership_check.0, "admin");
 

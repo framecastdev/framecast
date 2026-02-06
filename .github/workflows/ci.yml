@@ -40,6 +40,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+      TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
 
     steps:
       - name: Checkout
@@ -61,6 +62,19 @@ jobs:
 
       - name: Run tests
         run: just ci-test
+
+      - name: Run integration tests
+        run: just ci-test-integration
+
+      - name: Build API binary for E2E tests
+        run: cargo build --bin local
+
+      - name: Upload API binary for E2E tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-binary
+          path: target/debug/local
+          retention-days: 1
 
   infra-validate:
     name: Validate Infrastructure
@@ -115,6 +129,13 @@ jobs:
           fi
           ls -la target/lambda/lambda/bootstrap.zip
           echo "Lambda artifact size: $(du -h target/lambda/lambda/bootstrap.zip | cut -f1)"
+
+      - name: Upload Lambda artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-bootstrap
+          path: target/lambda/lambda/bootstrap.zip
+          retention-days: 5
 
   e2e-tests:
     name: E2E Tests
@@ -177,10 +198,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Download API binary
+        uses: actions/download-artifact@v4
         with:
-          shared-key: "ci"
+          name: api-binary
+          path: ./api-binary
 
       - name: Setup LocalStack SES identities
         run: just ci-setup-ses
@@ -188,9 +210,9 @@ jobs:
       - name: Run database migrations
         run: just ci-migrate
 
-      - name: Build and start API server
+      - name: Start API server
         shell: bash
-        run: just ci-start-api
+        run: just ci-start-api ./api-binary/local
 
       - name: Install Python E2E dependencies
         run: just install-python-deps
