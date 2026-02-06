@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
-from conftest import SeededUsers, TestDataFactory, UserPersona  # noqa: E402
+from conftest import SeededUsers, TestDataFactory  # noqa: E402
 from utils.localstack_email import LocalStackEmailClient  # noqa: E402
 
 
@@ -41,7 +41,9 @@ class TestInvitationWorkflowE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200, f"Team creation failed: {resp.status_code} {resp.text}"
+        assert resp.status_code == 200, (
+            f"Team creation failed: {resp.status_code} {resp.text}"
+        )
         team = resp.json()
         team_id = team["id"]
 
@@ -61,20 +63,8 @@ class TestInvitationWorkflowE2E:
         email = await localstack_email_client.wait_for_invitation_email(
             invitee.email, timeout=15
         )
-        # LocalStack filters by sender, so also try fetching all emails
-        if email is None:
-            all_emails = await localstack_email_client.get_emails(
-                "invitations@framecast.app"
-            )
-            for e in all_emails:
-                to_list = e.to if isinstance(e.to, list) else [e.to]
-                if invitee.email in to_list:
-                    email = e
-                    break
 
-        assert email is not None, (
-            f"Invitation email not found for {invitee.email}"
-        )
+        assert email is not None, f"Invitation email not found for {invitee.email}"
 
         # Step 4: Invitee accepts invitation (currently Starter tier)
         resp = await http_client.put(
@@ -89,9 +79,7 @@ class TestInvitationWorkflowE2E:
         assert membership["role"] == "member"
 
         # Step 5: Verify invitee was auto-upgraded to Creator tier
-        resp = await http_client.get(
-            "/v1/account", headers=invitee.auth_headers()
-        )
+        resp = await http_client.get("/v1/account", headers=invitee.auth_headers())
         assert resp.status_code == 200
         account = resp.json()
         assert account["tier"] == "creator", (
@@ -282,7 +270,7 @@ class TestInvitationErrorHandling:
         localstack_email_client: LocalStackEmailClient,
     ):
         """Test that malformed content returns None gracefully."""
-        test_uuid = "12345678-1234-1234-1234-123456789012"  # pragma: allowlist secret
+        test_uuid = "12345678-1234-4234-a234-123456789012"  # pragma: allowlist secret
         malformed_bodies = [
             "",
             "No URLs here",

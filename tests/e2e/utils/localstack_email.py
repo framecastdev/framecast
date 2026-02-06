@@ -30,7 +30,7 @@ class LocalStackEmail:
         # Body can be a string or a dict with text_part/html_part
         body_raw = data.get("Body", data.get("body", ""))
         if isinstance(body_raw, dict):
-            self.body = body_raw.get("text_part", body_raw.get("html_part", ""))
+            self.body = body_raw.get("html_part", body_raw.get("text_part", ""))
         else:
             self.body = body_raw
 
@@ -80,13 +80,17 @@ class LocalStackEmailClient:
 
     async def get_emails(self, email_address: str) -> list[LocalStackEmail]:
         """
-        Get all emails for a specific email address.
+        Get all emails where the given address appears as a recipient.
+
+        LocalStack's `/_aws/ses?email=` param filters by **sender**, not
+        recipient.  To find emails *to* a specific address we must fetch all
+        messages and filter client-side by ``ToAddresses``.
 
         Args:
-            email_address: Email address to retrieve emails for
+            email_address: Recipient email address to filter for
 
         Returns:
-            List of LocalStackEmail objects
+            List of LocalStackEmail objects addressed to ``email_address``
 
         Raises:
             httpx.RequestError: If request fails
@@ -95,7 +99,7 @@ class LocalStackEmailClient:
         url = f"{self.base_url}/_aws/ses"
 
         try:
-            response = await self.client.get(url, params={"email": email_address})
+            response = await self.client.get(url)
             response.raise_for_status()
 
             data = response.json()
@@ -121,7 +125,14 @@ class LocalStackEmailClient:
             else:
                 emails = []
 
-            return [LocalStackEmail(email) for email in emails if email]
+            all_emails = [LocalStackEmail(email) for email in emails if email]
+
+            # Filter by recipient (ToAddresses)
+            return [
+                e
+                for e in all_emails
+                if email_address in (e.to if isinstance(e.to, list) else [e.to])
+            ]
 
         except httpx.RequestError as e:
             raise httpx.RequestError(

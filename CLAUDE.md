@@ -211,6 +211,7 @@ just infra-plan dev           # Plan changes for environment
 | Inngest     | 8288  | Job orchestration UI       |
 
 Additional commands:
+
 - `just health-check` - Verify all services are running
 - `just logs` - View aggregated service logs
 - `just stop` - Stop all services

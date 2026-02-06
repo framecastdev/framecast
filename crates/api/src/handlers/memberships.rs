@@ -90,7 +90,7 @@ impl From<Membership> for MembershipResponse {
 
 /// Send invitation to join a team
 ///
-/// **POST /v1/teams/:team_id/invitations**
+/// **POST /v1/teams/{team_id}/invite**
 ///
 /// Sends an invitation email to a user to join the team.
 /// Only team owners and admins can send invitations.
@@ -243,7 +243,7 @@ pub async fn invite_member(
 
 /// Accept a team invitation
 ///
-/// **PUT /v1/invitations/:invitation_id/accept**
+/// **PUT /v1/invitations/{invitation_id}/accept**
 ///
 /// Accepts an invitation to join a team. The user must be the recipient.
 /// Starter users are automatically upgraded to Creator tier.
@@ -342,7 +342,7 @@ pub async fn accept_invitation(
 
 /// Decline a team invitation
 ///
-/// **PUT /v1/teams/:team_id/invitations/:invitation_id/decline**
+/// **PUT /v1/invitations/{invitation_id}/decline**
 ///
 /// Declines an invitation to join a team. The user must be the recipient.
 pub async fn decline_invitation(

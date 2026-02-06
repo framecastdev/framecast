@@ -649,7 +649,6 @@ async fn test_localstack_client_health_and_basic_operations() {
                 emails.len(),
                 test_email
             );
-            assert!(emails.is_empty() || !emails.is_empty()); // Either is valid for empty mailbox
         }
         Err(e) => {
             println!(
