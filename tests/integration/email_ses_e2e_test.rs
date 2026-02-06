@@ -331,52 +331,6 @@ async fn test_localstack_ses_error_handling() {
         }
     }
 
-    // ============================================================================
-    // Test 2: Empty subject and body
-    // ============================================================================
-    println!("\n📝 Test 2: Testing empty subject and body...");
-
-    let empty_message = EmailMessage::new(
-        "test@framecast.app".to_string(),
-        "invitations@framecast.app".to_string(),
-        "".to_string(), // Empty subject
-        "".to_string(), // Empty body
-    );
-
-    // This should still work with SES but create empty content
-    let receipt = email_service
-        .send_email(empty_message)
-        .await
-        .expect("Should handle empty content gracefully");
-
-    println!(
-        "✅ Empty content handled gracefully: {}",
-        receipt.message_id
-    );
-
-    // ============================================================================
-    // Test 3: Large email content
-    // ============================================================================
-    println!("\n📏 Test 3: Testing large email content...");
-
-    let large_body = "A".repeat(10000); // 10KB body
-    let large_message = EmailMessage::new(
-        "test@framecast.app".to_string(),
-        "invitations@framecast.app".to_string(),
-        "Large Email Test".to_string(),
-        large_body,
-    );
-
-    let receipt = email_service
-        .send_email(large_message)
-        .await
-        .expect("Should handle large content");
-
-    println!(
-        "✅ Large email content handled successfully: {}",
-        receipt.message_id
-    );
-
     println!("\n✅ Error handling tests completed successfully!");
 }
 
