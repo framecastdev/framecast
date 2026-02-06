@@ -276,6 +276,8 @@ fn validate_jwt_token(token: &str, config: &AuthConfig) -> Result<SupabaseClaims
 
     if let Some(aud) = &config.audience {
         validation.set_audience(&[aud]);
+    } else {
+        validation.validate_aud = false;
     }
 
     if let Some(iss) = &config.issuer {
@@ -347,5 +349,40 @@ mod tests {
         // Test with invalid token (this will fail due to invalid signature, which is expected)
         let result = validate_jwt_token("invalid_token", &config);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_jwt_roundtrip_no_issuer_no_audience() {
+        // Simulate the E2E test scenario: no issuer, no audience configured
+        let config = AuthConfig {
+            jwt_secret: "test-e2e-secret-key".to_string(),
+            issuer: None,
+            audience: None,
+        };
+
+        // Create a token matching what PyJWT generates
+        let claims = SupabaseClaims {
+            sub: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            email: Some("test@test.com".to_string()),
+            aud: "authenticated".to_string(),
+            role: "authenticated".to_string(),
+            iat: chrono::Utc::now().timestamp() as u64,
+            exp: (chrono::Utc::now().timestamp() + 3600) as u64,
+        };
+
+        let header = jsonwebtoken::Header::new(Algorithm::HS256);
+        let encoding_key = jsonwebtoken::EncodingKey::from_secret(config.jwt_secret.as_ref());
+        let token =
+            jsonwebtoken::encode(&header, &claims, &encoding_key).expect("Failed to encode JWT");
+
+        // Validate with same config (no issuer, no audience)
+        let result = validate_jwt_token(&token, &config);
+        assert!(result.is_ok(), "JWT validation failed: {:?}", result.err());
+
+        let decoded = result.unwrap();
+        assert_eq!(decoded.sub, claims.sub);
+        assert_eq!(decoded.email, claims.email);
+        assert_eq!(decoded.aud, "authenticated");
+        assert_eq!(decoded.role, "authenticated");
     }
 }
