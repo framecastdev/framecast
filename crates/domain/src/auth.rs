@@ -535,6 +535,55 @@ mod tests {
     }
 
     #[test]
+    fn test_viewer_cannot_invite() {
+        let user = create_test_user(UserTier::Creator);
+        let team = create_test_team();
+        let team_id = team.id;
+
+        let viewer_memberships = vec![(team, MembershipRole::Viewer)];
+        let viewer_ctx = AuthContext::new(user, viewer_memberships, None);
+
+        assert!(PermissionChecker::can_invite_members(&viewer_ctx, team_id).is_err());
+    }
+
+    #[test]
+    fn test_member_cannot_invite() {
+        let user = create_test_user(UserTier::Creator);
+        let team = create_test_team();
+        let team_id = team.id;
+
+        let member_memberships = vec![(team, MembershipRole::Member)];
+        let member_ctx = AuthContext::new(user, member_memberships, None);
+
+        assert!(PermissionChecker::can_invite_members(&member_ctx, team_id).is_err());
+    }
+
+    #[test]
+    fn test_member_cannot_admin_team() {
+        let user = create_test_user(UserTier::Creator);
+        let team = create_test_team();
+        let team_id = team.id;
+
+        let member_memberships = vec![(team, MembershipRole::Member)];
+        let member_ctx = AuthContext::new(user, member_memberships, None);
+
+        assert!(PermissionChecker::can_admin_team(&member_ctx, team_id).is_err());
+    }
+
+    #[test]
+    fn test_admin_can_admin_team() {
+        let user = create_test_user(UserTier::Creator);
+        let team = create_test_team();
+        let team_id = team.id;
+
+        let admin_memberships = vec![(team, MembershipRole::Admin)];
+        let admin_ctx = AuthContext::new(user, admin_memberships, None);
+
+        assert!(PermissionChecker::can_admin_team(&admin_ctx, team_id).is_ok());
+        assert!(PermissionChecker::can_invite_members(&admin_ctx, team_id).is_ok());
+    }
+
+    #[test]
     fn test_creator_tier_requirements() {
         let starter_user = create_test_user(UserTier::Starter);
         let creator_user = create_test_user(UserTier::Creator);

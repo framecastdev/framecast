@@ -838,9 +838,30 @@ mod tests {
         }
 
         #[test]
+        fn test_valid_pending_to_declined() {
+            let result = InvitationStateMachine::transition(
+                InvitationState::Pending,
+                InvitationEvent::Decline,
+                None,
+            );
+            assert_eq!(result, Ok(InvitationState::Declined));
+        }
+
+        #[test]
+        fn test_terminal_declined_cannot_transition() {
+            let result = InvitationStateMachine::transition(
+                InvitationState::Declined,
+                InvitationEvent::Accept,
+                None,
+            );
+            assert!(matches!(result, Err(StateError::TerminalState(_))));
+        }
+
+        #[test]
         fn test_is_terminal() {
             assert!(!InvitationState::Pending.is_terminal());
             assert!(InvitationState::Accepted.is_terminal());
+            assert!(InvitationState::Declined.is_terminal());
             assert!(InvitationState::Expired.is_terminal());
             assert!(InvitationState::Revoked.is_terminal());
         }

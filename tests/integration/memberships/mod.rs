@@ -2464,3 +2464,578 @@ mod test_invitation_state_filter {
         scenario.cleanup().await.unwrap();
     }
 }
+
+mod test_authorization_edge_cases {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_viewer_cannot_update_member_role() {
+        let app = TestApp::new().await.unwrap();
+        let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a viewer
+        let viewer_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(viewer_fixture.user.id)
+        .bind("viewer")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        // Add a member for the viewer to try to update
+        let member_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = create_test_router(&app).await;
+
+        let role_update = json!({ "role": "admin" });
+
+        let request = Request::builder()
+            .method(Method::PATCH)
+            .uri(format!(
+                "/v1/teams/{}/members/{}",
+                team.id, member_fixture.user.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", viewer_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(role_update.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_viewer_cannot_remove_member() {
+        let app = TestApp::new().await.unwrap();
+        let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a viewer
+        let viewer_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(viewer_fixture.user.id)
+        .bind("viewer")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        // Add a member for the viewer to try to remove
+        let member_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = create_test_router(&app).await;
+
+        let request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!(
+                "/v1/teams/{}/members/{}",
+                team.id, member_fixture.user.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", viewer_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_cross_team_invite_forbidden() {
+        let app = TestApp::new().await.unwrap();
+
+        // Create team A with owner A
+        let (owner_a, _team_a, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Create team B with owner B
+        let (_, team_b, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        let router = create_test_router(&app).await;
+
+        // Owner of team A tries to invite someone to team B
+        let invite_data = json!({
+            "email": "crossteam@example.com",
+            "role": "member"
+        });
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", team_b.id))
+            .header("authorization", format!("Bearer {}", owner_a.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_cross_team_list_members_forbidden() {
+        let app = TestApp::new().await.unwrap();
+
+        // Create team A with owner A
+        let (owner_a, _, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Create team B with owner B
+        let (_, team_b, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        let router = create_test_router(&app).await;
+
+        // Owner of team A tries to list members of team B
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/teams/{}/members", team_b.id))
+            .header("authorization", format!("Bearer {}", owner_a.jwt_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_invite_to_nonexistent_team() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, _, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        let fake_team_id = Uuid::new_v4();
+        let invite_data = json!({
+            "email": "someone@example.com",
+            "role": "member"
+        });
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", fake_team_id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        // Should be 403 (user has no membership in the team) or 404
+        let status = response.status();
+        assert!(
+            status == StatusCode::FORBIDDEN || status == StatusCode::NOT_FOUND,
+            "Expected 403 or 404 for nonexistent team, got {}",
+            status
+        );
+
+        app.cleanup().await.unwrap();
+    }
+}
+
+mod test_membership_exotic_inputs {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_invite_email_with_plus_addressing() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        let invite_data = json!({
+            "email": "user+tag@example.com",
+            "role": "member"
+        });
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitation: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(invitation["email"], "user+tag@example.com");
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_invite_email_case_handling() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // Invite with mixed-case email
+        let invite_data = json!({
+            "email": "USER@Example.COM",
+            "role": "member"
+        });
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        // Should succeed — email addresses are case-insensitive per RFC
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitation: Value = serde_json::from_slice(&body).unwrap();
+
+        // Document observed behavior (case-insensitive match or stored as-is)
+        assert!(invitation.get("email").is_some());
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_leave_then_rejoin_via_invitation() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a member
+        let member_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = create_test_router(&app).await;
+
+        // Step 1: Member leaves team
+        let leave_request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/leave", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", member_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.clone().oneshot(leave_request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // Step 2: Owner reinvites the same user
+        let invite_data = json!({
+            "email": member_fixture.user.email,
+            "role": "member"
+        });
+
+        let invite_request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let response = router.clone().oneshot(invite_request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "Re-invite after leaving should succeed"
+        );
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitation: Value = serde_json::from_slice(&body).unwrap();
+        let invitation_id = invitation["id"].as_str().unwrap();
+
+        // Step 3: Member accepts the new invitation
+        let accept_request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/invitations/{}/accept", invitation_id))
+            .header(
+                "authorization",
+                format!("Bearer {}", member_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.clone().oneshot(accept_request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "Accept after leave+reinvite should succeed"
+        );
+
+        // Step 4: Verify membership restored
+        let members_request = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/teams/{}/members", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(members_request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let members: Vec<Value> = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(members.len(), 2, "Team should have owner + rejoined member");
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_update_role_multiple_rapid_changes() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a member
+        let member_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = create_test_router(&app).await;
+
+        // Rapid role changes: member → admin → viewer → member
+        let role_sequence = ["admin", "viewer", "member"];
+
+        for target_role in role_sequence {
+            let role_update = json!({ "role": target_role });
+
+            let request = Request::builder()
+                .method(Method::PATCH)
+                .uri(format!(
+                    "/v1/teams/{}/members/{}",
+                    team.id, member_fixture.user.id
+                ))
+                .header(
+                    "authorization",
+                    format!("Bearer {}", owner_fixture.jwt_token),
+                )
+                .header("content-type", "application/json")
+                .body(Body::from(role_update.to_string()))
+                .unwrap();
+
+            let response = router.clone().oneshot(request).await.unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "Role change to {} should succeed",
+                target_role
+            );
+
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let membership: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(membership["role"], target_role);
+        }
+
+        // Verify final state in database
+        let db_membership: (String,) = sqlx::query_as(
+            "SELECT role::text FROM memberships WHERE team_id = $1 AND user_id = $2",
+        )
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+
+        assert_eq!(db_membership.0, "member");
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_invite_after_previous_declined() {
+        let scenario = InvitationTestScenario::new().await.unwrap();
+        let router = create_test_router(&scenario.app).await;
+
+        // Step 1: Send initial invitation
+        let invite_data = json!({
+            "email": scenario.invitee_email,
+            "role": "member"
+        });
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", scenario.team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitation: Value = serde_json::from_slice(&body).unwrap();
+        let invitation_id = invitation["id"].as_str().unwrap();
+
+        // Step 2: Create invitee user and decline
+        let invitee = scenario.create_invitee_user().await.unwrap();
+
+        let decline_request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/invitations/{}/decline", invitation_id))
+            .header("authorization", format!("Bearer {}", invitee.jwt_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.clone().oneshot(decline_request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "Decline should succeed: {}",
+            String::from_utf8_lossy(
+                &axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap()
+            )
+        );
+
+        // Step 3: Re-invite the same email — should succeed since previous was declined
+        let reinvite_data = json!({
+            "email": scenario.invitee_email,
+            "role": "admin"
+        });
+
+        let reinvite_request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", scenario.team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(reinvite_data.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(reinvite_request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "Re-invite after decline should succeed"
+        );
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let new_invitation: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(new_invitation["role"], "admin");
+        assert_eq!(new_invitation["state"], "pending");
+
+        scenario.cleanup().await.unwrap();
+    }
+}
