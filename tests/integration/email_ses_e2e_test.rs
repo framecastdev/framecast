@@ -17,9 +17,10 @@ fn localstack_endpoint() -> String {
     std::env::var("AWS_ENDPOINT_URL").unwrap_or_else(|_| "http://localhost:4566".to_string())
 }
 
-/// Whether we're running in CI (tests should fail instead of skip)
-fn is_ci() -> bool {
-    std::env::var("CI").is_ok()
+/// Whether LocalStack is expected to be available (tests should fail instead of skip).
+/// True when AWS_ENDPOINT_URL is explicitly set (e.g. in the localstack-test CI job).
+fn require_localstack() -> bool {
+    std::env::var("AWS_ENDPOINT_URL").is_ok()
 }
 
 /// Test configuration for LocalStack SES
@@ -57,10 +58,10 @@ async fn check_localstack_health() -> Result<(), Box<dyn std::error::Error>> {
     Err("LocalStack SES service not available".into())
 }
 
-/// Skip or panic depending on CI mode
+/// Skip or panic depending on whether LocalStack is expected
 fn skip_or_panic(msg: &str) {
-    if is_ci() {
-        panic!("CI mode: {}", msg);
+    if require_localstack() {
+        panic!("LocalStack required but: {}", msg);
     }
     println!("⏭️ Skipping test: {}", msg);
 }

@@ -173,7 +173,6 @@ jobs:
       AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
       AWS_DEFAULT_REGION: us-east-1
       AWS_ENDPOINT_URL: http://localstack:4566
-      CI: "true"
 
     steps:
       - name: Checkout

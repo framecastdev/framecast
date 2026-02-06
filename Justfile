@@ -335,10 +335,10 @@ ci-clippy:
     @echo "Running Clippy linter (CI mode)..."
     SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings
 
-# Run tests in CI mode
+# Run tests in CI mode (excludes integration tests that need LocalStack)
 ci-test:
     @echo "Running tests (CI mode)..."
-    cargo test --workspace
+    cargo test --workspace --exclude framecast-integration-tests
 
 # Run migrations in CI mode (requires DATABASE_URL)
 ci-migrate:
