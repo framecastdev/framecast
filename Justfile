@@ -306,10 +306,15 @@ ci-clippy:
     @echo "Running Clippy linter (CI mode)..."
     SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings
 
-# Run tests in CI mode (excludes integration tests that need LocalStack)
+# Run tests in CI mode (excludes integration tests, run separately with ci-test-integration)
 ci-test:
     @echo "Running tests (CI mode)..."
     cargo test --workspace --exclude framecast-integration-tests
+
+# Run integration tests in CI mode (requires PostgreSQL with migrations applied)
+ci-test-integration:
+    @echo "Running integration tests (CI mode)..."
+    cargo test -p framecast-integration-tests -- --test-threads=1
 
 # Run migrations in CI mode (requires DATABASE_URL)
 ci-migrate:
@@ -366,14 +371,21 @@ ci-setup-ses:
     aws --endpoint-url="$ENDPOINT" ses list-identities --region us-east-1
     echo "✅ SES setup completed!"
 
-# Start API server in background for E2E tests (CI mode)
-ci-start-api:
+# Start API server in background for E2E tests (CI mode). Pass binary path to skip building.
+ci-start-api binary_path="":
     #!/usr/bin/env bash
     set -e
-    echo "Building API server..."
-    cargo build --bin local
+    if [ -z "{{binary_path}}" ]; then
+        echo "Building API server..."
+        cargo build --bin local
+        BINARY="./target/debug/local"
+    else
+        echo "Using pre-built binary: {{binary_path}}"
+        chmod +x "{{binary_path}}"
+        BINARY="{{binary_path}}"
+    fi
     echo "Starting API server in background..."
-    cargo run --bin local &
+    $BINARY &
     API_PID=$!
     echo "$API_PID" > /tmp/framecast-api.pid
     trap "kill $API_PID 2>/dev/null || true" EXIT
