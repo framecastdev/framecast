@@ -3554,6 +3554,7 @@ mod tests {
     fn test_invitation_state_is_terminal() {
         assert!(!InvitationState::Pending.is_terminal());
         assert!(InvitationState::Accepted.is_terminal());
+        assert!(InvitationState::Declined.is_terminal());
         assert!(InvitationState::Revoked.is_terminal());
         assert!(InvitationState::Expired.is_terminal());
     }
@@ -3564,11 +3565,13 @@ mod tests {
             InvitationState::Pending.valid_transitions(),
             vec![
                 InvitationState::Accepted,
+                InvitationState::Declined,
                 InvitationState::Expired,
                 InvitationState::Revoked
             ]
         );
         assert!(InvitationState::Accepted.valid_transitions().is_empty());
+        assert!(InvitationState::Declined.valid_transitions().is_empty());
         assert!(InvitationState::Revoked.valid_transitions().is_empty());
         assert!(InvitationState::Expired.valid_transitions().is_empty());
     }
