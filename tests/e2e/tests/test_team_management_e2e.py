@@ -164,41 +164,138 @@ class TestTeamManagementE2E:
         )
         assert resp.status_code == 404
 
-    async def test_list_teams_shows_multiple_teams(
+    async def test_team_create_update_get_delete_lifecycle(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """User can see all teams they belong to."""
+        """Full CRUD lifecycle: create -> get -> update name -> get -> delete -> get (404)."""
         owner = seed_users.owner
 
-        # Step 1: Owner creates team A
-        team_a_data = test_data_factory.team_data()
+        # Step 1: Create team
+        team_data = test_data_factory.team_data()
         resp = await http_client.post(
-            "/v1/teams", json=team_a_data, headers=owner.auth_headers()
+            "/v1/teams", json=team_data, headers=owner.auth_headers()
+        )
+        assert resp.status_code == 200, f"Create failed: {resp.status_code} {resp.text}"
+        team = resp.json()
+        team_id = team["id"]
+        assert team["name"] == team_data["name"]
+        assert "slug" in team
+        assert team["user_role"] == "owner"
+
+        # Step 2: Get team
+        resp = await http_client.get(
+            f"/v1/teams/{team_id}", headers=owner.auth_headers()
         )
         assert resp.status_code == 200
-        team_a_id = resp.json()["id"]
+        fetched = resp.json()
+        assert fetched["id"] == team_id
+        assert fetched["name"] == team_data["name"]
 
-        # Step 2: Owner creates team B
-        team_b_data = test_data_factory.team_data()
-        resp = await http_client.post(
-            "/v1/teams", json=team_b_data, headers=owner.auth_headers()
+        # Step 3: Update team name
+        new_name = "Updated Team Name"
+        resp = await http_client.patch(
+            f"/v1/teams/{team_id}",
+            json={"name": new_name},
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 200, f"Update failed: {resp.status_code} {resp.text}"
+        updated = resp.json()
+        assert updated["name"] == new_name
+
+        # Step 4: Get again to verify update persisted
+        resp = await http_client.get(
+            f"/v1/teams/{team_id}", headers=owner.auth_headers()
         )
         assert resp.status_code == 200
-        team_b_id = resp.json()["id"]
+        assert resp.json()["name"] == new_name
 
-        # Step 3: Owner lists teams — should see both
-        resp = await http_client.get("/v1/teams", headers=owner.auth_headers())
+        # Step 5: Delete team
+        resp = await http_client.delete(
+            f"/v1/teams/{team_id}", headers=owner.auth_headers()
+        )
+        assert resp.status_code == 204, f"Delete failed: {resp.status_code} {resp.text}"
+
+        # Step 6: Verify team is gone
+        resp = await http_client.get(
+            f"/v1/teams/{team_id}", headers=owner.auth_headers()
+        )
+        assert resp.status_code == 404
+
+    async def test_cross_team_isolation(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+        test_data_factory: TestDataFactory,
+    ):
+        """User A owns team X, user B owns team Y — A cannot access team Y members."""
+        owner = seed_users.owner
+        other_user = seed_users.invitee
+
+        # Owner creates team X
+        team_data = test_data_factory.team_data()
+        resp = await http_client.post(
+            "/v1/teams", json=team_data, headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
-        teams = resp.json()
-        assert len(teams) == 2
+        team_x_id = resp.json()["id"]
 
-        returned_ids = {t["id"] for t in teams}
-        assert team_a_id in returned_ids
-        assert team_b_id in returned_ids
+        # Other user needs to be creator tier to create a team
+        # Upgrade invitee to creator first
+        resp = await http_client.post(
+            "/v1/account/upgrade",
+            json={"target_tier": "creator"},
+            headers=other_user.auth_headers(),
+        )
+        # May already be creator from previous test, so 200 or 409 are both ok
+        assert resp.status_code in [200, 409], (
+            f"Upgrade failed: {resp.status_code} {resp.text}"
+        )
 
-        # Both should have role "owner"
-        for t in teams:
-            assert t["user_role"] == "owner"
+        # Other user creates team Y
+        team_data_y = test_data_factory.team_data()
+        resp = await http_client.post(
+            "/v1/teams", json=team_data_y, headers=other_user.auth_headers()
+        )
+        assert resp.status_code == 200
+        team_y_id = resp.json()["id"]
+
+        # Owner tries to list team Y members — should be forbidden
+        resp = await http_client.get(
+            f"/v1/teams/{team_y_id}/members", headers=owner.auth_headers()
+        )
+        assert resp.status_code == 403, (
+            f"Expected 403 for cross-team access, got {resp.status_code}"
+        )
+
+        # Other user tries to list team X members — should be forbidden
+        resp = await http_client.get(
+            f"/v1/teams/{team_x_id}/members", headers=other_user.auth_headers()
+        )
+        assert resp.status_code == 403, (
+            f"Expected 403 for cross-team access, got {resp.status_code}"
+        )
+
+    async def test_starter_cannot_create_team(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+        test_data_factory: TestDataFactory,
+    ):
+        """Starter tier user cannot create teams (requires creator tier)."""
+        invitee = seed_users.invitee
+
+        # The invitee starts as starter tier (reset by seed_users fixture)
+        team_data = test_data_factory.team_data()
+        resp = await http_client.post(
+            "/v1/teams", json=team_data, headers=invitee.auth_headers()
+        )
+        assert resp.status_code == 403, (
+            f"Expected 403 for starter creating team, got {resp.status_code} {resp.text}"
+        )
+
+        # Verify error structure
+        error = resp.json()
+        assert "error" in error

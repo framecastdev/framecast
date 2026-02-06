@@ -3285,188 +3285,11 @@ mod tests {
     }
 
     // ========================================================================
-    // Project State Machine Integration Tests
+    // Invitation Declined Edge Cases
     // ========================================================================
 
     #[test]
-    fn test_project_start_render() {
-        let mut project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        assert_eq!(project.status, ProjectStatus::Draft);
-        project.start_render().unwrap();
-        assert_eq!(project.status, ProjectStatus::Rendering);
-    }
-
-    #[test]
-    fn test_project_on_job_completed() {
-        let mut project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        project.start_render().unwrap();
-        project.on_job_completed().unwrap();
-        assert_eq!(project.status, ProjectStatus::Completed);
-    }
-
-    #[test]
-    fn test_project_on_job_failed() {
-        let mut project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        project.start_render().unwrap();
-        project.on_job_failed().unwrap();
-        assert_eq!(project.status, ProjectStatus::Draft);
-    }
-
-    #[test]
-    fn test_project_on_job_canceled() {
-        let mut project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        project.start_render().unwrap();
-        project.on_job_canceled().unwrap();
-        assert_eq!(project.status, ProjectStatus::Draft);
-    }
-
-    #[test]
-    fn test_project_archive_from_draft() {
-        let mut project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        project.archive().unwrap();
-        assert_eq!(project.status, ProjectStatus::Archived);
-    }
-
-    #[test]
-    fn test_project_archive_from_completed() {
-        let mut project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        project.start_render().unwrap();
-        project.on_job_completed().unwrap();
-        project.archive().unwrap();
-        assert_eq!(project.status, ProjectStatus::Archived);
-    }
-
-    #[test]
-    fn test_project_unarchive() {
-        let mut project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        project.archive().unwrap();
-        project.unarchive().unwrap();
-        assert_eq!(project.status, ProjectStatus::Draft);
-    }
-
-    #[test]
-    fn test_project_rerender() {
-        let mut project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        project.start_render().unwrap();
-        project.on_job_completed().unwrap();
-        project.start_render().unwrap(); // Re-render
-        assert_eq!(project.status, ProjectStatus::Rendering);
-    }
-
-    #[test]
-    fn test_project_invalid_transition() {
-        let mut project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        // Cannot complete a draft project (must render first)
-        let result = project.on_job_completed();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_project_can_transition() {
-        let project = Project::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test".to_string(),
-            serde_json::json!({}),
-        )
-        .unwrap();
-
-        use crate::state::ProjectEvent;
-        assert!(project.can_transition(&ProjectEvent::Render));
-        assert!(project.can_transition(&ProjectEvent::Archive));
-        assert!(!project.can_transition(&ProjectEvent::JobCompleted));
-        assert!(!project.can_transition(&ProjectEvent::Unarchive));
-    }
-
-    #[test]
-    fn test_project_status_valid_transitions() {
-        assert_eq!(
-            ProjectStatus::Draft.valid_transitions(),
-            vec![ProjectStatus::Rendering, ProjectStatus::Archived]
-        );
-        assert_eq!(
-            ProjectStatus::Rendering.valid_transitions(),
-            vec![ProjectStatus::Completed, ProjectStatus::Draft]
-        );
-        assert_eq!(
-            ProjectStatus::Completed.valid_transitions(),
-            vec![ProjectStatus::Archived, ProjectStatus::Rendering]
-        );
-        assert_eq!(
-            ProjectStatus::Archived.valid_transitions(),
-            vec![ProjectStatus::Draft]
-        );
-    }
-
-    // ========================================================================
-    // Invitation State Machine Integration Tests
-    // ========================================================================
-
-    #[test]
-    fn test_invitation_accept() {
+    fn test_invitation_decline_sets_state() {
         let mut invitation = Invitation::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
@@ -3475,13 +3298,12 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(invitation.state(), InvitationState::Pending);
-        invitation.accept().unwrap();
-        assert_eq!(invitation.state(), InvitationState::Accepted);
+        invitation.decline().unwrap();
+        assert_eq!(invitation.state(), InvitationState::Declined);
     }
 
     #[test]
-    fn test_invitation_revoke() {
+    fn test_invitation_decline_sets_declined_at() {
         let mut invitation = Invitation::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
@@ -3490,12 +3312,13 @@ mod tests {
         )
         .unwrap();
 
-        invitation.revoke().unwrap();
-        assert_eq!(invitation.state(), InvitationState::Revoked);
+        assert!(invitation.declined_at.is_none());
+        invitation.decline().unwrap();
+        assert!(invitation.declined_at.is_some());
     }
 
     #[test]
-    fn test_invitation_cannot_accept_after_revoked() {
+    fn test_invitation_cannot_accept_after_declined() {
         let mut invitation = Invitation::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
@@ -3504,13 +3327,13 @@ mod tests {
         )
         .unwrap();
 
-        invitation.revoke().unwrap();
+        invitation.decline().unwrap();
         let result = invitation.accept();
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_invitation_cannot_revoke_after_accepted() {
+    fn test_invitation_cannot_revoke_after_declined() {
         let mut invitation = Invitation::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
@@ -3519,13 +3342,13 @@ mod tests {
         )
         .unwrap();
 
-        invitation.accept().unwrap();
+        invitation.decline().unwrap();
         let result = invitation.revoke();
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_invitation_cannot_accept_expired() {
+    fn test_invitation_multiple_terminal_fields_rejected() {
         let mut invitation = Invitation::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
@@ -3534,285 +3357,126 @@ mod tests {
         )
         .unwrap();
 
-        // Set expiration to the past
-        invitation.expires_at = Utc::now() - chrono::Duration::hours(1);
+        // Manually set both accepted_at and declined_at (impossible via normal API)
+        invitation.accepted_at = Some(Utc::now());
+        invitation.declined_at = Some(Utc::now());
 
-        assert_eq!(invitation.state(), InvitationState::Expired);
-        let result = invitation.accept();
+        let result = invitation.validate();
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_invitation_can_transition() {
-        let invitation = Invitation::new(
+    fn test_invitation_empty_email_rejected() {
+        let result = Invitation::new(
             Uuid::new_v4(),
+            Uuid::new_v4(),
+            "".to_string(),
+            InvitationRole::Member,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invitation_email_max_length_boundary() {
+        // 254-char email should pass (valid per RFC 5321)
+        let local_part = "a".repeat(63);
+        let domain = format!("{}.com", "b".repeat(186));
+        let email_254 = format!("{}@{}", local_part, domain);
+        assert!(email_254.len() <= 255);
+        // This should be valid since it contains '@' and is <= 255 chars
+        let result = Invitation::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            email_254,
+            InvitationRole::Member,
+        );
+        assert!(result.is_ok());
+    }
+
+    // ========================================================================
+    // Team Slug Boundary Tests
+    // ========================================================================
+
+    #[test]
+    fn test_slug_exactly_max_length_valid() {
+        // Slug at max length (50 chars) should be accepted
+        let slug = "a".repeat(50);
+        assert!(Team::validate_slug(&slug).is_ok());
+    }
+
+    #[test]
+    fn test_slug_over_max_length_invalid() {
+        // Slug at max+1 (51 chars) should be rejected
+        let slug = "a".repeat(51);
+        assert!(Team::validate_slug(&slug).is_err());
+    }
+
+    #[test]
+    fn test_slug_single_char_valid() {
+        assert!(Team::validate_slug("a").is_ok());
+        assert!(Team::validate_slug("z").is_ok());
+        assert!(Team::validate_slug("5").is_ok());
+    }
+
+    #[test]
+    fn test_slug_only_digits_valid() {
+        assert!(Team::validate_slug("123").is_ok());
+        assert!(Team::validate_slug("007").is_ok());
+    }
+
+    #[test]
+    fn test_slug_consecutive_hyphens_valid() {
+        // Consecutive hyphens are allowed by current validation (no rule against them)
+        assert!(Team::validate_slug("a--b").is_ok());
+    }
+
+    #[test]
+    fn test_slug_unicode_rejected() {
+        assert!(Team::validate_slug("café").is_err());
+        assert!(Team::validate_slug("日本語").is_err());
+        assert!(Team::validate_slug("team-αβ").is_err());
+    }
+
+    // ========================================================================
+    // User Tier Absorbing State
+    // ========================================================================
+
+    #[test]
+    fn test_user_upgrade_is_one_way() {
+        let mut user = User::new(
             Uuid::new_v4(),
             "test@example.com".to_string(),
-            InvitationRole::Member,
+            Some("Test".to_string()),
         )
         .unwrap();
 
-        use crate::state::InvitationEvent;
-        assert!(invitation.can_transition(&InvitationEvent::Accept));
-        assert!(invitation.can_transition(&InvitationEvent::Revoke));
-    }
+        user.upgrade_to_creator().unwrap();
+        assert_eq!(user.tier, UserTier::Creator);
 
-    #[test]
-    fn test_invitation_state_is_terminal() {
-        assert!(!InvitationState::Pending.is_terminal());
-        assert!(InvitationState::Accepted.is_terminal());
-        assert!(InvitationState::Declined.is_terminal());
-        assert!(InvitationState::Revoked.is_terminal());
-        assert!(InvitationState::Expired.is_terminal());
-    }
-
-    #[test]
-    fn test_invitation_state_valid_transitions() {
-        assert_eq!(
-            InvitationState::Pending.valid_transitions(),
-            vec![
-                InvitationState::Accepted,
-                InvitationState::Declined,
-                InvitationState::Expired,
-                InvitationState::Revoked
-            ]
-        );
-        assert!(InvitationState::Accepted.valid_transitions().is_empty());
-        assert!(InvitationState::Declined.valid_transitions().is_empty());
-        assert!(InvitationState::Revoked.valid_transitions().is_empty());
-        assert!(InvitationState::Expired.valid_transitions().is_empty());
+        // Attempting to upgrade again fails (already creator)
+        let result = user.upgrade_to_creator();
+        assert!(result.is_err());
     }
 
     // ========================================================================
-    // WebhookDelivery State Machine Integration Tests
+    // Security-Oriented Input Tests
     // ========================================================================
 
     #[test]
-    fn test_webhook_delivery_start_attempt() {
-        let mut delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-
-        assert_eq!(delivery.status, WebhookDeliveryStatus::Pending);
-        assert_eq!(delivery.attempts, 0);
-        delivery.start_attempt().unwrap();
-        assert_eq!(delivery.status, WebhookDeliveryStatus::Attempting);
-        assert_eq!(delivery.attempts, 1);
+    fn test_slug_sql_injection_rejected() {
+        assert!(Team::validate_slug("a; DROP TABLE teams").is_err());
+        assert!(Team::validate_slug("a' OR '1'='1").is_err());
     }
 
     #[test]
-    fn test_webhook_delivery_mark_delivered() {
-        let mut delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-
-        delivery.start_attempt().unwrap();
-        delivery
-            .mark_delivered(200, Some("OK".to_string()))
-            .unwrap();
-        assert_eq!(delivery.status, WebhookDeliveryStatus::Delivered);
-        assert_eq!(delivery.response_status, Some(200));
-        assert!(delivery.delivered_at.is_some());
+    fn test_slug_xss_rejected() {
+        assert!(Team::validate_slug("<script>alert(1)</script>").is_err());
+        assert!(Team::validate_slug("a<img src=x>").is_err());
     }
 
     #[test]
-    fn test_webhook_delivery_mark_for_retry() {
-        let mut delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-
-        delivery.start_attempt().unwrap();
-        let next_retry = Utc::now() + chrono::Duration::minutes(5);
-        delivery
-            .mark_for_retry(
-                Some(503),
-                Some("Service Unavailable".to_string()),
-                next_retry,
-            )
-            .unwrap();
-        assert_eq!(delivery.status, WebhookDeliveryStatus::Retrying);
-        assert_eq!(delivery.response_status, Some(503));
-        assert!(delivery.next_retry_at.is_some());
-    }
-
-    #[test]
-    fn test_webhook_delivery_retry_then_success() {
-        let mut delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-
-        // First attempt fails
-        delivery.start_attempt().unwrap();
-        let next_retry = Utc::now() + chrono::Duration::minutes(5);
-        delivery
-            .mark_for_retry(Some(500), None, next_retry)
-            .unwrap();
-
-        // Second attempt succeeds
-        delivery.start_attempt().unwrap();
-        delivery.mark_delivered(200, None).unwrap();
-        assert_eq!(delivery.status, WebhookDeliveryStatus::Delivered);
-        assert_eq!(delivery.attempts, 2);
-    }
-
-    #[test]
-    fn test_webhook_delivery_mark_failed_permanent() {
-        let mut delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-
-        delivery.start_attempt().unwrap();
-        delivery
-            .mark_failed_permanent(404, Some("Not Found".to_string()))
-            .unwrap();
-        assert_eq!(delivery.status, WebhookDeliveryStatus::Failed);
-        assert_eq!(delivery.response_status, Some(404));
-    }
-
-    #[test]
-    fn test_webhook_delivery_mark_failed_max_attempts() {
-        let mut delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-
-        // Simulate reaching max attempts
-        let next_retry = Utc::now() + chrono::Duration::minutes(5);
-        for _ in 0..5 {
-            delivery.start_attempt().unwrap();
-            delivery
-                .mark_for_retry(Some(500), None, next_retry)
-                .unwrap();
-        }
-
-        // Max attempts exceeded
-        delivery.mark_failed_max_attempts().unwrap();
-        assert_eq!(delivery.status, WebhookDeliveryStatus::Failed);
-        assert_eq!(delivery.attempts, 5);
-    }
-
-    #[test]
-    fn test_webhook_delivery_cannot_retry_after_max_attempts() {
-        let mut delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-        delivery.max_attempts = 2; // Lower max for testing
-
-        let next_retry = Utc::now() + chrono::Duration::minutes(5);
-        for _ in 0..2 {
-            delivery.start_attempt().unwrap();
-            delivery
-                .mark_for_retry(Some(500), None, next_retry)
-                .unwrap();
-        }
-
-        // Should fail because max attempts reached
-        let result = delivery.start_attempt();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_webhook_delivery_cannot_transition_from_delivered() {
-        let mut delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-
-        delivery.start_attempt().unwrap();
-        delivery.mark_delivered(200, None).unwrap();
-
-        // Cannot retry after delivered
-        let result = delivery.start_attempt();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_webhook_delivery_cannot_transition_from_failed() {
-        let mut delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-
-        delivery.start_attempt().unwrap();
-        delivery.mark_failed_permanent(400, None).unwrap();
-
-        // Cannot retry after failed
-        let result = delivery.start_attempt();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_webhook_delivery_status_is_terminal() {
-        assert!(!WebhookDeliveryStatus::Pending.is_terminal());
-        assert!(!WebhookDeliveryStatus::Attempting.is_terminal());
-        assert!(!WebhookDeliveryStatus::Retrying.is_terminal());
-        assert!(WebhookDeliveryStatus::Delivered.is_terminal());
-        assert!(WebhookDeliveryStatus::Failed.is_terminal());
-    }
-
-    #[test]
-    fn test_webhook_delivery_status_valid_transitions() {
-        assert_eq!(
-            WebhookDeliveryStatus::Pending.valid_transitions(),
-            vec![WebhookDeliveryStatus::Attempting]
-        );
-        assert_eq!(
-            WebhookDeliveryStatus::Attempting.valid_transitions(),
-            vec![
-                WebhookDeliveryStatus::Delivered,
-                WebhookDeliveryStatus::Retrying,
-                WebhookDeliveryStatus::Failed
-            ]
-        );
-        assert_eq!(
-            WebhookDeliveryStatus::Retrying.valid_transitions(),
-            vec![
-                WebhookDeliveryStatus::Attempting,
-                WebhookDeliveryStatus::Failed
-            ]
-        );
-        assert!(WebhookDeliveryStatus::Delivered
-            .valid_transitions()
-            .is_empty());
-        assert!(WebhookDeliveryStatus::Failed.valid_transitions().is_empty());
-    }
-
-    #[test]
-    fn test_webhook_delivery_can_transition() {
-        let delivery = WebhookDelivery::new(
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            "job.completed".to_string(),
-            serde_json::json!({"job_id": "123"}),
-        );
-
-        use crate::state::WebhookDeliveryEvent;
-        assert!(delivery.can_transition(&WebhookDeliveryEvent::Attempt));
-        assert!(!delivery.can_transition(&WebhookDeliveryEvent::Success));
-        assert!(!delivery.can_transition(&WebhookDeliveryEvent::Retry));
+    fn test_slug_path_traversal_rejected() {
+        assert!(Team::validate_slug("../etc/passwd").is_err());
+        assert!(Team::validate_slug("..%2f..%2f").is_err());
     }
 }

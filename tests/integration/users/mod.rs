@@ -628,3 +628,162 @@ mod test_error_response_consistency {
         app.cleanup().await.unwrap();
     }
 }
+
+mod test_profile_edge_cases {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_update_profile_unicode_name() {
+        let app = TestApp::new().await.unwrap();
+        let user_fixture = UserFixture::starter(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        let update_data = json!({
+            "name": "José Hernández-López 日本語"
+        });
+
+        let request = Request::builder()
+            .method(Method::PATCH)
+            .uri("/v1/account")
+            .header("authorization", format!("Bearer {}", user_fixture.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(update_data.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let profile: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(profile["name"], "José Hernández-López 日本語");
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_update_profile_name_at_max_length() {
+        let app = TestApp::new().await.unwrap();
+        let user_fixture = UserFixture::starter(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // UpdateProfileRequest validates name max 255 chars
+        let long_name = "A".repeat(255);
+        let update_data = json!({ "name": long_name });
+
+        let request = Request::builder()
+            .method(Method::PATCH)
+            .uri("/v1/account")
+            .header("authorization", format!("Bearer {}", user_fixture.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(update_data.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let profile: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(profile["name"].as_str().unwrap().len(), 255);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_update_profile_null_avatar_clears() {
+        let app = TestApp::new().await.unwrap();
+        let user_fixture = UserFixture::starter(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // First set an avatar
+        let set_avatar = json!({
+            "avatar_url": "https://example.com/avatar.jpg"
+        });
+
+        let request = Request::builder()
+            .method(Method::PATCH)
+            .uri("/v1/account")
+            .header("authorization", format!("Bearer {}", user_fixture.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(set_avatar.to_string()))
+            .unwrap();
+
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Now clear avatar by sending null
+        let clear_avatar = json!({
+            "avatar_url": null
+        });
+
+        let request = Request::builder()
+            .method(Method::PATCH)
+            .uri("/v1/account")
+            .header("authorization", format!("Bearer {}", user_fixture.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(clear_avatar.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let profile: Value = serde_json::from_slice(&body).unwrap();
+
+        // Avatar should be null/empty after clearing
+        assert!(
+            profile["avatar_url"].is_null() || profile["avatar_url"] == "",
+            "Avatar should be cleared, got: {:?}",
+            profile["avatar_url"]
+        );
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_update_profile_empty_body_noop() {
+        let app = TestApp::new().await.unwrap();
+        let user_fixture = UserFixture::starter(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // Get original profile
+        let get_request = Request::builder()
+            .method(Method::GET)
+            .uri("/v1/account")
+            .header("authorization", format!("Bearer {}", user_fixture.jwt_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.clone().oneshot(get_request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let original_profile: Value = serde_json::from_slice(&body).unwrap();
+
+        // Send empty update
+        let empty_update = json!({});
+
+        let request = Request::builder()
+            .method(Method::PATCH)
+            .uri("/v1/account")
+            .header("authorization", format!("Bearer {}", user_fixture.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(empty_update.to_string()))
+            .unwrap();
+
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let updated_profile: Value = serde_json::from_slice(&body).unwrap();
+
+        // Name should be unchanged
+        assert_eq!(original_profile["name"], updated_profile["name"]);
+        assert_eq!(original_profile["email"], updated_profile["email"]);
+
+        app.cleanup().await.unwrap();
+    }
+}

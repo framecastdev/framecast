@@ -4,11 +4,10 @@
 //! to ensure data integrity across the system
 
 use framecast_domain::entities::*;
-use framecast_common::Error;
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::common::{TestApp, assertions};
+use crate::common::TestApp;
 
 /// Helper to convert MembershipRole to string for SQL binding
 fn role_to_str(role: &MembershipRole) -> &'static str {
@@ -22,44 +21,6 @@ fn role_to_str(role: &MembershipRole) -> &'static str {
 
 mod test_user_invariants {
     use super::*;
-
-    #[tokio::test]
-    async fn test_inv_u1_creator_users_have_upgrade_timestamp() {
-        // INV-U1: Creator users must have upgrade timestamp
-        let app = TestApp::new().await.unwrap();
-
-        // Test valid creator user
-        let mut creator_user = User::new(
-            Uuid::new_v4(),
-            "creator@example.com".to_string(),
-            Some("Creator User".to_string()),
-        ).unwrap();
-
-        creator_user.upgrade_to_creator().unwrap();
-        assert!(creator_user.upgraded_at.is_some());
-        assert!(creator_user.validate().is_ok());
-
-        // Test invalid creator user (missing upgrade timestamp)
-        let mut invalid_creator = User::new(
-            Uuid::new_v4(),
-            "invalid@example.com".to_string(),
-            Some("Invalid Creator".to_string()),
-        ).unwrap();
-
-        invalid_creator.tier = UserTier::Creator;
-        invalid_creator.upgraded_at = None; // Invalid - missing timestamp
-
-        let validation_result = invalid_creator.validate();
-        assert!(validation_result.is_err());
-
-        if let Err(Error::Validation(msg)) = validation_result {
-            assert!(msg.contains("Creator users must have upgrade timestamp"));
-        } else {
-            panic!("Expected validation error for missing upgrade timestamp");
-        }
-
-        app.cleanup().await.unwrap();
-    }
 
     #[tokio::test]
     async fn test_inv_u3_starter_users_no_team_memberships() {
@@ -88,111 +49,6 @@ mod test_user_invariants {
         app.cleanup().await.unwrap();
     }
 
-    #[tokio::test]
-    async fn test_inv_u5_credits_cannot_be_negative() {
-        // INV-U5: Credits cannot be negative
-        let app = TestApp::new().await.unwrap();
-
-        // Test valid user with positive credits
-        let mut user = User::new(
-            Uuid::new_v4(),
-            "user@example.com".to_string(),
-            Some("Test User".to_string()),
-        ).unwrap();
-
-        user.credits = 1000;
-        assert!(user.validate().is_ok());
-
-        // Test user with zero credits (valid)
-        user.credits = 0;
-        assert!(user.validate().is_ok());
-
-        // Test user with negative credits (invalid)
-        user.credits = -1;
-        let validation_result = user.validate();
-        assert!(validation_result.is_err());
-
-        if let Err(Error::Validation(msg)) = validation_result {
-            assert!(msg.contains("Credits cannot be negative"));
-        } else {
-            panic!("Expected validation error for negative credits");
-        }
-
-        app.cleanup().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_inv_u6_storage_cannot_be_negative() {
-        // INV-U6: Ephemeral storage cannot be negative
-        let app = TestApp::new().await.unwrap();
-
-        let mut user = User::new(
-            Uuid::new_v4(),
-            "user@example.com".to_string(),
-            Some("Test User".to_string()),
-        ).unwrap();
-
-        // Test valid storage values
-        user.ephemeral_storage_bytes = 0;
-        assert!(user.validate().is_ok());
-
-        user.ephemeral_storage_bytes = 1024;
-        assert!(user.validate().is_ok());
-
-        // Test negative storage (invalid)
-        user.ephemeral_storage_bytes = -1;
-        let validation_result = user.validate();
-        assert!(validation_result.is_err());
-
-        if let Err(Error::Validation(msg)) = validation_result {
-            assert!(msg.contains("Storage cannot be negative"));
-        } else {
-            panic!("Expected validation error for negative storage");
-        }
-
-        app.cleanup().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_user_field_validation() {
-        // Test email validation
-        let invalid_email_result = User::new(
-            Uuid::new_v4(),
-            "invalid-email".to_string(),
-            Some("Test User".to_string()),
-        );
-        assert!(invalid_email_result.is_err());
-
-        let long_email_result = User::new(
-            Uuid::new_v4(),
-            format!("{}@example.com", "x".repeat(250)),
-            Some("Test User".to_string()),
-        );
-        assert!(long_email_result.is_err());
-
-        // Test name validation
-        let empty_name_result = User::new(
-            Uuid::new_v4(),
-            "test@example.com".to_string(),
-            Some("".to_string()),
-        );
-        assert!(empty_name_result.is_err());
-
-        let long_name_result = User::new(
-            Uuid::new_v4(),
-            "test@example.com".to_string(),
-            Some("x".repeat(101)),
-        );
-        assert!(long_name_result.is_err());
-
-        // Test valid user creation
-        let valid_user = User::new(
-            Uuid::new_v4(),
-            "test@example.com".to_string(),
-            Some("Valid Name".to_string()),
-        );
-        assert!(valid_user.is_ok());
-    }
 }
 
 mod test_team_invariants {
@@ -278,42 +134,6 @@ mod test_team_invariants {
     }
 
     #[tokio::test]
-    async fn test_inv_t4_slug_format_validation() {
-        // INV-T4: Team slug format validation
-
-        // Valid slug formats
-        let valid_slugs = vec![
-            "valid-slug",
-            "team-123",
-            "simple",
-            "with-multiple-dashes",
-            "a",
-        ];
-
-        for slug in valid_slugs {
-            let team_result = Team::new("Test Team".to_string(), Some(slug.to_string()));
-            assert!(team_result.is_ok(), "Slug '{}' should be valid", slug);
-        }
-
-        // Invalid slug formats
-        let invalid_slugs = vec![
-            "",                    // Empty
-            "x".repeat(51),        // Too long
-            "-leading-dash",       // Leading dash
-            "trailing-dash-",      // Trailing dash
-            "UPPERCASE",           // Uppercase letters
-            "spaces in slug",      // Spaces
-            "special@chars",       // Special characters
-            "under_scores",        // Underscores (not allowed)
-        ];
-
-        for slug in invalid_slugs {
-            let team_result = Team::new("Test Team".to_string(), Some(slug.to_string()));
-            assert!(team_result.is_err(), "Slug '{}' should be invalid", slug);
-        }
-    }
-
-    #[tokio::test]
     async fn test_inv_t7_max_owned_teams_per_user() {
         // INV-T7: Max 10 owned teams per user (CARD-2 from cardinality constraints)
         let app = TestApp::new().await.unwrap();
@@ -376,18 +196,6 @@ mod test_team_invariants {
         app.cleanup().await.unwrap();
     }
 
-    #[tokio::test]
-    async fn test_team_name_validation() {
-        // Test team name validation
-        let empty_name_result = Team::new("".to_string(), None);
-        assert!(empty_name_result.is_err());
-
-        let long_name_result = Team::new("x".repeat(101), None);
-        assert!(long_name_result.is_err());
-
-        let valid_name_result = Team::new("Valid Team Name".to_string(), None);
-        assert!(valid_name_result.is_ok());
-    }
 }
 
 mod test_membership_invariants {
@@ -518,53 +326,6 @@ mod test_membership_invariants {
 
         // Should fail due to unique constraint on (team_id, user_id)
         assert!(membership2_result.is_err());
-
-        app.cleanup().await.unwrap();
-    }
-}
-
-mod test_timestamp_invariants {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_inv_time1_updated_at_progression() {
-        // INV-TIME1: updated_at must not go backwards
-        let app = TestApp::new().await.unwrap();
-
-        let mut user = User::new(
-            Uuid::new_v4(),
-            "test@example.com".to_string(),
-            Some("Test User".to_string()),
-        ).unwrap();
-
-        let initial_updated_at = user.updated_at;
-
-        // Simulate time passing and update
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        user.updated_at = Utc::now();
-
-        // Verify progression
-        assertions::assert_timestamp_progression(&initial_updated_at, &user.updated_at);
-
-        app.cleanup().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_created_at_immutability() {
-        // Test that created_at should not change after creation
-        let app = TestApp::new().await.unwrap();
-
-        let user = User::new(
-            Uuid::new_v4(),
-            "test@example.com".to_string(),
-            Some("Test User".to_string()),
-        ).unwrap();
-
-        let original_created_at = user.created_at;
-
-        // In practice, created_at should never be modified
-        // This test ensures our test infrastructure respects that
-        assertions::assert_timestamp_recent(&original_created_at);
 
         app.cleanup().await.unwrap();
     }

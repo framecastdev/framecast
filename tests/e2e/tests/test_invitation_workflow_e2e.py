@@ -181,3 +181,171 @@ class TestInvitationWorkflowE2E:
         )
         # Should get authorization error (not a member of the team)
         assert resp.status_code in [401, 403]
+
+    async def test_invitation_revoke_then_accept_fails(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+        test_data_factory: TestDataFactory,
+    ):
+        """Invite -> revoke -> accept should fail (revoked is terminal)."""
+        owner = seed_users.owner
+        invitee = seed_users.invitee
+
+        # Owner creates team
+        team_data = test_data_factory.team_data()
+        resp = await http_client.post(
+            "/v1/teams", json=team_data, headers=owner.auth_headers()
+        )
+        assert resp.status_code == 200
+        team_id = resp.json()["id"]
+
+        # Owner invites invitee
+        resp = await http_client.post(
+            f"/v1/teams/{team_id}/invitations",
+            json={"email": invitee.email, "role": "member"},
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 200
+        invitation_id = resp.json()["id"]
+
+        # Owner revokes the invitation (DELETE, not POST)
+        resp = await http_client.delete(
+            f"/v1/teams/{team_id}/invitations/{invitation_id}",
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 204, f"Revoke failed: {resp.status_code} {resp.text}"
+
+        # Invitee tries to accept revoked invitation — should fail
+        resp = await http_client.post(
+            f"/v1/invitations/{invitation_id}/accept",
+            headers=invitee.auth_headers(),
+        )
+        assert resp.status_code in [400, 409], (
+            f"Expected 400/409 for revoked invitation accept, got {resp.status_code} {resp.text}"
+        )
+
+    async def test_reinvite_after_decline(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+        test_data_factory: TestDataFactory,
+    ):
+        """Invite -> decline -> re-invite -> accept -> membership created."""
+        owner = seed_users.owner
+        invitee = seed_users.invitee
+
+        # Owner creates team
+        team_data = test_data_factory.team_data()
+        resp = await http_client.post(
+            "/v1/teams", json=team_data, headers=owner.auth_headers()
+        )
+        assert resp.status_code == 200
+        team_id = resp.json()["id"]
+
+        # Owner invites invitee
+        resp = await http_client.post(
+            f"/v1/teams/{team_id}/invitations",
+            json={"email": invitee.email, "role": "member"},
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 200
+        invitation_id = resp.json()["id"]
+
+        # Invitee declines
+        resp = await http_client.post(
+            f"/v1/invitations/{invitation_id}/decline",
+            headers=invitee.auth_headers(),
+        )
+        assert resp.status_code == 204
+
+        # Owner sends a new invitation to same email
+        resp = await http_client.post(
+            f"/v1/teams/{team_id}/invitations",
+            json={"email": invitee.email, "role": "admin"},
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 200, (
+            f"Re-invite after decline should succeed: {resp.status_code} {resp.text}"
+        )
+        new_invitation_id = resp.json()["id"]
+        assert resp.json()["role"] == "admin"
+
+        # Invitee accepts the new invitation
+        resp = await http_client.post(
+            f"/v1/invitations/{new_invitation_id}/accept",
+            headers=invitee.auth_headers(),
+        )
+        assert resp.status_code == 200, (
+            f"Accept re-invite failed: {resp.status_code} {resp.text}"
+        )
+
+        # Verify invitee is now a team member with admin role
+        resp = await http_client.get(
+            f"/v1/teams/{team_id}/members", headers=owner.auth_headers()
+        )
+        assert resp.status_code == 200
+        members = resp.json()
+        invitee_member = next(
+            (m for m in members if m["user_id"] == invitee.user_id), None
+        )
+        assert invitee_member is not None, "Invitee should be a team member"
+        assert invitee_member["role"] == "admin"
+
+    async def test_invitation_email_contains_team_info(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+        localstack_email_client: LocalStackEmailClient,
+        test_data_factory: TestDataFactory,
+    ):
+        """Verify invitation email subject/body contain team name and role."""
+        owner = seed_users.owner
+        invitee = seed_users.invitee
+
+        # Owner creates team with a recognizable name
+        team_data = test_data_factory.team_data()
+        team_data["name"] = "Verification Test Studio"
+        resp = await http_client.post(
+            "/v1/teams", json=team_data, headers=owner.auth_headers()
+        )
+        assert resp.status_code == 200
+        team_id = resp.json()["id"]
+
+        # Owner invites invitee
+        resp = await http_client.post(
+            f"/v1/teams/{team_id}/invitations",
+            json={"email": invitee.email, "role": "member"},
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 200
+
+        # Wait for and retrieve invitation emails for the invitee
+        import asyncio
+
+        team_name = "Verification Test Studio"
+        target_email = None
+        start = asyncio.get_event_loop().time()
+        timeout = 15
+
+        while (asyncio.get_event_loop().time() - start) < timeout:
+            emails = await localstack_email_client.get_emails(invitee.email)
+            for e in emails:
+                if team_name in (e.subject or "") or team_name in (e.body or ""):
+                    target_email = e
+                    break
+            if target_email:
+                break
+            await asyncio.sleep(0.5)
+
+        assert target_email is not None, (
+            f"Invitation email with team name '{team_name}' not found for {invitee.email}"
+        )
+
+        # Verify email contains an invitation URL
+        invitation_url = localstack_email_client.extract_invitation_url(
+            target_email.body
+        )
+        assert invitation_url is not None, (
+            f"Email should contain invitation URL. Body: {target_email.body[:200]}"
+        )
