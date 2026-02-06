@@ -949,20 +949,27 @@ pub async fn create_membership_tx(
 }
 
 /// Mark an invitation as accepted within an existing transaction.
+///
+/// Returns `RepositoryError::NotFound` if the invitation does not exist
+/// or has already been accepted (accepted_at IS NOT NULL).
 pub async fn mark_invitation_accepted_tx(
     transaction: &mut Transaction<'_, Postgres>,
     invitation_id: Uuid,
-) -> std::result::Result<(), sqlx::Error> {
-    sqlx::query!(
+) -> std::result::Result<(), RepositoryError> {
+    let result = sqlx::query!(
         r#"
         UPDATE invitations
         SET accepted_at = NOW()
-        WHERE id = $1
+        WHERE id = $1 AND accepted_at IS NULL
         "#,
         invitation_id
     )
     .execute(&mut **transaction)
     .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(RepositoryError::NotFound);
+    }
     Ok(())
 }
 
