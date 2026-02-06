@@ -52,15 +52,20 @@ RUN cargo install cargo-lambda
 RUN cargo install cargo-watch
 
 # Install Python tools via pipx
-RUN pipx install aws-sam-cli
 RUN pipx install uv
 RUN pipx install pre-commit
+
+# Install OpenTofu
+RUN curl --proto '=https' --tlsv1.2 -fsSL https://get.opentofu.org/install-opentofu.sh -o install-opentofu.sh \
+    && chmod +x install-opentofu.sh \
+    && ./install-opentofu.sh --install-method deb \
+    && rm install-opentofu.sh
 
 # Verify installations
 RUN just --version && \
     sqlx --version && \
     cargo lambda --version && \
-    sam --version && \
+    tofu --version && \
     uv --version && \
     zig version
 

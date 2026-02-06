@@ -183,6 +183,18 @@ just seed                     # Seed test data
 just fmt                      # Format all code
 just clippy                   # Run linter
 just fix                      # Auto-fix linting issues
+
+# Build & Deploy
+just lambda-build             # Build Lambda with cargo-lambda
+just lambda-watch             # Hot reload for local Lambda dev
+just deploy-local             # Deploy full stack to LocalStack
+just deploy-dev               # Deploy to AWS dev
+just deploy-prod              # Deploy to AWS production
+
+# Infrastructure
+just infra-init               # Initialize OpenTofu
+just infra-validate           # Validate OpenTofu config
+just infra-plan dev           # Plan changes for environment
 ```
 
 ---
