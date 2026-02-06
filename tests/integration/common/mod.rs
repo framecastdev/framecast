@@ -392,4 +392,3 @@ mod tests {
 }
 
 pub mod email_mock;
-pub mod localstack_client;
