@@ -362,7 +362,7 @@ ci-setup-ses:
     echo "Setting up LocalStack SES identities (CI mode) at $ENDPOINT..."
     echo "Waiting for LocalStack to be ready..."
     for i in $(seq 1 30); do
-        if aws --endpoint-url="$ENDPOINT" sts get-caller-identity > /dev/null 2>&1; then
+        if aws --endpoint-url="$ENDPOINT" ses list-identities --region us-east-1 > /dev/null 2>&1; then
             echo "✅ LocalStack is ready"
             break
         fi
