@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 # Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
+    unzip \
     build-essential \
     pkg-config \
     libssl-dev \
@@ -18,13 +19,18 @@ RUN apt-get update && apt-get install -y \
     python3-venv \
     pipx \
     jq \
-    awscli \
     ca-certificates \
     gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20.x (required for GitHub Actions like actions/checkout)
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+# Install AWS CLI v2 (supports AWS_ENDPOINT_URL env var)
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip \
+    && unzip -q awscliv2.zip \
+    && ./aws/install \
+    && rm -rf awscliv2.zip aws
+
+# Install Node.js 22.x LTS (required for GitHub Actions like actions/checkout)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
@@ -67,6 +73,7 @@ RUN just --version && \
     cargo lambda --version && \
     tofu --version && \
     uv --version && \
+    aws --version && \
     zig version
 
 # Set working directory
