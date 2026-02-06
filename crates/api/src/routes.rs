@@ -18,6 +18,7 @@ pub fn user_routes() -> Router<AppState> {
 /// Create team management routes
 pub fn team_routes() -> Router<AppState> {
     Router::new()
+        .route("/v1/teams", get(teams::list_teams))
         .route("/v1/teams", post(teams::create_team))
         .route("/v1/teams/{id}", get(teams::get_team))
         .route("/v1/teams/{id}", patch(teams::update_team))
@@ -27,23 +28,26 @@ pub fn team_routes() -> Router<AppState> {
 /// Create team membership routes
 pub fn membership_routes() -> Router<AppState> {
     Router::new()
-        // Team invitation endpoints
+        // Team member endpoints
         .route(
-            "/v1/teams/{team_id}/invite",
-            post(memberships::invite_member),
+            "/v1/teams/{team_id}/members",
+            get(memberships::list_members),
         )
         .route(
             "/v1/teams/{team_id}/members/{user_id}",
-            delete(memberships::remove_member),
+            delete(memberships::remove_member).patch(memberships::update_member_role),
         )
+        // Team invitation endpoints (spec: POST /v1/teams/:id/invitations)
         .route(
-            "/v1/teams/{team_id}/members/{user_id}/role",
-            put(memberships::update_member_role),
+            "/v1/teams/{team_id}/invitations",
+            post(memberships::invite_member),
         )
+        // Leave team
+        .route("/v1/teams/{team_id}/leave", post(memberships::leave_team))
         // Global invitation acceptance endpoints
         .route(
             "/v1/invitations/{invitation_id}/accept",
-            put(memberships::accept_invitation),
+            post(memberships::accept_invitation),
         )
         .route(
             "/v1/invitations/{invitation_id}/decline",

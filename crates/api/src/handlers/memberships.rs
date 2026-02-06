@@ -90,9 +90,98 @@ impl From<Membership> for MembershipResponse {
     }
 }
 
+/// List team members
+///
+/// **GET /v1/teams/{team_id}/members**
+///
+/// Returns all members of a team. Any team member can view the list.
+pub async fn list_members(
+    auth_context: AuthUser,
+    State(state): State<AppState>,
+    Path(team_id): Path<Uuid>,
+) -> Result<Json<Vec<MembershipResponse>>> {
+    let user = &auth_context.0.user;
+
+    // Check if user is a member of the team
+    let membership = state
+        .repos
+        .memberships
+        .get_by_team_and_user(team_id, user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get membership: {}", e)))?;
+
+    if membership.is_none() {
+        return Err(Error::Authorization(
+            "Access denied: Not a member of this team".to_string(),
+        ));
+    }
+
+    // Get all members
+    let members = state
+        .repos
+        .memberships
+        .find_by_team(team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to list members: {}", e)))?;
+
+    let responses: Vec<MembershipResponse> =
+        members.into_iter().map(MembershipResponse::from).collect();
+
+    Ok(Json(responses))
+}
+
+/// Leave a team
+///
+/// **POST /v1/teams/{team_id}/leave**
+///
+/// Removes the authenticated user from the team.
+/// The last owner cannot leave (INV-T2).
+pub async fn leave_team(
+    auth_context: AuthUser,
+    State(state): State<AppState>,
+    Path(team_id): Path<Uuid>,
+) -> Result<StatusCode> {
+    let user = &auth_context.0.user;
+
+    // Check if user is a member of the team
+    let membership = state
+        .repos
+        .memberships
+        .get_by_team_and_user(team_id, user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get membership: {}", e)))?
+        .ok_or_else(|| Error::NotFound("Not a member of this team".to_string()))?;
+
+    // Business rule: Cannot leave if last owner (INV-T2)
+    if membership.role == MembershipRole::Owner {
+        let owner_count = state
+            .repos
+            .memberships
+            .count_owners(team_id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to count owners: {}", e)))?;
+
+        if owner_count <= 1 {
+            return Err(Error::Conflict(
+                "Cannot leave: you are the last owner of this team".to_string(),
+            ));
+        }
+    }
+
+    // Remove membership
+    state
+        .repos
+        .memberships
+        .delete(team_id, user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to leave team: {}", e)))?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Send invitation to join a team
 ///
-/// **POST /v1/teams/{team_id}/invite**
+/// **POST /v1/teams/{team_id}/invitations**
 ///
 /// Sends an invitation email to a user to join the team.
 /// Only team owners and admins can send invitations.
@@ -245,7 +334,7 @@ pub async fn invite_member(
 
 /// Accept a team invitation
 ///
-/// **PUT /v1/invitations/{invitation_id}/accept**
+/// **POST /v1/invitations/{invitation_id}/accept**
 ///
 /// Accepts an invitation to join a team. The user must be the recipient.
 /// Starter users are automatically upgraded to Creator tier.
@@ -471,7 +560,7 @@ pub async fn remove_member(
 
 /// Update a team member's role
 ///
-/// **PUT /v1/teams/:team_id/members/:user_id/role**
+/// **PATCH /v1/teams/:team_id/members/:user_id**
 ///
 /// Updates a member's role in the team. Only owners can update roles.
 /// Admins can update roles but cannot promote to owner.

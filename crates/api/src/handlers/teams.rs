@@ -99,6 +99,32 @@ impl TeamResponse {
     }
 }
 
+/// List teams for the current user
+///
+/// **GET /v1/teams**
+///
+/// Returns all teams the authenticated user is a member of, with their role.
+pub async fn list_teams(
+    auth_context: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<TeamResponse>>> {
+    let user = &auth_context.0.user;
+
+    let teams_with_roles = state
+        .repos
+        .teams
+        .find_by_user(user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to list teams: {}", e)))?;
+
+    let responses: Vec<TeamResponse> = teams_with_roles
+        .into_iter()
+        .map(|(team, role)| TeamResponse::from_team_with_context(team, Some(role), user.id))
+        .collect();
+
+    Ok(Json(responses))
+}
+
 /// Create a new team
 ///
 /// **POST /v1/teams**
