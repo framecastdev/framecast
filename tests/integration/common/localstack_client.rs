@@ -68,16 +68,11 @@ impl From<RawLocalStackMessage> for LocalStackEmail {
             .body
             .map(|b| {
                 // Prefer HTML part, fall back to text part
-                b.html_part
-                    .or(b.text_part)
-                    .unwrap_or_default()
+                b.html_part.or(b.text_part).unwrap_or_default()
             })
             .unwrap_or_default();
 
-        let to = raw
-            .destination
-            .map(|d| d.to_addresses)
-            .unwrap_or_default();
+        let to = raw.destination.map(|d| d.to_addresses).unwrap_or_default();
 
         Self {
             id: raw.id,
@@ -161,7 +156,11 @@ impl LocalStackEmailClient {
         }
 
         let data: SesMessagesResponse = response.json().await?;
-        let emails = data.messages.into_iter().map(LocalStackEmail::from).collect();
+        let emails = data
+            .messages
+            .into_iter()
+            .map(LocalStackEmail::from)
+            .collect();
         Ok(emails)
     }
 
@@ -423,7 +422,11 @@ mod tests {
 
     #[test]
     fn test_email_is_invitation() {
-        let invitation_email = make_email("test", "You're invited to join Test Team", "Click here to accept");
+        let invitation_email = make_email(
+            "test",
+            "You're invited to join Test Team",
+            "Click here to accept",
+        );
         assert!(invitation_email.is_invitation());
 
         let regular_email = make_email("test2", "Welcome to Framecast", "Welcome message");
