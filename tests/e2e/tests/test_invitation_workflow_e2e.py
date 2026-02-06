@@ -49,7 +49,7 @@ class TestInvitationWorkflowE2E:
 
         # Step 2: Owner invites invitee
         resp = await http_client.post(
-            f"/v1/teams/{team_id}/invite",
+            f"/v1/teams/{team_id}/invitations",
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
@@ -67,7 +67,7 @@ class TestInvitationWorkflowE2E:
         assert email is not None, f"Invitation email not found for {invitee.email}"
 
         # Step 4: Invitee accepts invitation (currently Starter tier)
-        resp = await http_client.put(
+        resp = await http_client.post(
             f"/v1/invitations/{invitation_id}/accept",
             headers=invitee.auth_headers(),
         )
@@ -107,7 +107,7 @@ class TestInvitationWorkflowE2E:
 
         # Owner invites invitee
         resp = await http_client.post(
-            f"/v1/teams/{team_id}/invite",
+            f"/v1/teams/{team_id}/invitations",
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
@@ -141,7 +141,7 @@ class TestInvitationWorkflowE2E:
 
         # First invitation succeeds
         resp = await http_client.post(
-            f"/v1/teams/{team_id}/invite",
+            f"/v1/teams/{team_id}/invitations",
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
@@ -149,7 +149,7 @@ class TestInvitationWorkflowE2E:
 
         # Second invitation to same email should be rejected
         resp = await http_client.post(
-            f"/v1/teams/{team_id}/invite",
+            f"/v1/teams/{team_id}/invitations",
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
@@ -175,7 +175,7 @@ class TestInvitationWorkflowE2E:
 
         # Invitee (not a member) tries to invite someone — should fail
         resp = await http_client.post(
-            f"/v1/teams/{team_id}/invite",
+            f"/v1/teams/{team_id}/invitations",
             json={"email": "random@example.com", "role": "member"},
             headers=invitee.auth_headers(),
         )
