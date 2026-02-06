@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id, team_id, invited_by, email, role as \"role: InvitationRole\",\n                   token, expires_at, accepted_at, declined_at, revoked_at, created_at\n            FROM invitations\n            WHERE team_id = $1\n            ORDER BY created_at DESC\n            ",
+  "query": "\n                    SELECT id, team_id, invited_by, email, role as \"role: InvitationRole\",\n                           token, expires_at, accepted_at, declined_at, revoked_at, created_at\n                    FROM invitations\n                    WHERE team_id = $1\n                      AND accepted_at IS NOT NULL\n                    ORDER BY created_at DESC\n                    ",
   "describe": {
     "columns": [
       {
@@ -89,5 +89,5 @@
       false
     ]
   },
-  "hash": "b172691a2168226efd55d55a7310857df5b29507a808d2a015c9adca0bec6121"
+  "hash": "191091f6d901c6b1615a402bb02389d0aa7704f24617fe5cddabd7a02ef3a00b"
 }

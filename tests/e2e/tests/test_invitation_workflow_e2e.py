@@ -115,7 +115,7 @@ class TestInvitationWorkflowE2E:
         invitation_id = resp.json()["id"]
 
         # Invitee declines
-        resp = await http_client.put(
+        resp = await http_client.post(
             f"/v1/invitations/{invitation_id}/decline",
             headers=invitee.auth_headers(),
         )

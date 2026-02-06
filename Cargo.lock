@@ -1619,8 +1619,10 @@ name = "framecast-domain"
 version = "0.0.1-SNAPSHOT"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "framecast-common",
+ "getrandom 0.2.17",
  "hex",
  "rand 0.8.5",
  "regex",

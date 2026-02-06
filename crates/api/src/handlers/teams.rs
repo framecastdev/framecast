@@ -397,6 +397,20 @@ pub async fn delete_team(
         ));
     }
 
+    // Business rule: Team must have no other members before deletion
+    let member_count = state
+        .repos
+        .memberships
+        .count_for_team(team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
+
+    if member_count > 1 {
+        return Err(Error::Conflict(
+            "Team must have no other members before deletion".to_string(),
+        ));
+    }
+
     // Business rule: Cannot delete if there are active jobs
     let active_jobs_count = state
         .repos

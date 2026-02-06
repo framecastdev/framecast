@@ -3,7 +3,7 @@
 //! Tests the membership/invitation endpoints:
 //! - POST /v1/teams/{team_id}/invitations - Invite member (renamed from /invite)
 //! - POST /v1/invitations/{invitation_id}/accept - Accept invitation
-//! - PUT /v1/invitations/{invitation_id}/decline - Decline invitation
+//! - POST /v1/invitations/{invitation_id}/decline - Decline invitation
 //! - DELETE /v1/teams/{team_id}/members/{user_id} - Remove member
 //! - PATCH /v1/teams/{team_id}/members/{user_id} - Update member role
 //! - GET /v1/teams/{team_id}/members - List team members
@@ -650,7 +650,7 @@ mod test_decline_invitation {
             .unwrap();
 
         let request = Request::builder()
-            .method(Method::PUT)
+            .method(Method::POST)
             .uri(format!("/v1/invitations/{}/decline", invitation_id))
             .header(
                 "authorization",
@@ -692,7 +692,7 @@ mod test_decline_invitation {
         let wrong_user = UserFixture::creator(&scenario.app).await.unwrap();
 
         let request = Request::builder()
-            .method(Method::PUT)
+            .method(Method::POST)
             .uri(format!("/v1/invitations/{}/decline", invitation_id))
             .header("authorization", format!("Bearer {}", wrong_user.jwt_token))
             .body(Body::empty())
@@ -1372,12 +1372,12 @@ mod test_leave_team {
     }
 
     #[tokio::test]
-    async fn test_last_owner_cannot_leave() {
+    async fn test_last_owner_leaving_auto_deletes_team() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let router = create_test_router(&app).await;
 
-        // Try to leave as the only owner (should fail per INV-T2)
+        // Last owner (and sole member) leaving should auto-delete the team
         let request = Request::builder()
             .method(Method::POST)
             .uri(format!("/v1/teams/{}/leave", team.id))
@@ -1389,7 +1389,55 @@ mod test_leave_team {
             .unwrap();
 
         let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
+        // Verify the team was auto-deleted
+        let team_check: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM teams WHERE id = $1")
+            .bind(team.id)
+            .fetch_one(&app.pool)
+            .await
+            .unwrap();
+        assert_eq!(team_check.0, 0);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_last_owner_cannot_leave_with_other_members() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a non-owner member so the owner can't leave (INV-T2)
+        let member = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = create_test_router(&app).await;
+
+        // Last owner tries to leave but other members exist — should fail
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/leave", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::CONFLICT);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -2106,7 +2154,7 @@ mod test_invitation_management {
 
         // Decline the invitation
         let decline_request = Request::builder()
-            .method(Method::PUT)
+            .method(Method::POST)
             .uri(format!("/v1/invitations/{}/decline", invitation_id))
             .header(
                 "authorization",
@@ -2140,6 +2188,278 @@ mod test_invitation_management {
             .find(|i| i["id"] == invitation_id.to_string())
             .unwrap();
         assert_eq!(declined_inv["state"], "declined");
+
+        scenario.cleanup().await.unwrap();
+    }
+}
+
+mod test_delete_team_sole_member {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_delete_team_with_other_members_rejected() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a member to the team
+        let member_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = create_test_router(&app).await;
+
+        // Owner tries to delete team with other members — should fail
+        let request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!("/v1/teams/{}", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let error: Value = serde_json::from_slice(&body).unwrap();
+
+        assert!(error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("no other members"));
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_delete_team_sole_member_succeeds() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // Owner is the only member — should succeed
+        let request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!("/v1/teams/{}", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // Verify team was deleted
+        let team_check: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM teams WHERE id = $1")
+            .bind(team.id)
+            .fetch_one(&app.pool)
+            .await
+            .unwrap();
+        assert_eq!(team_check.0, 0);
+
+        app.cleanup().await.unwrap();
+    }
+}
+
+mod test_team_auto_delete {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_team_auto_deleted_when_last_member_leaves() {
+        let app = TestApp::new().await.unwrap();
+        let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a second owner so the first can leave
+        let second_owner = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(second_owner.user.id)
+        .bind("owner")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = create_test_router(&app).await;
+
+        // Second owner leaves — 1 member remains, team should NOT be deleted
+        let leave_request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/leave", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", second_owner.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.clone().oneshot(leave_request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // Team should still exist
+        let team_check: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM teams WHERE id = $1")
+            .bind(team.id)
+            .fetch_one(&app.pool)
+            .await
+            .unwrap();
+        assert_eq!(team_check.0, 1);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_team_auto_deleted_when_last_member_removed() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a member
+        let member_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = create_test_router(&app).await;
+
+        // Owner removes the member
+        let remove_request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!(
+                "/v1/teams/{}/members/{}",
+                team.id, member_fixture.user.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let remove_response = router.clone().oneshot(remove_request).await.unwrap();
+        assert_eq!(remove_response.status(), StatusCode::NO_CONTENT);
+
+        // Team should still exist (owner is still a member)
+        let team_check: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM teams WHERE id = $1")
+            .bind(team.id)
+            .fetch_one(&app.pool)
+            .await
+            .unwrap();
+        assert_eq!(team_check.0, 1);
+
+        app.cleanup().await.unwrap();
+    }
+}
+
+mod test_invitation_state_filter {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_list_invitations_with_state_filter() {
+        let scenario = InvitationTestScenario::new().await.unwrap();
+        let router = create_test_router(&scenario.app).await;
+
+        // Create a pending invitation
+        let invite_data = json!({
+            "email": "pending@example.com",
+            "role": "member"
+        });
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", scenario.team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // List with state=pending should return the invitation
+        let list_request = Request::builder()
+            .method(Method::GET)
+            .uri(format!(
+                "/v1/teams/{}/invitations?state=pending",
+                scenario.team.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let list_response = router.clone().oneshot(list_request).await.unwrap();
+        assert_eq!(list_response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitations: Vec<Value> = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(invitations.len(), 1);
+        assert_eq!(invitations[0]["state"], "pending");
+
+        // List with state=accepted should return empty
+        let list_accepted = Request::builder()
+            .method(Method::GET)
+            .uri(format!(
+                "/v1/teams/{}/invitations?state=accepted",
+                scenario.team.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let accepted_response = router.oneshot(list_accepted).await.unwrap();
+        assert_eq!(accepted_response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(accepted_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let accepted_invitations: Vec<Value> = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(accepted_invitations.len(), 0);
 
         scenario.cleanup().await.unwrap();
     }

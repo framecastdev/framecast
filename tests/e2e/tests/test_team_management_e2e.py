@@ -133,13 +133,13 @@ class TestTeamManagementE2E:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_last_owner_cannot_leave(
+    async def test_last_owner_leaving_auto_deletes_team(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """INV-T2: Last owner cannot leave team — must always have >= 1 owner."""
+        """Last owner (sole member) leaving auto-deletes the team."""
         owner = seed_users.owner
 
         # Step 1: Owner creates team
@@ -150,22 +150,19 @@ class TestTeamManagementE2E:
         assert resp.status_code == 200
         team_id = resp.json()["id"]
 
-        # Step 2: Owner tries to leave — should be rejected (409 Conflict)
+        # Step 2: Owner leaves — team should be auto-deleted (204)
         resp = await http_client.post(
             f"/v1/teams/{team_id}/leave", headers=owner.auth_headers()
         )
-        assert resp.status_code == 409, (
-            f"Expected 409 Conflict for last owner leaving, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 204, (
+            f"Expected 204 for last owner leaving (auto-delete), got {resp.status_code} {resp.text}"
         )
 
-        # Step 3: Owner still listed as member
+        # Step 3: Team should no longer exist
         resp = await http_client.get(
-            f"/v1/teams/{team_id}/members", headers=owner.auth_headers()
+            f"/v1/teams/{team_id}", headers=owner.auth_headers()
         )
-        assert resp.status_code == 200
-        members = resp.json()
-        assert len(members) == 1
-        assert members[0]["role"] == "owner"
+        assert resp.status_code == 404
 
     async def test_list_teams_shows_multiple_teams(
         self,
