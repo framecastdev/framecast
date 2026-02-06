@@ -10,12 +10,17 @@ Supports two modes:
 """
 
 import asyncio
+import os
 import tempfile
+import time
+import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
+import asyncpg
 import httpx
+import jwt
 import pytest
 import respx
 from faker import Faker
@@ -83,63 +88,44 @@ class E2EConfig(BaseSettings):
 class UserPersona(BaseModel):
     """Represents a test user with specific characteristics."""
 
-    id: str
+    user_id: str  # UUID string
     email: str
     name: str
-    tier: str  # "visitor", "starter", "creator"
+    tier: str  # "starter", "creator"
     credits: int = 0
     team_memberships: list[str] = []
     owned_teams: list[str] = []
     api_keys: list[str] = []
 
     def to_auth_token(self) -> str:
-        """Generate a mock JWT token for this user."""
-        import base64
-        import json
-
+        """Generate a proper HS256 JWT token for this user."""
         payload = {
-            "sub": self.id,
+            "sub": self.user_id,
             "email": self.email,
             "aud": "authenticated",
             "role": "authenticated",
-            "framecast_tier": self.tier,
-            "exp": 9999999999,  # Far future expiry
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 3600,
         }
+        secret = os.environ.get("JWT_SECRET", "test-e2e-secret-key")
+        return jwt.encode(payload, secret, algorithm="HS256")
 
-        # Simple mock JWT (not cryptographically valid, for testing only)
-        header = base64.b64encode(
-            json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
-        ).decode()
-        payload_encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-        signature = "mock-signature"
-
-        return f"{header}.{payload_encoded}.{signature}"
+    def auth_headers(self) -> dict[str, str]:
+        """Return authorization headers for HTTP requests."""
+        return {"Authorization": f"Bearer {self.to_auth_token()}"}
 
 
 # Standard user personas for testing
-@pytest.fixture
-def visitor_user() -> UserPersona:
-    """A visitor user (not authenticated)."""
-    fake = Faker()
-    return UserPersona(
-        id="usr_visitor_test",
-        email=fake.email(),
-        name=fake.name(),
-        tier="visitor",
-    )
-
-
 @pytest.fixture
 def starter_user() -> UserPersona:
     """A starter tier user with some credits."""
     fake = Faker()
     return UserPersona(
-        id="usr_starter_test",
+        user_id=str(uuid.uuid4()),
         email=fake.email(),
         name=fake.name(),
         tier="starter",
-        credits=1000,  # 10 dollars worth
-        api_keys=["ak_starter_test_key"],
+        credits=1000,
     )
 
 
@@ -148,14 +134,11 @@ def creator_user() -> UserPersona:
     """A creator tier user with team memberships."""
     fake = Faker()
     return UserPersona(
-        id="usr_creator_test",
+        user_id=str(uuid.uuid4()),
         email=fake.email(),
         name=fake.name(),
         tier="creator",
-        credits=5000,  # 50 dollars worth
-        team_memberships=["tm_test_team_1"],
-        owned_teams=["tm_test_team_owned"],
-        api_keys=["ak_creator_test_key"],
+        credits=5000,
     )
 
 
@@ -164,13 +147,11 @@ def team_owner() -> UserPersona:
     """A creator user who owns multiple teams."""
     fake = Faker()
     return UserPersona(
-        id="usr_team_owner_test",
+        user_id=str(uuid.uuid4()),
         email=fake.email(),
         name=fake.name(),
         tier="creator",
-        credits=10000,  # 100 dollars worth
-        owned_teams=["tm_team_1", "tm_team_2"],
-        api_keys=["ak_team_owner_key"],
+        credits=10000,
     )
 
 
@@ -179,13 +160,11 @@ def team_member() -> UserPersona:
     """A creator user who is a member of teams but doesn't own any."""
     fake = Faker()
     return UserPersona(
-        id="usr_team_member_test",
+        user_id=str(uuid.uuid4()),
         email=fake.email(),
         name=fake.name(),
         tier="creator",
-        credits=2000,  # 20 dollars worth
-        team_memberships=["tm_team_1", "tm_team_2"],
-        api_keys=["ak_team_member_key"],
+        credits=2000,
     )
 
 
@@ -202,6 +181,109 @@ def event_loop():
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+
+# Database seeding for E2E tests
+class SeededUsers:
+    """Container for seeded test users."""
+
+    def __init__(self, owner: UserPersona, invitee: UserPersona):
+        self.owner = owner
+        self.invitee = invitee
+
+
+@pytest.fixture
+async def seed_users(test_config: E2EConfig):
+    """Seed test users directly into the database for E2E tests."""
+    database_url = os.environ.get("DATABASE_URL", test_config.database_url)
+    conn = await asyncpg.connect(database_url)
+    try:
+        owner_id = uuid.uuid4()
+        owner_email = "owner-e2e@test.com"
+        invitee_id = uuid.uuid4()
+        invitee_email = "invitee-e2e@test.com"
+
+        now = asyncio.get_event_loop().time()
+        from datetime import datetime, timezone
+
+        now_dt = datetime.now(timezone.utc)
+
+        # Upsert owner (Creator tier)
+        await conn.execute(
+            """
+            INSERT INTO users (id, email, name, tier, credits,
+                               ephemeral_storage_bytes, upgraded_at, created_at, updated_at)
+            VALUES ($1, $2, $3, 'creator', 5000, 0, $4, $4, $4)
+            ON CONFLICT (email) DO UPDATE SET
+                id = $1, tier = 'creator', credits = 5000, upgraded_at = $4, updated_at = $4
+            """,
+            owner_id,
+            owner_email,
+            "Test Owner",
+            now_dt,
+        )
+        # Re-read the actual ID in case it was an existing row
+        row = await conn.fetchrow(
+            "SELECT id FROM users WHERE email = $1", owner_email
+        )
+        owner_id = row["id"]
+
+        # Upsert invitee (Starter tier — will be auto-upgraded on accept)
+        await conn.execute(
+            """
+            INSERT INTO users (id, email, name, tier, credits,
+                               ephemeral_storage_bytes, created_at, updated_at)
+            VALUES ($1, $2, $3, 'starter', 1000, 0, $4, $4)
+            ON CONFLICT (email) DO UPDATE SET
+                id = $1, tier = 'starter', credits = 1000, upgraded_at = NULL, updated_at = $4
+            """,
+            invitee_id,
+            invitee_email,
+            "Test Invitee",
+            now_dt,
+        )
+        row = await conn.fetchrow(
+            "SELECT id FROM users WHERE email = $1", invitee_email
+        )
+        invitee_id = row["id"]
+
+        owner = UserPersona(
+            user_id=str(owner_id),
+            email=owner_email,
+            name="Test Owner",
+            tier="creator",
+            credits=5000,
+        )
+        invitee = UserPersona(
+            user_id=str(invitee_id),
+            email=invitee_email,
+            name="Test Invitee",
+            tier="starter",
+            credits=1000,
+        )
+
+        yield SeededUsers(owner=owner, invitee=invitee)
+
+        # Cleanup: remove memberships, invitations, teams created during test
+        await conn.execute(
+            "DELETE FROM invitations WHERE email = $1", invitee_email
+        )
+        await conn.execute(
+            "DELETE FROM memberships WHERE user_id = $1 OR user_id = $2",
+            owner_id,
+            invitee_id,
+        )
+        await conn.execute(
+            "DELETE FROM teams WHERE id IN (SELECT team_id FROM memberships WHERE user_id = $1)",
+            owner_id,
+        )
+        # Clean up any remaining teams created by owner
+        # (memberships already deleted, so this catches orphans)
+        await conn.execute(
+            "DELETE FROM users WHERE id = $1 OR id = $2", owner_id, invitee_id
+        )
+    finally:
+        await conn.close()
 
 
 # HTTP client for API testing
@@ -483,12 +565,13 @@ def assert_credits_non_negative(credits: int) -> None:
 __all__ = [
     "E2EConfig",
     "UserPersona",
+    "SeededUsers",
     "test_config",
     "http_client",
     "authenticated_client",
     "localstack_email_client",
     "email_cleanup",
-    "visitor_user",
+    "seed_users",
     "starter_user",
     "creator_user",
     "team_owner",

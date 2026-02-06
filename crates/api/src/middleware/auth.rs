@@ -11,9 +11,11 @@ use axum::{
 };
 use framecast_db::repositories::Repositories;
 use framecast_domain::{auth::AuthContext, entities::*};
+use framecast_email::EmailService;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// Authentication error
@@ -119,6 +121,7 @@ pub struct AuthConfig {
 pub struct AppState {
     pub repos: Repositories,
     pub auth_config: AuthConfig,
+    pub email: Arc<dyn EmailService>,
 }
 
 /// Authenticated user extractor

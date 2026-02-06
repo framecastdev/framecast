@@ -382,6 +382,8 @@ ci-setup-ses:
         "developer@example.com"
         "admin@example.com"
         "user@test.com"
+        "owner-e2e@test.com"
+        "invitee-e2e@test.com"
     )
     for email in "${EMAIL_ADDRESSES[@]}"; do
         echo "✉️ Verifying email identity: $email"
@@ -397,6 +399,33 @@ ci-setup-ses:
 ci-test-integration-ses:
     @echo "Running SES integration tests (CI mode)..."
     cargo test -p framecast-integration-tests --test email_ses_e2e_test -- --nocapture
+
+# Start API server in background for E2E tests (CI mode)
+ci-start-api:
+    #!/usr/bin/env bash
+    set -e
+    echo "Building API server..."
+    cargo build --bin local
+    echo "Starting API server in background..."
+    cargo run --bin local &
+    echo "Waiting for API server to be ready..."
+    for i in $(seq 1 30); do
+        if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+            echo "✅ API server is ready"
+            exit 0
+        fi
+        echo "⏳ Waiting for API server... (attempt $i/30)"
+        sleep 2
+    done
+    echo "❌ API server did not start within 60 seconds"
+    exit 1
+
+# Run Python E2E tests in CI mode
+ci-test-e2e:
+    #!/usr/bin/env bash
+    set -e
+    echo "Running Python E2E tests (CI mode)..."
+    cd tests/e2e && uv run pytest tests/ -m "real_services" -v --tb=short
 
 # ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)

@@ -117,8 +117,8 @@ jobs:
           ls -la target/lambda/lambda/bootstrap.zip
           echo "Lambda artifact size: $(du -h target/lambda/lambda/bootstrap.zip | cut -f1)"
 
-  localstack-test:
-    name: LocalStack SES Integration
+  e2e-tests:
+    name: E2E Tests
     runs-on: self-hosted
     needs: [ci]
     container:
@@ -158,6 +158,10 @@ jobs:
       AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
       AWS_DEFAULT_REGION: us-east-1
       AWS_ENDPOINT_URL: http://localstack:4566
+      JWT_SECRET: test-e2e-secret-key
+      EMAIL_PROVIDER: ses
+      EMAIL_FROM: invitations@framecast.app
+      EMAIL_ENABLED: "true"
 
     steps:
       - name: Checkout
@@ -179,3 +183,13 @@ jobs:
 
       - name: Run SES integration tests
         run: just ci-test-integration-ses
+
+      - name: Build and start API server
+        shell: bash
+        run: just ci-start-api
+
+      - name: Install Python E2E dependencies
+        run: just install-python-deps
+
+      - name: Run Python E2E tests
+        run: just ci-test-e2e

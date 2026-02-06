@@ -3,12 +3,16 @@
 //! This module implements invitation and membership management operations
 //! with proper authorization and business rule enforcement.
 
+use anyhow::Context;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     Json,
 };
 use framecast_common::{Error, Result};
+use framecast_db::repositories::{
+    create_membership_tx, mark_invitation_accepted_tx, upgrade_user_tier_tx,
+};
 use framecast_domain::entities::{
     Invitation, InvitationRole, InvitationState, Membership, MembershipRole, UserTier,
 };
@@ -199,6 +203,8 @@ pub async fn invite_member(
 
     // Convert MembershipRole to InvitationRole (validates that Owner cannot be invited)
     let invitation_role = InvitationRole::try_from(request.role)?;
+    let role_display = invitation_role.to_string();
+    let recipient_email = request.email.clone();
 
     // Create invitation
     let invitation = Invitation::new(team_id, user.id, request.email, invitation_role)?;
@@ -210,30 +216,43 @@ pub async fn invite_member(
         .await
         .map_err(|e| Error::Internal(format!("Failed to create invitation: {}", e)))?;
 
-    // Future: Email sending will be handled by webhook delivery system
-    // The invitation is created successfully and will be sent via external service
+    // Send invitation email
+    let team = state
+        .repos
+        .teams
+        .get_by_id(team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get team: {}", e)))?
+        .ok_or_else(|| Error::Internal("Team not found after creating invitation".to_string()))?;
+    let inviter_name = user.name.clone().unwrap_or_else(|| user.email.clone());
+    state
+        .email
+        .send_team_invitation(
+            &team.name,
+            team_id,
+            created_invitation.id,
+            &recipient_email,
+            &inviter_name,
+            &role_display,
+        )
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to send invitation email: {}", e)))?;
 
     Ok(Json(InvitationResponse::from(created_invitation)))
 }
 
 /// Accept a team invitation
 ///
-/// **PUT /v1/teams/:team_id/invitations/:invitation_id/accept**
+/// **PUT /v1/invitations/:invitation_id/accept**
 ///
 /// Accepts an invitation to join a team. The user must be the recipient.
+/// Starter users are automatically upgraded to Creator tier.
 pub async fn accept_invitation(
     auth_context: AuthUser,
     State(state): State<AppState>,
     Path(invitation_id): Path<Uuid>,
 ) -> Result<Json<MembershipResponse>> {
     let user = &auth_context.0.user;
-
-    // User must be creator tier to accept invitations (INV-M4)
-    if user.tier != UserTier::Creator {
-        return Err(Error::Authorization(
-            "Only creator tier users can accept team invitations".to_string(),
-        ));
-    }
 
     // Get invitation
     let invitation = state
@@ -285,20 +304,38 @@ pub async fn accept_invitation(
     // Create membership (convert InvitationRole to MembershipRole)
     let membership = Membership::new(team_id, user.id, invitation.role.to_membership_role());
 
-    let created_membership = state
+    // Begin transaction — all mutations happen atomically (Zero2Prod Ch.7 pattern)
+    let mut transaction = state
         .repos
-        .memberships
-        .create(&membership)
+        .begin()
         .await
-        .map_err(|e| Error::Internal(format!("Failed to create membership: {}", e)))?;
+        .context("Failed to acquire a Postgres connection from the pool")
+        .map_err(|e| Error::Internal(e.to_string()))?;
 
-    // Mark invitation as accepted
-    state
-        .repos
-        .invitations
-        .mark_accepted(invitation_id)
+    // Auto-upgrade Starter → Creator if needed
+    if user.tier == UserTier::Starter {
+        upgrade_user_tier_tx(&mut transaction, user.id, UserTier::Creator)
+            .await
+            .context("Failed to upgrade user tier to Creator")
+            .map_err(|e| Error::Internal(e.to_string()))?;
+    }
+
+    let created_membership = create_membership_tx(&mut transaction, &membership)
         .await
-        .map_err(|e| Error::Internal(format!("Failed to mark invitation as accepted: {}", e)))?;
+        .context("Failed to create team membership")
+        .map_err(|e| Error::Internal(e.to_string()))?;
+
+    mark_invitation_accepted_tx(&mut transaction, invitation_id)
+        .await
+        .context("Failed to mark invitation as accepted")
+        .map_err(|e| Error::Internal(e.to_string()))?;
+
+    // Explicit commit — Drop without commit = rollback (RAII)
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit invitation acceptance transaction")
+        .map_err(|e| Error::Internal(e.to_string()))?;
 
     Ok(Json(MembershipResponse::from(created_membership)))
 }

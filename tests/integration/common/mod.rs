@@ -9,7 +9,7 @@
 //! - Common assertions
 
 use std::env;
-use std::sync::Once;
+use std::sync::{Arc, Once};
 
 use anyhow::Result;
 use axum::http::{header::AUTHORIZATION, HeaderMap, HeaderValue};
@@ -17,6 +17,7 @@ use chrono::Utc;
 use framecast_api::middleware::{AppState, AuthConfig};
 use framecast_db::repositories::Repositories;
 use framecast_domain::entities::*;
+use framecast_email::{EmailConfig, EmailServiceFactory};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -80,7 +81,14 @@ impl TestApp {
             audience: Some("authenticated".to_string()),
         };
 
-        let state = AppState { repos, auth_config };
+        let email_config = EmailConfig::from_env()?;
+        let email_service = EmailServiceFactory::create(email_config).await?;
+
+        let state = AppState {
+            repos,
+            auth_config,
+            email: Arc::from(email_service),
+        };
 
         Ok(TestApp {
             state,
