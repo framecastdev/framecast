@@ -184,10 +184,10 @@ jobs:
           shared-key: "ci"
 
       - name: Setup LocalStack S3 buckets
-        run: just ci-setup-localstack endpoint="http://localstack:4566"
+        run: just ci-setup-localstack
 
       - name: Setup LocalStack SES identities
-        run: just ci-setup-ses endpoint="http://localstack:4566"
+        run: just ci-setup-ses
 
       - name: Run database migrations
         run: just ci-migrate

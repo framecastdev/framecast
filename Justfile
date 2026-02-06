@@ -345,20 +345,20 @@ ci-migrate:
     @echo "Running migrations (CI mode)..."
     sqlx migrate run
 
-# Setup LocalStack S3 buckets for CI
-ci-setup-localstack endpoint="http://localstack:4566":
+# Setup LocalStack S3 buckets for CI (uses AWS_ENDPOINT_URL env var)
+ci-setup-localstack:
     @echo "Setting up LocalStack S3 buckets (CI mode)..."
-    aws --endpoint-url={{endpoint}} s3 mb s3://framecast-outputs-dev || true
-    aws --endpoint-url={{endpoint}} s3 mb s3://framecast-assets-dev || true
+    aws s3 mb s3://framecast-outputs-dev || true
+    aws s3 mb s3://framecast-assets-dev || true
 
-# Setup LocalStack SES identities for CI
-ci-setup-ses endpoint="http://localstack:4566":
+# Setup LocalStack SES identities for CI (uses AWS_ENDPOINT_URL env var)
+ci-setup-ses:
     #!/usr/bin/env bash
     set -e
     echo "Setting up LocalStack SES identities (CI mode)..."
     echo "Waiting for LocalStack to be ready..."
     for i in $(seq 1 30); do
-        if curl -sf "{{endpoint}}/_localstack/health" > /dev/null 2>&1; then
+        if aws sts get-caller-identity > /dev/null 2>&1; then
             echo "✅ LocalStack is ready"
             break
         fi
@@ -383,11 +383,10 @@ ci-setup-ses endpoint="http://localstack:4566":
         echo "✉️ Verifying email identity: $email"
         aws ses verify-email-identity \
             --email-address "$email" \
-            --endpoint-url "{{endpoint}}" \
             --region us-east-1 || echo "Failed to verify $email"
     done
     echo "🔍 Listing verified identities..."
-    aws ses list-identities --endpoint-url "{{endpoint}}" --region us-east-1
+    aws ses list-identities --region us-east-1
     echo "✅ SES setup completed!"
 
 # Run SES integration tests in CI mode
