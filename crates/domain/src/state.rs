@@ -262,6 +262,7 @@ impl ProjectStateMachine {
 pub enum InvitationState {
     Pending,
     Accepted,
+    Declined,
     Expired,
     Revoked,
 }
@@ -269,14 +270,18 @@ pub enum InvitationState {
 impl InvitationState {
     /// Check if this is a terminal state
     pub fn is_terminal(&self) -> bool {
-        matches!(self, Self::Accepted | Self::Expired | Self::Revoked)
+        matches!(
+            self,
+            Self::Accepted | Self::Declined | Self::Expired | Self::Revoked
+        )
     }
 
     /// Get all valid next states from current state
     pub fn valid_transitions(&self) -> &'static [InvitationState] {
         match self {
-            Self::Pending => &[Self::Accepted, Self::Expired, Self::Revoked],
+            Self::Pending => &[Self::Accepted, Self::Declined, Self::Expired, Self::Revoked],
             Self::Accepted => &[],
+            Self::Declined => &[],
             Self::Expired => &[],
             Self::Revoked => &[],
         }
@@ -288,6 +293,7 @@ impl std::fmt::Display for InvitationState {
         match self {
             Self::Pending => write!(f, "pending"),
             Self::Accepted => write!(f, "accepted"),
+            Self::Declined => write!(f, "declined"),
             Self::Expired => write!(f, "expired"),
             Self::Revoked => write!(f, "revoked"),
         }
@@ -299,6 +305,8 @@ impl std::fmt::Display for InvitationState {
 pub enum InvitationEvent {
     /// User accepts the invitation
     Accept,
+    /// User declines the invitation
+    Decline,
     /// Invitation expires (automatic when expires_at is reached)
     Expire,
     /// Admin revokes the invitation
@@ -309,6 +317,7 @@ impl std::fmt::Display for InvitationEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Accept => write!(f, "accept"),
+            Self::Decline => write!(f, "decline"),
             Self::Expire => write!(f, "expire"),
             Self::Revoke => write!(f, "revoke"),
         }
@@ -350,6 +359,7 @@ impl InvitationStateMachine {
                 }
                 InvitationState::Accepted
             }
+            (InvitationState::Pending, InvitationEvent::Decline) => InvitationState::Declined,
             (InvitationState::Pending, InvitationEvent::Expire) => InvitationState::Expired,
             (InvitationState::Pending, InvitationEvent::Revoke) => InvitationState::Revoked,
 

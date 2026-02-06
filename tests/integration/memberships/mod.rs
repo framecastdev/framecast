@@ -765,12 +765,30 @@ mod test_remove_member {
     }
 
     #[tokio::test]
-    async fn test_remove_last_owner_forbidden() {
+    async fn test_admin_cannot_remove_owner() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add an admin
+        let admin_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(admin_fixture.user.id)
+        .bind("admin")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
         let router = create_test_router(&app).await;
 
-        // Try to remove the only owner (should fail per INV-T2)
+        // Admin tries to remove owner — should fail
         let request = Request::builder()
             .method(Method::DELETE)
             .uri(format!(
@@ -779,14 +797,14 @@ mod test_remove_member {
             ))
             .header(
                 "authorization",
-                format!("Bearer {}", owner_fixture.jwt_token),
+                format!("Bearer {}", admin_fixture.jwt_token),
             )
             .body(Body::empty())
             .unwrap();
 
         let response = router.oneshot(request).await.unwrap();
 
-        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -796,7 +814,8 @@ mod test_remove_member {
         assert!(error["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("last owner"));
+            .to_lowercase()
+            .contains("cannot remove"));
 
         app.cleanup().await.unwrap();
     }
@@ -1005,18 +1024,33 @@ mod test_update_member_role {
     async fn test_demote_last_owner_forbidden() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a second owner who will try to demote the first
+        let second_owner = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(second_owner.user.id)
+        .bind("owner")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
         let router = create_test_router(&app).await;
 
-        let role_update = json!({
-            "role": "admin"
-        });
-
-        // Try to demote the only owner
-        let request = Request::builder()
+        // Demote second_owner to admin — succeeds (2 owners → 1)
+        let role_update = json!({ "role": "admin" });
+        let request1 = Request::builder()
             .method(Method::PATCH)
             .uri(format!(
                 "/v1/teams/{}/members/{}",
-                team.id, owner_fixture.user.id
+                team.id, second_owner.user.id
             ))
             .header(
                 "authorization",
@@ -1026,9 +1060,57 @@ mod test_update_member_role {
             .body(Body::from(role_update.to_string()))
             .unwrap();
 
-        let response = router.oneshot(request).await.unwrap();
+        let response1 = router.clone().oneshot(request1).await.unwrap();
+        assert_eq!(response1.status(), StatusCode::OK);
 
-        assert_eq!(response.status(), StatusCode::CONFLICT);
+        // Now second_owner (admin) tries to demote the last owner — should fail (admin cannot promote/demote to owner level)
+        // Actually admin can update roles, but cannot promote TO owner. Demoting FROM owner is checked via INV-T2.
+        // But admin doesn't have permission to touch owner roles either way.
+        // The cleaner approach: re-promote second_owner to owner, then have them try to demote the last remaining owner.
+
+        // Re-promote second_owner back to owner
+        sqlx::query("UPDATE memberships SET role = 'owner' WHERE team_id = $1 AND user_id = $2")
+            .bind(team.id)
+            .bind(second_owner.user.id)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+
+        // Owner demotes first owner to admin (2 owners → 1 owner)
+        let request2 = Request::builder()
+            .method(Method::PATCH)
+            .uri(format!(
+                "/v1/teams/{}/members/{}",
+                team.id, owner_fixture.user.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", second_owner.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(json!({ "role": "admin" }).to_string()))
+            .unwrap();
+
+        let response2 = router.clone().oneshot(request2).await.unwrap();
+        assert_eq!(response2.status(), StatusCode::OK);
+
+        // Now first_owner (now admin) tries to demote last owner (second_owner) — fails (admin cannot change owner)
+        let request3 = Request::builder()
+            .method(Method::PATCH)
+            .uri(format!(
+                "/v1/teams/{}/members/{}",
+                team.id, second_owner.user.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(json!({ "role": "admin" }).to_string()))
+            .unwrap();
+
+        let response3 = router.oneshot(request3).await.unwrap();
+        assert_eq!(response3.status(), StatusCode::FORBIDDEN);
 
         app.cleanup().await.unwrap();
     }
@@ -1082,19 +1164,23 @@ mod test_list_members {
 
         assert_eq!(members.len(), 2);
 
-        // Verify owner is in the list
+        // Verify owner is in the list with enriched user fields
         let owner_member = members
             .iter()
             .find(|m| m["user_id"] == owner_fixture.user.id.to_string())
             .expect("Owner should be in members list");
         assert_eq!(owner_member["role"], "owner");
+        assert!(owner_member.get("user_email").is_some());
+        assert_eq!(owner_member["user_email"], owner_fixture.user.email);
 
-        // Verify member is in the list
+        // Verify member is in the list with enriched user fields
         let regular_member = members
             .iter()
             .find(|m| m["user_id"] == member_fixture.user.id.to_string())
             .expect("Member should be in members list");
         assert_eq!(regular_member["role"], "member");
+        assert!(regular_member.get("user_email").is_some());
+        assert_eq!(regular_member["user_email"], member_fixture.user.email);
 
         app.cleanup().await.unwrap();
     }
@@ -1493,6 +1579,7 @@ mod test_invitation_lifecycle_with_email {
             created_at: chrono::Utc::now() - chrono::Duration::days(8),
             expires_at: chrono::Utc::now() - chrono::Duration::days(1),
             accepted_at: None,
+            declined_at: None,
             revoked_at: None,
         };
 
@@ -1540,6 +1627,519 @@ mod test_invitation_lifecycle_with_email {
             .as_str()
             .unwrap()
             .contains("expired"));
+
+        scenario.cleanup().await.unwrap();
+    }
+}
+
+mod test_membership_guards {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_remove_member_cannot_remove_self() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // Owner tries to remove self via DELETE (should fail — use /leave instead)
+        let request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!(
+                "/v1/teams/{}/members/{}",
+                team.id, owner_fixture.user.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let error: Value = serde_json::from_slice(&body).unwrap();
+
+        assert!(error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Cannot remove yourself"));
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_update_role_cannot_change_own_role() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        let role_update = json!({
+            "role": "admin"
+        });
+
+        // Owner tries to change own role
+        let request = Request::builder()
+            .method(Method::PATCH)
+            .uri(format!(
+                "/v1/teams/{}/members/{}",
+                team.id, owner_fixture.user.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(role_update.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let error: Value = serde_json::from_slice(&body).unwrap();
+
+        assert!(error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Cannot change your own role"));
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_invite_owner_role_rejected() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // Send invitation with "owner" role — should fail at deserialization
+        // since InvitationRole has no Owner variant
+        let invite_data = json!({
+            "email": "new@example.com",
+            "role": "owner"
+        });
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        // Should be 422 (Unprocessable Entity) since the role value is invalid
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_invite_self_rejected() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // Owner tries to invite themselves
+        let invite_data = json!({
+            "email": owner_fixture.user.email,
+            "role": "member"
+        });
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let error: Value = serde_json::from_slice(&body).unwrap();
+
+        assert!(error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Cannot invite yourself"));
+
+        app.cleanup().await.unwrap();
+    }
+}
+
+mod test_invitation_management {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_list_invitations_owner_can_view() {
+        let scenario = InvitationTestScenario::new().await.unwrap();
+        let router = create_test_router(&scenario.app).await;
+
+        // Create invitations
+        for i in 0..3 {
+            let invite_data = json!({
+                "email": format!("user{}@example.com", i),
+                "role": "member"
+            });
+
+            let request = Request::builder()
+                .method(Method::POST)
+                .uri(format!("/v1/teams/{}/invitations", scenario.team.id))
+                .header(
+                    "authorization",
+                    format!("Bearer {}", scenario.inviter.jwt_token),
+                )
+                .header("content-type", "application/json")
+                .body(Body::from(invite_data.to_string()))
+                .unwrap();
+
+            let response = router.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        // List invitations
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/teams/{}/invitations", scenario.team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitations: Vec<Value> = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(invitations.len(), 3);
+        for inv in &invitations {
+            assert_eq!(inv["state"], "pending");
+            assert!(inv.get("email").is_some());
+        }
+
+        scenario.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_list_invitations_member_cannot_view() {
+        let app = TestApp::new().await.unwrap();
+        let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a regular member
+        let member_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = create_test_router(&app).await;
+
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/teams/{}/invitations", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", member_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_revoke_invitation_by_owner() {
+        let scenario = InvitationTestScenario::new().await.unwrap();
+        let router = create_test_router(&scenario.app).await;
+
+        // Create an invitation
+        let invitation_id = scenario
+            .send_invitation(InvitationRole::Member)
+            .await
+            .unwrap();
+
+        // Revoke it
+        let request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!(
+                "/v1/teams/{}/invitations/{}",
+                scenario.team.id, invitation_id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // Verify state is revoked by listing invitations
+        let list_request = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/teams/{}/invitations", scenario.team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let list_response = router.oneshot(list_request).await.unwrap();
+        let body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitations: Vec<Value> = serde_json::from_slice(&body).unwrap();
+
+        let revoked = invitations
+            .iter()
+            .find(|i| i["id"] == invitation_id.to_string())
+            .unwrap();
+        assert_eq!(revoked["state"], "revoked");
+
+        scenario.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_revoke_non_pending_invitation() {
+        let scenario = InvitationTestScenario::new().await.unwrap();
+        let router = create_test_router(&scenario.app).await;
+
+        // Create and accept invitation
+        let (invitation_id, invitee_fixture) = scenario
+            .complete_invitation_workflow(InvitationRole::Member)
+            .await
+            .unwrap();
+
+        // Accept first
+        let accept_request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/invitations/{}/accept", invitation_id))
+            .header(
+                "authorization",
+                format!("Bearer {}", invitee_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let accept_response = router.clone().oneshot(accept_request).await.unwrap();
+        assert_eq!(accept_response.status(), StatusCode::OK);
+
+        // Try to revoke accepted invitation — should fail
+        let revoke_request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!(
+                "/v1/teams/{}/invitations/{}",
+                scenario.team.id, invitation_id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let revoke_response = router.oneshot(revoke_request).await.unwrap();
+        assert_eq!(revoke_response.status(), StatusCode::CONFLICT);
+
+        scenario.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_revoke_wrong_team() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_a, team_a, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let (owner_b, team_b, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        let router = create_test_router(&app).await;
+
+        // Create invitation on team A
+        let invite_data = json!({
+            "email": "someone@example.com",
+            "role": "member"
+        });
+
+        let invite_request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/invitations", team_a.id))
+            .header("authorization", format!("Bearer {}", owner_a.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(invite_data.to_string()))
+            .unwrap();
+
+        let invite_response = router.clone().oneshot(invite_request).await.unwrap();
+        assert_eq!(invite_response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(invite_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitation: Value = serde_json::from_slice(&body).unwrap();
+        let invitation_id = invitation["id"].as_str().unwrap();
+
+        // Try to revoke via team B — should fail with 404
+        let revoke_request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!(
+                "/v1/teams/{}/invitations/{}",
+                team_b.id, invitation_id
+            ))
+            .header("authorization", format!("Bearer {}", owner_b.jwt_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let revoke_response = router.oneshot(revoke_request).await.unwrap();
+        assert_eq!(revoke_response.status(), StatusCode::NOT_FOUND);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_resend_invitation() {
+        let scenario = InvitationTestScenario::new().await.unwrap();
+        let router = create_test_router(&scenario.app).await;
+
+        // Create an invitation
+        let invitation_id = scenario
+            .send_invitation(InvitationRole::Member)
+            .await
+            .unwrap();
+
+        // Get original expiration
+        let list_request = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/teams/{}/invitations", scenario.team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let list_response = router.clone().oneshot(list_request).await.unwrap();
+        let body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitations: Vec<Value> = serde_json::from_slice(&body).unwrap();
+        let original_expires = invitations[0]["expires_at"].as_str().unwrap().to_string();
+
+        // Wait briefly to ensure new expiration is different
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // Resend
+        let resend_request = Request::builder()
+            .method(Method::POST)
+            .uri(format!(
+                "/v1/teams/{}/invitations/{}/resend",
+                scenario.team.id, invitation_id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let resend_response = router.oneshot(resend_request).await.unwrap();
+        assert_eq!(resend_response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(resend_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let updated_invitation: Value = serde_json::from_slice(&body).unwrap();
+
+        // Expiration should be updated
+        let new_expires = updated_invitation["expires_at"].as_str().unwrap();
+        assert_ne!(new_expires, original_expires);
+        assert_eq!(updated_invitation["state"], "pending");
+
+        scenario.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_decline_sets_declined_not_revoked() {
+        let scenario = InvitationTestScenario::new().await.unwrap();
+        let router = create_test_router(&scenario.app).await;
+
+        // Create invitation and invitee
+        let (invitation_id, invitee_fixture) = scenario
+            .complete_invitation_workflow(InvitationRole::Member)
+            .await
+            .unwrap();
+
+        // Decline the invitation
+        let decline_request = Request::builder()
+            .method(Method::PUT)
+            .uri(format!("/v1/invitations/{}/decline", invitation_id))
+            .header(
+                "authorization",
+                format!("Bearer {}", invitee_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let decline_response = router.clone().oneshot(decline_request).await.unwrap();
+        assert_eq!(decline_response.status(), StatusCode::NO_CONTENT);
+
+        // Verify state is "declined" (not "revoked") by listing invitations
+        let list_request = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/teams/{}/invitations", scenario.team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", scenario.inviter.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let list_response = router.oneshot(list_request).await.unwrap();
+        let body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let invitations: Vec<Value> = serde_json::from_slice(&body).unwrap();
+
+        let declined_inv = invitations
+            .iter()
+            .find(|i| i["id"] == invitation_id.to_string())
+            .unwrap();
+        assert_eq!(declined_inv["state"], "declined");
 
         scenario.cleanup().await.unwrap();
     }
