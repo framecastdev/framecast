@@ -361,8 +361,9 @@ mod tests {
         };
 
         // Create a token matching what PyJWT generates
+        let test_user_id = Uuid::new_v4().to_string();
         let claims = SupabaseClaims {
-            sub: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            sub: test_user_id.clone(),
             email: Some("test@test.com".to_string()),
             aud: "authenticated".to_string(),
             role: "authenticated".to_string(),

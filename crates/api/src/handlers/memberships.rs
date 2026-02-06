@@ -72,6 +72,7 @@ impl From<Invitation> for InvitationResponse {
 #[derive(Debug, Serialize)]
 pub struct MembershipResponse {
     pub id: Uuid,
+    pub team_id: Uuid,
     pub user_id: Uuid,
     pub role: MembershipRole,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -81,6 +82,7 @@ impl From<Membership> for MembershipResponse {
     fn from(membership: Membership) -> Self {
         Self {
             id: membership.id,
+            team_id: membership.team_id,
             user_id: membership.user_id,
             role: membership.role,
             created_at: membership.created_at,
@@ -327,8 +329,7 @@ pub async fn accept_invitation(
 
     mark_invitation_accepted_tx(&mut transaction, invitation_id)
         .await
-        .context("Failed to mark invitation as accepted")
-        .map_err(|e| Error::Internal(e.to_string()))?;
+        .map_err(Error::from)?;
 
     // Explicit commit — Drop without commit = rollback (RAII)
     transaction
@@ -605,8 +606,10 @@ mod tests {
 
     #[test]
     fn test_membership_response_serialization() {
+        let team_id = Uuid::new_v4();
         let membership_response = MembershipResponse {
             id: Uuid::new_v4(),
+            team_id,
             user_id: Uuid::new_v4(),
             role: MembershipRole::Admin,
             created_at: chrono::Utc::now(),
@@ -614,5 +617,6 @@ mod tests {
 
         let json = serde_json::to_string(&membership_response).unwrap();
         assert!(json.contains("admin"));
+        assert!(json.contains(&team_id.to_string()));
     }
 }

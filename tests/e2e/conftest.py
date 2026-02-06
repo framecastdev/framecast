@@ -198,7 +198,7 @@ async def seed_users(test_config: E2EConfig):
                                ephemeral_storage_bytes, upgraded_at, created_at, updated_at)
             VALUES ($1, $2, $3, 'creator', 5000, 0, $4, $4, $4)
             ON CONFLICT (email) DO UPDATE SET
-                id = $1, tier = 'creator', credits = 5000, upgraded_at = $4, updated_at = $4
+                tier = 'creator', credits = 5000, upgraded_at = $4, updated_at = $4
             """,
             owner_id,
             owner_email,
@@ -216,7 +216,7 @@ async def seed_users(test_config: E2EConfig):
                                ephemeral_storage_bytes, created_at, updated_at)
             VALUES ($1, $2, $3, 'starter', 1000, 0, $4, $4)
             ON CONFLICT (email) DO UPDATE SET
-                id = $1, tier = 'starter', credits = 1000, upgraded_at = NULL, updated_at = $4
+                tier = 'starter', credits = 1000, upgraded_at = NULL, updated_at = $4
             """,
             invitee_id,
             invitee_email,

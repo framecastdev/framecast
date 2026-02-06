@@ -407,10 +407,14 @@ ci-start-api:
     cargo build --bin local
     echo "Starting API server in background..."
     cargo run --bin local &
-    echo "Waiting for API server to be ready..."
+    API_PID=$!
+    echo "$API_PID" > /tmp/framecast-api.pid
+    trap "kill $API_PID 2>/dev/null || true" EXIT
+    echo "Waiting for API server to be ready (PID: $API_PID)..."
     for i in $(seq 1 30); do
         if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
-            echo "✅ API server is ready"
+            echo "✅ API server is ready (PID: $API_PID)"
+            trap - EXIT
             exit 0
         fi
         echo "⏳ Waiting for API server... (attempt $i/30)"
@@ -418,6 +422,15 @@ ci-start-api:
     done
     echo "❌ API server did not start within 60 seconds"
     exit 1
+
+# Stop API server started by ci-start-api
+ci-stop-api:
+    #!/usr/bin/env bash
+    if [ -f /tmp/framecast-api.pid ]; then
+        kill "$(cat /tmp/framecast-api.pid)" 2>/dev/null || true
+        rm -f /tmp/framecast-api.pid
+        echo "🛑 API server stopped"
+    fi
 
 # Run Python E2E tests in CI mode
 ci-test-e2e:
