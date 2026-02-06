@@ -107,7 +107,7 @@ class UserPersona(BaseModel):
             "iat": int(time.time()),
             "exp": int(time.time()) + 3600,
         }
-        secret = os.environ.get("JWT_SECRET", "test-e2e-secret-key")
+        secret = os.environ.get("JWT_SECRET", "test-e2e-secret-key-for-ci-only-0")
         return jwt.encode(payload, secret, algorithm="HS256")
 
     def auth_headers(self) -> dict[str, str]:

@@ -54,6 +54,7 @@ markers = [
     "security: security validation tests",
     "invitation: invitation workflow tests",
     "error_handling: error handling and edge case tests",
+    "sam_local: tests that run against SAM local deployment",
 ]
 
 [tool.coverage.run]

@@ -38,6 +38,18 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      localstack:
+        image: localstack/localstack:latest
+        env:
+          SERVICES: ses
+          DEBUG: "0"
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
     env:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
       TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
@@ -62,6 +74,25 @@ jobs:
 
       - name: Run tests
         run: just ci-test
+
+      - name: Setup LocalStack SES identities
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ENDPOINT_URL: http://localstack:4566
+        run: just ci-setup-ses
+
+      - name: Run SES integration tests
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ENDPOINT_URL: http://localstack:4566
+          EMAIL_PROVIDER: ses
+          FROM_EMAIL: invitations@framecast.app
+          EMAIL_ENABLED: "true"
+        run: just ci-test-integration-ses
 
   infra-validate:
     name: Validate Infrastructure
@@ -143,7 +174,7 @@ jobs:
       localstack:
         image: localstack/localstack:latest
         env:
-          SERVICES: s3,ses,iam,logs
+          SERVICES: ses
           DEBUG: "0"
         options: >-
           --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
@@ -158,7 +189,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
       AWS_DEFAULT_REGION: us-east-1
       AWS_ENDPOINT_URL: http://localstack:4566
-      JWT_SECRET: test-e2e-secret-key
+      JWT_SECRET: test-e2e-secret-key-for-ci-only-0  # pragma: allowlist secret
       EMAIL_PROVIDER: ses
       FROM_EMAIL: invitations@framecast.app
       EMAIL_ENABLED: "true"
@@ -183,17 +214,11 @@ jobs:
         with:
           shared-key: "ci"
 
-      - name: Setup LocalStack S3 buckets
-        run: just ci-setup-localstack
-
       - name: Setup LocalStack SES identities
         run: just ci-setup-ses
 
       - name: Run database migrations
         run: just ci-migrate
-
-      - name: Run SES integration tests
-        run: just ci-test-integration-ses
 
       - name: Build and start API server
         shell: bash

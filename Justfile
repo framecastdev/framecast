@@ -425,7 +425,7 @@ ci-test-e2e:
     #!/usr/bin/env bash
     set -e
     echo "Running Python E2E tests (CI mode)..."
-    cd tests/e2e && uv run pytest tests/ -m "real_services and invitation" -v --tb=short
+    cd tests/e2e && uv run pytest tests/test_invitation_workflow_e2e.py -v --tb=short
 
 # ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)
