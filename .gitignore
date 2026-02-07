@@ -181,6 +181,11 @@ $RECYCLE.BIN/
 # === Mutation Testing ===
 mutants.out/
 
+# === CI Artifacts ===
+e2e-results.xml
+test-output.txt
+integration-test-output.txt
+
 # === Project Specific ===
 # Local development artifacts
 .framecast/

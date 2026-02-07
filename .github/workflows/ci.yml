@@ -48,7 +48,7 @@ jobs:
           tool: just,cargo-binstall
 
       - name: Install sqlx-cli
-        run: cargo binstall --no-confirm sqlx-cli
+        run: cargo binstall --no-confirm sqlx-cli@0.8.3
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -56,21 +56,27 @@ jobs:
           shared-key: "ci"
 
       - name: Check formatting
+        id: fmt
         run: just fmt-check
 
       - name: Run clippy
+        id: clippy
         run: just ci-clippy
 
       - name: Run migrations
+        id: migrate
         run: just ci-migrate
 
       - name: Run tests
-        run: just ci-test
+        id: test
+        run: just ci-test 2>&1 | tee test-output.txt
 
       - name: Run integration tests
-        run: just ci-test-integration
+        id: integration-test
+        run: just ci-test-integration 2>&1 | tee integration-test-output.txt
 
       - name: Build API binary for E2E tests
+        id: build-binary
         run: cargo build --bin local
 
       - name: Upload API binary for E2E tests
@@ -79,6 +85,38 @@ jobs:
           name: api-binary
           path: target/debug/local
           retention-days: 1
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## CI Pipeline"
+            echo ""
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+            echo "| Formatting | ${{ steps.fmt.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Clippy | ${{ steps.clippy.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Migrations | ${{ steps.migrate.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Unit Tests | ${{ steps.test.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Integration Tests | ${{ steps.integration-test.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| API Binary Build | ${{ steps.build-binary.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo ""
+
+            if [ -f test-output.txt ]; then
+              unit_summary=$(grep -E "^test result:" test-output.txt | tail -1 || true)
+              if [ -n "$unit_summary" ]; then
+                echo "**Unit tests:** \`$unit_summary\`"
+              fi
+            fi
+
+            if [ -f integration-test-output.txt ]; then
+              integ_summary=$(grep -E "^test result:" integration-test-output.txt | tail -1 || true)
+              if [ -n "$integ_summary" ]; then
+                echo "**Integration tests:** \`$integ_summary\`"
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   infra-validate:
     name: Validate Infrastructure
@@ -97,15 +135,34 @@ jobs:
         uses: opentofu/setup-opentofu@v1
 
       - name: Format check OpenTofu
+        id: tofu-fmt
         run: |
           cd infra/opentofu
           tofu fmt -check -recursive
 
       - name: Initialize OpenTofu
+        id: tofu-init
         run: just infra-init
 
       - name: Validate OpenTofu configuration
+        id: tofu-validate
         run: just infra-validate
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Infrastructure Validation"
+            echo ""
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+            echo "| Format (\`tofu fmt\`) | ${{ steps.tofu-fmt.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Init (\`tofu init\`) | ${{ steps.tofu-init.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Validate (\`tofu validate\`) | ${{ steps.tofu-validate.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo ""
+            echo "OpenTofu $(tofu version -json | jq -r '.terraform_version')"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build-lambda:
     name: Build Lambda
@@ -152,6 +209,29 @@ jobs:
           path: target/lambda/lambda/bootstrap.zip
           retention-days: 5
 
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Build Lambda"
+            echo ""
+            if [ -f target/lambda/lambda/bootstrap.zip ]; then
+              size=$(du -h target/lambda/lambda/bootstrap.zip | cut -f1)
+              bytes=$(stat -c%s target/lambda/lambda/bootstrap.zip)
+              echo ":white_check_mark: **Lambda artifact built successfully**"
+              echo ""
+              echo "| Property | Value |"
+              echo "|----------|-------|"
+              echo "| Artifact | \`bootstrap.zip\` |"
+              echo "| Size | ${size} (${bytes} bytes) |"
+              echo "| Zig | $(zig version) |"
+              echo "| cargo-lambda | $(cargo lambda --version) |"
+            else
+              echo ":x: **Lambda build failed** — artifact not found"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
   mutation-tests:
     name: Mutation Tests
     needs: ci  # Only run after unit tests pass
@@ -189,6 +269,56 @@ jobs:
         with:
           name: mutation-results
           path: mutants.out/
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Mutation Tests"
+            echo ""
+
+            if [ -f mutants.out/outcomes.json ]; then
+              total=$(jq '[.outcomes[] | select(.scenario != "Baseline")] | length' mutants.out/outcomes.json)
+              caught=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "CaughtMutant")] | length' mutants.out/outcomes.json)
+              missed=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "MissedMutant")] | length' mutants.out/outcomes.json)
+              unviable=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Unviable")] | length' mutants.out/outcomes.json)
+              timeout=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Timeout")] | length' mutants.out/outcomes.json)
+
+              if [ "$total" -gt 0 ]; then
+                score=$(( (caught * 100) / (caught + missed) ))
+              else
+                score=0
+              fi
+
+              if [ "$missed" -eq 0 ]; then
+                echo ":white_check_mark: **All mutants caught!**"
+              else
+                echo ":warning: **${missed} mutants survived**"
+              fi
+              echo ""
+              echo "| Metric | Count |"
+              echo "|--------|-------|"
+              echo "| Total mutants | ${total} |"
+              echo "| :white_check_mark: Caught | ${caught} |"
+              echo "| :x: Missed | ${missed} |"
+              echo "| :construction: Unviable | ${unviable} |"
+              echo "| :clock1: Timeout | ${timeout} |"
+              echo "| **Mutation score** | **${score}%** (caught / (caught + missed)) |"
+
+              if [ "$missed" -gt 0 ] && [ -f mutants.out/missed.txt ]; then
+                echo ""
+                echo "<details><summary>Missed mutants</summary>"
+                echo ""
+                echo '```'
+                cat mutants.out/missed.txt
+                echo '```'
+                echo "</details>"
+              fi
+            else
+              echo ":x: **No mutation results found** — \`outcomes.json\` missing"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   e2e-tests:
     name: E2E Tests
@@ -259,7 +389,7 @@ jobs:
           tool: just,cargo-binstall
 
       - name: Install sqlx-cli
-        run: cargo binstall --no-confirm sqlx-cli
+        run: cargo binstall --no-confirm sqlx-cli@0.8.3
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
@@ -293,4 +423,43 @@ jobs:
           TEST_LOCAL_API_URL: http://localhost:3000
           TEST_LOCALSTACK_SES_URL: http://localhost:4566
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
-        run: just ci-test-e2e
+        run: |
+          cd tests/e2e && uv run pytest tests/ -m "real_services" -v --tb=short \
+            --junitxml=../../e2e-results.xml
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## E2E Tests"
+            echo ""
+
+            if [ -f e2e-results.xml ]; then
+              tests=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          root = ET.parse('e2e-results.xml').getroot().find('testsuite')
+          t, f, e, s = int(root.get('tests',0)), int(root.get('failures',0)), int(root.get('errors',0)), int(root.get('skipped',0))
+          passed = t - f - e - s
+          print(f'{t}|{passed}|{f}|{e}|{s}|{root.get(\"time\",\"?\")}')" || echo "?|?|?|?|?|?")
+
+              IFS='|' read -r total passed failed errors skipped duration <<< "$tests"
+
+              if [ "$failed" = "0" ] && [ "$errors" = "0" ]; then
+                echo ":white_check_mark: **All E2E tests passed**"
+              else
+                echo ":x: **E2E test failures detected**"
+              fi
+              echo ""
+              echo "| Metric | Count |"
+              echo "|--------|-------|"
+              echo "| Total | ${total} |"
+              echo "| :white_check_mark: Passed | ${passed} |"
+              echo "| :x: Failed | ${failed} |"
+              echo "| :boom: Errors | ${errors} |"
+              echo "| :fast_forward: Skipped | ${skipped} |"
+              echo "| Duration | ${duration}s |"
+            else
+              echo ":x: **No E2E results found** — \`e2e-results.xml\` missing"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
