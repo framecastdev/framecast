@@ -50,12 +50,12 @@ ENV PATH="/opt/rust/cargo/bin:${PATH}"
 # Add Rust components
 RUN rustup component add rustfmt clippy
 
-# Pre-compile heavy Cargo tools (MAJOR TIME SAVINGS)
-# These take 7-15 minutes each to compile
-RUN cargo install just
-RUN cargo install sqlx-cli --no-default-features --features postgres
-RUN cargo install cargo-lambda
-RUN cargo install cargo-watch
+# Pre-compile Cargo tools in a single layer (smaller image, all --locked for reproducibility)
+RUN cargo install --locked just \
+    && cargo install --locked sqlx-cli --no-default-features --features postgres \
+    && cargo install --locked cargo-lambda \
+    && cargo install --locked cargo-watch \
+    && cargo install --locked cargo-mutants
 
 # Install Python tools via pipx
 RUN pipx install uv
@@ -71,6 +71,7 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL https://get.opentofu.org/install-opent
 RUN just --version && \
     sqlx --version && \
     cargo lambda --version && \
+    cargo mutants --version && \
     tofu --version && \
     uv --version && \
     aws --version && \
