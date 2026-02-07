@@ -244,7 +244,7 @@ mod test_create_team {
             .unwrap();
 
         let response = router.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -277,7 +277,7 @@ mod test_create_team {
             .unwrap();
 
         let response = router.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -304,7 +304,7 @@ mod test_create_team {
             .unwrap();
 
         let response = router.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -356,7 +356,7 @@ mod test_create_team {
             .unwrap();
 
         let response1 = router.clone().oneshot(request1).await.unwrap();
-        assert_eq!(response1.status(), StatusCode::OK);
+        assert_eq!(response1.status(), StatusCode::CREATED);
 
         // Create second team with same slug
         let request2 = Request::builder()
@@ -453,7 +453,7 @@ mod test_create_team {
             .unwrap();
 
         let response = router.clone().oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -522,7 +522,7 @@ mod test_create_team {
             .unwrap();
 
         let response = router.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -563,7 +563,7 @@ mod test_create_team {
 
         let response = router.oneshot(request).await.unwrap();
         // Should succeed — name is stored safely via parameterized queries
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -596,7 +596,7 @@ mod test_create_team {
             .unwrap();
 
         let response = router.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await

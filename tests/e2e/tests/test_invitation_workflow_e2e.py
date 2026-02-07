@@ -41,7 +41,7 @@ class TestInvitationWorkflowE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200, (
+        assert resp.status_code == 201, (
             f"Team creation failed: {resp.status_code} {resp.text}"
         )
         team = resp.json()
@@ -102,7 +102,7 @@ class TestInvitationWorkflowE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         team_id = resp.json()["id"]
 
         # Owner invites invitee
@@ -136,7 +136,7 @@ class TestInvitationWorkflowE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         team_id = resp.json()["id"]
 
         # First invitation succeeds
@@ -170,7 +170,7 @@ class TestInvitationWorkflowE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         team_id = resp.json()["id"]
 
         # Invitee (not a member) tries to invite someone — should fail
@@ -197,7 +197,7 @@ class TestInvitationWorkflowE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         team_id = resp.json()["id"]
 
         # Owner invites invitee
@@ -240,7 +240,7 @@ class TestInvitationWorkflowE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         team_id = resp.json()["id"]
 
         # Owner invites invitee
@@ -309,7 +309,7 @@ class TestInvitationWorkflowE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         team_id = resp.json()["id"]
 
         # Owner invites invitee

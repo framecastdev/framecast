@@ -91,24 +91,6 @@ impl MembershipRepository {
         Ok(updated_membership)
     }
 
-    /// Find membership by team and user
-    pub async fn find(&self, team_id: Uuid, user_id: Uuid) -> Result<Option<Membership>> {
-        let membership = sqlx::query_as!(
-            Membership,
-            r#"
-            SELECT id, team_id, user_id, role as "role: MembershipRole", created_at
-            FROM memberships
-            WHERE team_id = $1 AND user_id = $2
-            "#,
-            team_id,
-            user_id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(membership)
-    }
-
     /// Get all memberships for a team with user details
     pub async fn find_by_team(&self, team_id: Uuid) -> Result<Vec<MembershipWithUser>> {
         let memberships = sqlx::query_as!(

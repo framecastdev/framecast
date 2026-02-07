@@ -53,7 +53,7 @@ impl From<User> for UserResponse {
 /// Request for updating user profile
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateProfileRequest {
-    #[validate(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 100))]
     pub name: Option<String>,
 
     #[validate(url)]

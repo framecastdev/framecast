@@ -40,7 +40,7 @@ class TestTeamManagementE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200, (
+        assert resp.status_code == 201, (
             f"Team creation failed: {resp.status_code} {resp.text}"
         )
         team = resp.json()
@@ -147,7 +147,7 @@ class TestTeamManagementE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         team_id = resp.json()["id"]
 
         # Step 2: Owner leaves — team should be auto-deleted (204)
@@ -178,7 +178,7 @@ class TestTeamManagementE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200, f"Create failed: {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, f"Create failed: {resp.status_code} {resp.text}"
         team = resp.json()
         team_id = team["id"]
         assert team["name"] == team_data["name"]
@@ -239,7 +239,7 @@ class TestTeamManagementE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data, headers=owner.auth_headers()
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         team_x_id = resp.json()["id"]
 
         # Other user needs to be creator tier to create a team
@@ -259,7 +259,7 @@ class TestTeamManagementE2E:
         resp = await http_client.post(
             "/v1/teams", json=team_data_y, headers=other_user.auth_headers()
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         team_y_id = resp.json()["id"]
 
         # Owner tries to list team Y members — should be forbidden

@@ -26,7 +26,7 @@ pub struct CreateTeamRequest {
 
     /// Optional team slug (if not provided, generated from name)
     #[validate(
-        length(min = 1, max = 63),
+        length(min = 1, max = 50),
         custom(function = "validate_slug_format", message = "Invalid slug format")
     )]
     pub slug: Option<String>,
@@ -38,11 +38,7 @@ pub struct CreateTeamRequest {
 
 /// Custom validation function for slug format
 fn validate_slug_format(slug: &str) -> std::result::Result<(), validator::ValidationError> {
-    if crate::validate_team_slug(slug) {
-        Ok(())
-    } else {
-        Err(validator::ValidationError::new("invalid_format"))
-    }
+    crate::Team::validate_slug(slug).map_err(|_| validator::ValidationError::new("invalid_format"))
 }
 
 /// Request for updating a team
@@ -141,18 +137,11 @@ pub async fn create_team(
     auth_context: AuthUser,
     State(state): State<TeamsState>,
     Json(request): Json<CreateTeamRequest>,
-) -> Result<Json<TeamResponse>> {
+) -> Result<(StatusCode, Json<TeamResponse>)> {
     // Validate request
     request
         .validate()
         .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
-
-    // Validate slug format manually if provided
-    if let Some(ref slug) = request.slug {
-        if !crate::validate_team_slug(slug) {
-            return Err(Error::Validation("Invalid slug format".to_string()));
-        }
-    }
 
     let user = &auth_context.0.user;
 
@@ -224,7 +213,7 @@ pub async fn create_team(
     let response =
         TeamResponse::from_team_with_context(created_team, Some(MembershipRole::Owner), user.id);
 
-    Ok(Json(response))
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 /// Get team details

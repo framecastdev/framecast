@@ -1,6 +1,5 @@
-//! Teams domain layer: entities, state machines, auth, validation
+//! Teams domain layer: entities, state machines, auth
 
 pub mod auth;
 pub mod entities;
 pub mod state;
-pub mod validation;
