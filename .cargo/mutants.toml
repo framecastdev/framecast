@@ -22,6 +22,11 @@ exclude_re = [
   "Debug for",
   # Error type definitions (thiserror derive generates these)
   "impl.*Error",
+  # Time-boundary mutations (< vs <=) are untestable at nanosecond precision
+  # without clock mocking — the difference is meaningless in practice
+  "replace < with <= in .*::is_expired",
+  "replace < with <= in .*::is_valid",
+  "replace < with <= in Invitation::state",
 ]
 
 # Skip logging/tracing calls — mutations in logging have no behavioral impact

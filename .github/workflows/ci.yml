@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -391,6 +392,11 @@ jobs:
         with:
           name: mutation-results
           path: combined/
+
+      - name: Clean up shard artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: mutation-results-*
 
   e2e-tests:
     name: E2E Tests

@@ -219,7 +219,7 @@ impl PermissionChecker {
     pub fn can_remove_member(
         ctx: &AuthContext,
         team_id: uuid::Uuid,
-        target_user_id: uuid::Uuid,
+        _target_user_id: uuid::Uuid,
         target_role: MembershipRole,
     ) -> Result<()> {
         // Check basic admin permissions
@@ -236,11 +236,8 @@ impl PermissionChecker {
             );
         }
 
-        // Users cannot remove themselves if they're the only owner
-        if target_user_id == ctx.user.id && target_role == MembershipRole::Owner {
-            // This would need to be checked against database for owner count
-            // For now, assume this check happens at the repository level
-        }
+        // INV-T2: "sole owner" check is enforced at the repository layer,
+        // which can query the actual owner count before allowing removal.
 
         Ok(())
     }
@@ -836,16 +833,8 @@ mod tests {
         assert!(result.is_ok(), "Admin should be able to remove a member");
     }
 
-    // Kills: crates/domain/src/auth.rs:240:42 replace && with || in can_remove_member
-    // Kills: crates/domain/src/auth.rs:240:27 replace == with != in can_remove_member
-    // Kills: crates/domain/src/auth.rs:240:57 replace == with != in can_remove_member
-    // Tests the self-removal path for an owner (line 240).
-    // The self-removal check on line 240 is a no-op (comment says checked at repo level),
-    // but the mutant targets the boolean expression. We need to ensure the code path is hit.
-    // The function currently succeeds when an owner removes themselves (no actual block).
-    // The mutant `replace && with ||` on line 240 would make the condition true for
-    // non-self users or non-owners, but since the body is empty it wouldn't change behavior.
-    // However, the mutant scanner still expects us to exercise these conditions.
+    // Owner self-removal: permission check passes — INV-T2 sole-owner guard
+    // is enforced at the repository layer, not here.
     #[test]
     fn test_can_remove_member_self_removal_owner() {
         let user = create_test_user(UserTier::Creator);
@@ -868,8 +857,7 @@ mod tests {
         );
     }
 
-    // Additional test: non-self owner removal where target_user_id != ctx.user.id
-    // This exercises the false branch of target_user_id == ctx.user.id on line 240.
+    // Owner can remove another member
     #[test]
     fn test_can_remove_member_owner_removes_non_self_member() {
         let user = create_test_user(UserTier::Creator);
@@ -888,7 +876,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // Test: owner removes self with non-owner role (false on second &&)
+    // Owner removing self with non-owner target role
     #[test]
     fn test_can_remove_member_self_removal_non_owner_role() {
         let user = create_test_user(UserTier::Creator);

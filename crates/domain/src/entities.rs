@@ -772,6 +772,7 @@ pub enum ProjectStatus {
 
 impl ProjectStatus {
     /// Check if this is a terminal state (Project has no terminal states)
+    #[mutants::skip] // Delegates to ProjectState::is_terminal() which always returns false
     pub fn is_terminal(&self) -> bool {
         self.to_state().is_terminal()
     }
