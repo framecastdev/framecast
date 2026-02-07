@@ -434,9 +434,9 @@ mutants-domain *args="":
 mutants-check *args="":
     cargo mutants --jobs 4 --iterate {{args}}
 
-# CI mutation testing (uses --in-place for speed, outputs results)
+# CI mutation testing (--in-place modifies source directly, faster in disposable CI environments)
 ci-mutants:
-    cargo mutants --jobs 2 --in-place -p framecast-domain -p framecast-common -- --test-threads=2
+    cargo mutants --in-place -p framecast-domain -p framecast-common -- --test-threads=2
 
 # ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)
