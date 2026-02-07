@@ -645,37 +645,6 @@ logs-lambda env="dev":
     aws logs tail /aws/lambda/framecast-{{env}}-api --follow
 
 # ============================================================================
-# CI BASE IMAGE
-# ============================================================================
-
-# Build CI base image for amd64 (local only, does not push)
-ci-image-build:
-    @echo "Building CI base image for linux/amd64..."
-    docker buildx build --platform linux/amd64 \
-        -t ghcr.io/framecastdev/framecast-ci:latest \
-        -f infra/ci/Dockerfile \
-        --load .
-    @echo "CI image built: ghcr.io/framecastdev/framecast-ci:latest"
-
-# Build, tag with timestamp, push to GHCR, and update ci.yml to use the new tag
-ci-image-publish:
-    #!/usr/bin/env bash
-    set -e
-    TAG=$(date -u +%Y%m%d%H%M%S)
-    IMAGE="ghcr.io/framecastdev/framecast-ci"
-    echo "Building and pushing CI image: ${IMAGE}:${TAG} + :latest..."
-    gh auth token | docker login ghcr.io -u framecastdev --password-stdin
-    docker buildx build --platform linux/amd64 \
-        -t "${IMAGE}:${TAG}" \
-        -t "${IMAGE}:latest" \
-        -f infra/ci/Dockerfile \
-        --push .
-    echo "Updating ci.yml to use tag: ${TAG}..."
-    sed -i "s|${IMAGE}:[a-zA-Z0-9]*|${IMAGE}:${TAG}|g" .github/workflows/ci.yml
-    echo "CI image published: ${IMAGE}:${TAG}"
-    echo "ci.yml updated — remember to commit the change"
-
-# ============================================================================
 # ADMIN PROCESSES (Rule XII: Admin Processes)
 # ============================================================================
 
