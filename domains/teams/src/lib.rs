@@ -12,9 +12,9 @@ pub use domain::state::{
 };
 // Re-export repository types
 pub use repository::{
-    create_membership_tx, mark_invitation_accepted_tx, upgrade_user_tier_tx, ApiKeyRepository,
-    InvitationRepository, MembershipRepository, MembershipWithUser, TeamRepository,
-    TeamsRepositories, UserRepository,
+    create_membership_tx, create_team_tx, mark_invitation_accepted_tx, upgrade_user_tier_tx,
+    ApiKeyRepository, InvitationRepository, MembershipRepository, MembershipWithUser,
+    TeamRepository, TeamsRepositories, UserRepository,
 };
 
 // Re-export API types

@@ -94,6 +94,7 @@ Attributes:
   token         : String! (unique, 32 bytes, URL-safe base64)
   expires_at    : Timestamp DEFAULT now() + INTERVAL '7 days'
   accepted_at   : Timestamp?
+  declined_at   : Timestamp?
   revoked_at    : Timestamp?                                    // Ã¢â€ Â NEW in v0.4.0
   created_at    : Timestamp DEFAULT now()
 
@@ -112,11 +113,12 @@ Constraints:
 Derived:
   state Ã¢â€°Â¡
     IF accepted_at IS NOT NULL THEN 'accepted'
+    ELSE IF declined_at IS NOT NULL THEN 'declined'
     ELSE IF revoked_at IS NOT NULL THEN 'revoked'
     ELSE IF expires_at < now() THEN 'expired'
     ELSE 'pending'
 
-  is_actionable Ã¢â€°Â¡ (accepted_at IS NULL Ã¢Ë†Â§ revoked_at IS NULL Ã¢Ë†Â§ expires_at > now())
+  is_actionable Ã¢â€°Â¡ (accepted_at IS NULL Ã¢Ë†Â§ declined_at IS NULL Ã¢Ë†Â§ revoked_at IS NULL Ã¢Ë†Â§ expires_at > now())
 ```
 
 ## 4.5 ApiKey

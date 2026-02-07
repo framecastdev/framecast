@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use framecast_common::{Error, Result, Urn};
+use validator::ValidateEmail;
 
 pub use crate::domain::state::InvitationState;
 use crate::domain::state::{
@@ -21,6 +22,9 @@ use crate::domain::state::{
 
 /// Maximum number of team memberships a single user can hold (INV-T8)
 pub const MAX_TEAM_MEMBERSHIPS: i64 = 50;
+
+/// Maximum number of teams a single user can own (INV-T7)
+pub const MAX_OWNED_TEAMS: i64 = 10;
 
 /// User tier levels
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, Default)]
@@ -60,7 +64,7 @@ impl User {
     /// Create a new user with validation
     pub fn new(id: Uuid, email: String, name: Option<String>) -> Result<Self> {
         // Validate email format
-        if !email.contains('@') || email.len() > 255 {
+        if !email.validate_email() || email.len() > 255 {
             return Err(Error::Validation(
                 "Invalid email format or length".to_string(),
             ));
@@ -122,7 +126,7 @@ impl User {
         }
 
         // Email validation
-        if !self.email.contains('@') || self.email.len() > 255 {
+        if !self.email.validate_email() || self.email.len() > 255 {
             return Err(Error::Validation(
                 "Invalid email format or length".to_string(),
             ));
@@ -404,12 +408,6 @@ impl Membership {
             created_at: Utc::now(),
         }
     }
-
-    /// Validate invariants per spec
-    pub fn validate(&self) -> Result<()> {
-        // Basic reference validation is handled by database constraints
-        Ok(())
-    }
 }
 
 /// Invitation entity - pending invitation to join a team
@@ -437,7 +435,7 @@ impl Invitation {
         role: InvitationRole,
     ) -> Result<Self> {
         // Validate email
-        if !email.contains('@') || email.is_empty() {
+        if !email.validate_email() {
             return Err(Error::Validation("Invalid email format".to_string()));
         }
 
@@ -541,7 +539,7 @@ impl Invitation {
     /// Validate invariants per spec
     pub fn validate(&self) -> Result<()> {
         // Email validation
-        if !self.email.contains('@') || self.email.is_empty() {
+        if !self.email.validate_email() {
             return Err(Error::Validation("Invalid email format".to_string()));
         }
 
@@ -1168,17 +1166,11 @@ mod tests {
     }
 
     #[test]
-    fn test_invitation_email_max_length_boundary() {
-        // 254-char email should pass (valid per RFC 5321)
-        let local_part = "a".repeat(63);
-        let domain = format!("{}.com", "b".repeat(186));
-        let email_254 = format!("{}@{}", local_part, domain);
-        assert!(email_254.len() <= 255);
-        // This should be valid since it contains '@' and is <= 255 chars
+    fn test_invitation_email_valid_format_accepted() {
         let result = Invitation::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
-            email_254,
+            "valid.user+tag@example.com".to_string(),
             InvitationRole::Member,
         );
         assert!(result.is_ok());
@@ -1368,17 +1360,17 @@ mod tests {
             updated_at: now,
         };
 
-        // "@example.com" is 12 chars, so local_part needs to be 243 for 255 total
-        // 255-char email with '@' should be valid
-        let local_part = "a".repeat(243);
-        user.email = format!("{}@example.com", local_part);
-        assert_eq!(user.email.len(), 255);
+        // RFC-valid email within 255-char limit should pass
+        user.email = "valid@example.com".to_string();
         assert!(user.validate().is_ok());
 
-        // 256-char email should be invalid
-        let local_part = "a".repeat(244);
+        // Email exceeding RFC local-part limit (64 chars) should fail format validation
+        let local_part = "a".repeat(65);
         user.email = format!("{}@example.com", local_part);
-        assert_eq!(user.email.len(), 256);
+        assert!(user.validate().is_err());
+
+        // Clearly invalid format should fail
+        user.email = "not-an-email".to_string();
         assert!(user.validate().is_err());
     }
 

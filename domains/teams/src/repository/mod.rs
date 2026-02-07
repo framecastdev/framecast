@@ -13,7 +13,9 @@ pub use api_keys::ApiKeyRepository;
 pub use invitations::InvitationRepository;
 pub use memberships::{MembershipRepository, MembershipWithUser};
 pub use teams::TeamRepository;
-pub use transactions::{create_membership_tx, mark_invitation_accepted_tx, upgrade_user_tier_tx};
+pub use transactions::{
+    create_membership_tx, create_team_tx, mark_invitation_accepted_tx, upgrade_user_tier_tx,
+};
 pub use users::UserRepository;
 
 /// Combined repository access for the Teams domain

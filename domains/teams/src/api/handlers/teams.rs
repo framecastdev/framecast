@@ -3,13 +3,13 @@
 //! This module implements team CRUD operations with proper authorization
 //! and business rule enforcement as defined in the API specification.
 
-use crate::{MembershipRole, Team, UserTier};
+use crate::{MembershipRole, Team, UserTier, MAX_OWNED_TEAMS};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     Json,
 };
-use framecast_common::{Error, Result};
+use framecast_common::{Error, Result, Urn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -78,7 +78,7 @@ impl TeamResponse {
     ) -> Self {
         let user_urn = user_role
             .as_ref()
-            .map(|_| format!("framecast:{}:{}", team.id, user_id));
+            .map(|_| Urn::team_user(team.id, user_id).to_string());
 
         Self {
             id: team.id,
@@ -160,8 +160,11 @@ pub async fn create_team(
         .await
         .map_err(|e| Error::Internal(format!("Failed to count owned teams: {}", e)))?;
 
-    if owned_teams_count >= 10 {
-        return Err(Error::Conflict("Cannot own more than 10 teams".to_string()));
+    if owned_teams_count >= MAX_OWNED_TEAMS {
+        return Err(Error::Conflict(format!(
+            "Cannot own more than {} teams",
+            MAX_OWNED_TEAMS
+        )));
     }
 
     // Use Team constructor to handle slug generation
@@ -191,23 +194,26 @@ pub async fn create_team(
         team.credits = credits;
     }
 
-    // Save team to database
-    let created_team = state
+    // Atomically create team + owner membership in a transaction (INV-T1, INV-T2)
+    let mut tx = state
         .repos
-        .teams
-        .create(&team)
+        .begin()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
+
+    let created_team = crate::create_team_tx(&mut tx, &team)
         .await
         .map_err(|e| Error::Internal(format!("Failed to create team: {}", e)))?;
 
-    // Create owner membership for the user (INV-T2: every team has at least one owner)
     let membership = crate::Membership::new(created_team.id, user.id, MembershipRole::Owner);
 
-    state
-        .repos
-        .memberships
-        .create(&membership)
+    crate::create_membership_tx(&mut tx, &membership)
         .await
         .map_err(|e| Error::Internal(format!("Failed to create membership: {}", e)))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to commit transaction: {}", e)))?;
 
     // Return response with user context
     let response =
