@@ -10,8 +10,6 @@ pub use domain::entities::*;
 pub use domain::state::{
     InvitationEvent, InvitationGuardContext, InvitationState, InvitationStateMachine, StateError,
 };
-pub use domain::validation::validate_team_slug;
-
 // Re-export repository types
 pub use repository::{
     create_membership_tx, mark_invitation_accepted_tx, upgrade_user_tier_tx, ApiKeyRepository,

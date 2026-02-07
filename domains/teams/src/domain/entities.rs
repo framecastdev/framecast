@@ -220,6 +220,12 @@ impl Team {
             ));
         }
 
+        if slug.contains("--") {
+            return Err(Error::Validation(
+                "Slug cannot contain consecutive hyphens".to_string(),
+            ));
+        }
+
         Ok(())
     }
 
@@ -1191,9 +1197,9 @@ mod tests {
     }
 
     #[test]
-    fn test_slug_consecutive_hyphens_valid() {
-        // Consecutive hyphens are allowed by current validation (no rule against them)
-        assert!(Team::validate_slug("a--b").is_ok());
+    fn test_slug_consecutive_hyphens_rejected() {
+        assert!(Team::validate_slug("a--b").is_err());
+        assert!(Team::validate_slug("a---b").is_err());
     }
 
     #[test]

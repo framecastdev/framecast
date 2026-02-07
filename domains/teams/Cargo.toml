@@ -30,11 +30,6 @@ rand = "0.8"
 hex = "0.4"
 base64.workspace = true
 getrandom.workspace = true
-regex = "1.0"
-
-# Validation
-lazy_static = "1.5"
-
 # HTTP server (for API layer)
 axum.workspace = true
 
