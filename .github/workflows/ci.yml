@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
@@ -74,7 +74,7 @@ jobs:
         run: cargo build --bin local
 
       - name: Upload API binary for E2E tests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: api-binary
           path: target/debug/local
@@ -86,7 +86,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install just
         uses: taiki-e/install-action@v2
@@ -113,13 +113,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@v1
+        uses: mlugg/setup-zig@v2
         with:
           version: 0.15.1
 
@@ -146,7 +146,7 @@ jobs:
           echo "Lambda artifact size: $(du -h target/lambda/lambda/bootstrap.zip | cut -f1)"
 
       - name: Upload Lambda artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: lambda-bootstrap
           path: target/lambda/lambda/bootstrap.zip
@@ -162,7 +162,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
@@ -185,7 +185,7 @@ jobs:
 
       - name: Upload mutation results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: mutation-results
           path: mutants.out/
@@ -248,7 +248,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
@@ -262,7 +262,7 @@ jobs:
         run: cargo binstall --no-confirm sqlx-cli
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -270,7 +270,7 @@ jobs:
           shared-key: "ci"
 
       - name: Download API binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: api-binary
           path: ./api-binary
