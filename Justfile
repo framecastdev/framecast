@@ -435,8 +435,16 @@ mutants-check *args="":
     cargo mutants --jobs 4 --iterate {{args}}
 
 # CI mutation testing (--in-place modifies source directly, faster in disposable CI environments)
-ci-mutants:
-    cargo mutants --in-place -p framecast-domain -p framecast-common
+# Pass shard="k/n" to run a subset (e.g. just ci-mutants "0/8")
+ci-mutants shard="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "{{shard}}" ]; then
+      cargo mutants --in-place --shard "{{shard}}" --baseline skip \
+        -p framecast-domain -p framecast-common
+    else
+      cargo mutants --in-place -p framecast-domain -p framecast-common
+    fi
 
 # ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)

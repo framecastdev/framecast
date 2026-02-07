@@ -233,9 +233,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   mutation-tests:
-    name: Mutation Tests
+    name: Mutants (shard ${{ matrix.shard }}/8)
     needs: ci  # Only run after unit tests pass
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
 
     env:
       SQLX_OFFLINE: "true"
@@ -260,14 +265,14 @@ jobs:
         with:
           shared-key: "ci"
 
-      - name: Run mutation tests (domain + common)
-        run: just ci-mutants
+      - name: Run mutation shard
+        run: just ci-mutants "${{ matrix.shard }}/8"
 
-      - name: Upload mutation results
+      - name: Upload shard results
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: mutation-results
+          name: mutation-results-${{ matrix.shard }}
           path: mutants.out/
 
       - name: Job summary
@@ -275,7 +280,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## Mutation Tests"
+            echo "## Mutation Tests (shard ${{ matrix.shard }}/8)"
             echo ""
 
             if [ -f mutants.out/outcomes.json ]; then
@@ -285,26 +290,13 @@ jobs:
               unviable=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Unviable")] | length' mutants.out/outcomes.json)
               timeout=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Timeout")] | length' mutants.out/outcomes.json)
 
-              if [ "$total" -gt 0 ]; then
-                score=$(( (caught * 100) / (caught + missed) ))
-              else
-                score=0
-              fi
-
-              if [ "$missed" -eq 0 ]; then
-                echo ":white_check_mark: **All mutants caught!**"
-              else
-                echo ":warning: **${missed} mutants survived**"
-              fi
-              echo ""
               echo "| Metric | Count |"
               echo "|--------|-------|"
-              echo "| Total mutants | ${total} |"
+              echo "| Total | ${total} |"
               echo "| :white_check_mark: Caught | ${caught} |"
               echo "| :x: Missed | ${missed} |"
               echo "| :construction: Unviable | ${unviable} |"
               echo "| :clock1: Timeout | ${timeout} |"
-              echo "| **Mutation score** | **${score}%** (caught / (caught + missed)) |"
 
               if [ "$missed" -gt 0 ] && [ -f mutants.out/missed.txt ]; then
                 echo ""
@@ -316,9 +308,89 @@ jobs:
                 echo "</details>"
               fi
             else
-              echo ":x: **No mutation results found** — \`outcomes.json\` missing"
+              echo ":x: **No results** — \`outcomes.json\` missing"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  mutation-summary:
+    name: Mutation Summary
+    needs: mutation-tests
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all shard results
+        uses: actions/download-artifact@v7
+        with:
+          pattern: mutation-results-*
+          path: shards/
+
+      - name: Aggregate and summarize
+        shell: bash
+        run: |
+          mkdir -p combined
+
+          # Merge text result files across all shards
+          for file in caught.txt missed.txt timeout.txt unviable.txt; do
+            > "combined/${file}"
+            for shard_dir in shards/mutation-results-*/; do
+              if [ -f "${shard_dir}${file}" ]; then
+                cat "${shard_dir}${file}" >> "combined/${file}"
+              fi
+            done
+          done
+
+          # Aggregate outcomes.json from all shards
+          jq -s '{outcomes: [.[].outcomes[]] }' shards/mutation-results-*/outcomes.json > combined/outcomes.json
+
+          # Compute totals
+          total=$(jq '[.outcomes[] | select(.scenario != "Baseline")] | length' combined/outcomes.json)
+          caught=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "CaughtMutant")] | length' combined/outcomes.json)
+          missed=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "MissedMutant")] | length' combined/outcomes.json)
+          unviable=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Unviable")] | length' combined/outcomes.json)
+          timeout=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Timeout")] | length' combined/outcomes.json)
+
+          if [ "$((caught + missed))" -gt 0 ]; then
+            score=$(( (caught * 100) / (caught + missed) ))
+          else
+            score=0
+          fi
+
+          {
+            echo "## Mutation Tests"
+            echo ""
+            if [ "$missed" -eq 0 ]; then
+              echo ":white_check_mark: **All mutants caught!**"
+            else
+              echo ":warning: **${missed} mutants survived**"
+            fi
+            echo ""
+            echo "| Metric | Count |"
+            echo "|--------|-------|"
+            echo "| Total mutants | ${total} |"
+            echo "| :white_check_mark: Caught | ${caught} |"
+            echo "| :x: Missed | ${missed} |"
+            echo "| :construction: Unviable | ${unviable} |"
+            echo "| :clock1: Timeout | ${timeout} |"
+            echo "| **Mutation score** | **${score}%** (caught / (caught + missed)) |"
+
+            if [ "$missed" -gt 0 ] && [ -s combined/missed.txt ]; then
+              echo ""
+              echo "<details><summary>Missed mutants</summary>"
+              echo ""
+              echo '```'
+              cat combined/missed.txt
+              echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload combined results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: mutation-results
+          path: combined/
 
   e2e-tests:
     name: E2E Tests
