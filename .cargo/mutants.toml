@@ -12,8 +12,8 @@ profile = "mutants"
 # CPU-bound from parallel builds, so fewer test threads per build is fine)
 additional_cargo_test_args = ["--all-targets", "--", "--test-threads=2"]
 
-# Only mutate domain and common crates
-examine_globs = ["domains/*/src/**/*.rs", "crates/common/src/**/*.rs"]
+# Only mutate pure domain logic — no I/O (repository, API handlers, middleware)
+examine_globs = ["domains/*/src/domain/**/*.rs", "crates/common/src/**/*.rs"]
 
 # Exclude patterns that generate noise without value
 exclude_re = [
