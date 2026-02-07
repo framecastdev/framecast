@@ -127,7 +127,8 @@ impl TeamRepository {
             r#"
             SELECT COUNT(*)
             FROM jobs
-            WHERE team_id = $1 AND status NOT IN ('completed', 'failed', 'canceled')
+            WHERE owner LIKE 'framecast:team:' || $1::text || '%'
+              AND status NOT IN ('completed', 'failed', 'canceled')
             "#,
         )
         .bind(team_id)
