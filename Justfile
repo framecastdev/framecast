@@ -436,7 +436,7 @@ mutants-check *args="":
 
 # CI mutation testing (--in-place modifies source directly, faster in disposable CI environments)
 ci-mutants:
-    cargo mutants --in-place -p framecast-domain -p framecast-common -- -- --test-threads=2
+    cargo mutants --in-place -p framecast-domain -p framecast-common
 
 # ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)

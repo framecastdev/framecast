@@ -8,8 +8,9 @@ minimum_test_timeout = 30.0
 # Defined in workspace Cargo.toml as [profile.mutants]
 profile = "mutants"
 
-# Skip doctests — each doctest compiles as a separate binary, slow and low-value
-additional_cargo_test_args = ["--all-targets"]
+# Skip doctests (--all-targets) and limit test threads (mutation testing is
+# CPU-bound from parallel builds, so fewer test threads per build is fine)
+additional_cargo_test_args = ["--all-targets", "--", "--test-threads=2"]
 
 # Only mutate domain and common crates
 examine_globs = ["crates/domain/src/**/*.rs", "crates/common/src/**/*.rs"]
