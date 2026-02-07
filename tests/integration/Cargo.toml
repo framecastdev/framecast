@@ -36,9 +36,7 @@ test-log = { workspace = true }
 serial_test = { workspace = true }
 
 # === Internal Crates ===
-framecast-api = { path = "../../crates/api" }
-framecast-domain = { workspace = true }
-framecast-db = { workspace = true }
+framecast-teams = { workspace = true }
 framecast-email = { workspace = true }
 framecast-common = { workspace = true }
 

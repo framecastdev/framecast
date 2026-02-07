@@ -70,11 +70,15 @@ jobs:
 
       - name: Run tests
         id: test
-        run: just ci-test 2>&1 | tee test-output.txt
+        run: |
+          set -o pipefail
+          just ci-test 2>&1 | tee test-output.txt
 
       - name: Run integration tests
         id: integration-test
-        run: just ci-test-integration 2>&1 | tee integration-test-output.txt
+        run: |
+          set -o pipefail
+          just ci-test-integration 2>&1 | tee integration-test-output.txt
 
       - name: Build API binary for E2E tests
         id: build-binary

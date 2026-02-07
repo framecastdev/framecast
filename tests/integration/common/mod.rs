@@ -14,10 +14,9 @@ use std::sync::{Arc, Once};
 use anyhow::Result;
 use axum::http::{header::AUTHORIZATION, HeaderMap, HeaderValue};
 use chrono::Utc;
-use framecast_api::middleware::{AppState, AuthConfig};
-use framecast_db::repositories::Repositories;
-use framecast_domain::entities::*;
 use framecast_email::{EmailConfig, EmailServiceFactory};
+use framecast_teams::*;
+use framecast_teams::{AuthConfig, TeamsState};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -57,7 +56,7 @@ impl TestConfig {
 /// Test application state with database connection
 #[allow(dead_code)]
 pub struct TestApp {
-    pub state: AppState,
+    pub state: TeamsState,
     pub config: TestConfig,
     pub pool: PgPool,
 }
@@ -73,7 +72,7 @@ impl TestApp {
         // Run migrations for test database
         sqlx::migrate!("../../migrations").run(&pool).await?;
 
-        let repos = Repositories::new(pool.clone());
+        let repos = framecast_teams::TeamsRepositories::new(pool.clone());
 
         let auth_config = AuthConfig {
             jwt_secret: config.jwt_secret.clone(),
@@ -84,7 +83,7 @@ impl TestApp {
         let email_config = EmailConfig::from_env()?;
         let email_service = EmailServiceFactory::create(email_config).await?;
 
-        let state = AppState {
+        let state = TeamsState {
             repos,
             auth_config,
             email: Arc::from(email_service),

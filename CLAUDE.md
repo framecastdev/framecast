@@ -137,7 +137,7 @@ git commit -m "some changes"
 ### Rule 11: Mutation-Test Critical Logic
 
 **YOU MUST** run `just mutants-domain` after adding or modifying business logic
-in `crates/domain/` or `crates/common/`. Fix surviving mutants by adding
+in `domains/*/` or `crates/common/`. Fix surviving mutants by adding
 targeted test assertions — do NOT use `#[mutants::skip]` to silence legitimate gaps.
 
 Use `#[mutants::skip]` ONLY for:
@@ -177,7 +177,7 @@ Before executing ANY command, ask yourself:
 - Am I following best practices? → Review SOLID, DRY, YAGNI principles
 - Did I break this into phases/tasks? → Plan before implementing
 - Am I working on main branch? → STOP, create feature branch
-- Did I modify domain/common logic? → Run `just mutants-domain`
+- Did I modify domain/common logic? → Run `just mutants-domain` (covers `domains/*/` and `crates/common/`)
 - Am I adding placeholder code? → STOP, YAGNI — add it when it's needed
 </law>
 
@@ -194,7 +194,7 @@ just test         # Run all Rust tests
 just check        # Run all quality checks (fmt, clippy, tests, pre-commit)
 
 # Running specific tests
-just test domain              # Test specific crate
+just test teams               # Test specific crate
 just test "job"               # Test matching pattern
 
 # E2E tests (Python)
@@ -221,8 +221,8 @@ just deploy-dev               # Deploy to AWS dev
 just deploy-prod              # Deploy to AWS production
 
 # Mutation Testing
-just mutants                  # Run mutation tests (domain + common)
-just mutants-domain           # Run mutation tests (domain only)
+just mutants                  # Run mutation tests (all domain crates + common)
+just mutants-domain           # Run mutation tests (domain crates only)
 just mutants-check            # Re-test only previously missed mutants
 
 # Infrastructure
@@ -257,35 +257,70 @@ Additional commands:
 ### Crate Structure
 
 ```
-crates/
-├── api/          # Lambda handlers, HTTP routes (axum)
-├── domain/       # Business logic, entities, validation, state machines
-├── db/           # Database layer, repositories (sqlx + PostgreSQL)
-├── email/        # AWS SES email service
-├── inngest/      # Job orchestration client
-├── comfyui/      # RunPod/ComfyUI client for video generation
-└── common/       # Shared utilities, error types, URN parsing
+domains/                   # Domain-driven vertical slices
+├── teams/                 # framecast-teams: Users, Teams, Memberships, Invitations, ApiKeys, Auth
+├── projects/              # framecast-projects: Projects, AssetFiles (stub)
+├── jobs/                  # framecast-jobs: Jobs, JobEvents (stub)
+└── webhooks/              # framecast-webhooks: Webhooks, WebhookDeliveries (stub)
+
+crates/                    # Shared infrastructure
+├── app/                   # framecast-app: Composition root, Lambda + local binaries
+├── email/                 # framecast-email: AWS SES email service
+├── inngest/               # framecast-inngest: Job orchestration client
+├── comfyui/               # framecast-comfyui: RunPod/ComfyUI client
+└── common/                # framecast-common: Shared error types, URN parsing
+```
+
+Each domain crate owns its full vertical slice:
+
+```
+domains/teams/src/
+├── api/                   # Routes, handlers, middleware (axum)
+│   ├── middleware.rs       # AuthUser, ApiKeyUser, TeamsState, AuthConfig
+│   ├── routes.rs           # Router<TeamsState>
+│   └── handlers/           # users.rs, teams.rs, memberships.rs
+├── domain/                # Entities, state machines, validation
+│   ├── entities.rs         # User, Team, Membership, Invitation, ApiKey
+│   ├── state.rs            # InvitationStateMachine
+│   ├── auth.rs             # AuthContext
+│   └── validation.rs       # validate_team_slug
+└── repository/            # Database access (sqlx + PostgreSQL)
+    ├── users.rs, teams.rs, memberships.rs, invitations.rs, api_keys.rs
+    └── transactions.rs     # TX helpers
 ```
 
 ### Dependency Flow
 
 ```
-api → domain → common
- ↓      ↓
-db   email/inngest/comfyui
+                  framecast-common
+                   ↑    ↑    ↑    ↑
+            ┌──────┘    │    │    └──────┐
+    framecast-teams     │    │     framecast-email
+         ↑              │    │
+         │    ┌─────────┘    │
+    framecast-jobs           │
+         ↑                   │
+    framecast-webhooks ──────┘
+         ↑
+    framecast-app → ALL domains + email + inngest + comfyui
 ```
 
-- `domain` contains pure business logic, no I/O
-- `api` orchestrates handlers and injects dependencies
-- `db`, `email`, `inngest`, `comfyui` are backing service adapters
+- Each domain owns entities + repositories + API handlers (vertical slice)
+- `framecast-teams` has no domain dependencies (only `common` + `email`)
+- `framecast-app` is the composition root (composes all domain routers)
+- Cross-domain reads use CQRS: query other domain's tables directly (same DB)
 
 ### Key Patterns
 
 **Error Handling:** `thiserror` for library crates, `anyhow` for application code. Never `.unwrap()` in production.
 
-**Repository Pattern:** Database access via trait-based repositories in `db/` crate, injected into handlers.
+**Domain State:** Each domain defines its own state (e.g. `TeamsState { repos, auth_config, email }`).
+The app crate composes them via `Router::merge()` with `.with_state()`.
 
-**State Machines:** Job/Project/Invitation states defined in `domain/src/state.rs` with explicit transitions.
+**Repository Pattern:** Per-domain repository structs (e.g. `TeamsRepositories`) with per-entity repos.
+Cross-domain queries read tables directly (CQRS read-side).
+
+**State Machines:** Job/Project/Invitation states defined in each domain's `domain/state.rs` with explicit transitions.
 
 **Mutation Testing:** `cargo-mutants` validates test effectiveness on domain/common crates.
 Surviving mutants indicate tests that don't catch injected bugs — fix by adding assertions.
@@ -319,10 +354,13 @@ framecast/
 ├── CLAUDE.md               # This file
 ├── .env.example            # Config template (III)
 ├── .claude/skills/         # Domain knowledge
+├── domains/
+│   ├── teams/              # Users, Teams, Memberships, Invitations, Auth
+│   ├── projects/           # Projects, AssetFiles (stub)
+│   ├── jobs/               # Jobs, JobEvents (stub)
+│   └── webhooks/           # Webhooks, WebhookDeliveries (stub)
 ├── crates/
-│   ├── api/                # Lambda handlers (VI, VII)
-│   ├── domain/             # Business logic
-│   ├── db/                 # Database layer (IV)
+│   ├── app/                # Composition root, Lambda + local binaries
 │   ├── email/              # AWS SES email service (IV)
 │   ├── inngest/            # Job orchestration (IV)
 │   ├── comfyui/            # RunPod client (IV)

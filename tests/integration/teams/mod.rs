@@ -16,13 +16,13 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use framecast_api::routes;
+use framecast_teams::{routes, UserTier};
 
 use crate::common::{TestApp, UserFixture};
 
 /// Create test router with all routes
 async fn create_test_router(app: &TestApp) -> Router {
-    routes::create_routes().with_state(app.state.clone())
+    routes().with_state(app.state.clone())
 }
 
 mod test_list_teams {
@@ -66,10 +66,7 @@ mod test_list_teams {
     #[tokio::test]
     async fn test_list_teams_multiple_teams() {
         let app = TestApp::new().await.unwrap();
-        let creator = app
-            .create_test_user(framecast_domain::entities::UserTier::Creator)
-            .await
-            .unwrap();
+        let creator = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = crate::common::create_test_jwt(&creator, &app.config.jwt_secret).unwrap();
 
         // Create two teams where user is owner

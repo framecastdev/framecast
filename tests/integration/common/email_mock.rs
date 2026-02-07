@@ -295,14 +295,14 @@ impl Default for MockEmailService {
 pub mod test_utils {
     use super::*;
     use crate::common::{TestApp, UserFixture};
-    use framecast_domain::entities::InvitationRole;
+    use framecast_teams::InvitationRole;
 
     /// Create a complete invitation test scenario
     pub struct InvitationTestScenario {
         pub app: TestApp,
         pub email_service: MockEmailService,
         pub inviter: UserFixture,
-        pub team: framecast_domain::entities::Team,
+        pub team: framecast_teams::Team,
         pub invitee_email: String,
     }
 
@@ -333,7 +333,7 @@ pub mod test_utils {
             role: InvitationRole,
         ) -> Result<Uuid, Box<dyn std::error::Error>> {
             // Create invitation in database (simulating API call)
-            let invitation = framecast_domain::entities::Invitation::new(
+            let invitation = framecast_teams::Invitation::new(
                 self.team.id,
                 self.inviter.user.id,
                 self.invitee_email.clone(),
@@ -361,7 +361,7 @@ pub mod test_utils {
         /// Create invitee user and get their auth fixture
         pub async fn create_invitee_user(&self) -> Result<UserFixture, Box<dyn std::error::Error>> {
             // Create creator user with the invitee email
-            let mut invitee_user = framecast_domain::entities::User::new(
+            let mut invitee_user = framecast_teams::User::new(
                 Uuid::new_v4(),
                 self.invitee_email.clone(),
                 Some("Invitee User".to_string()),

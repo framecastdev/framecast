@@ -3,7 +3,7 @@
 //! Tests all critical business rules from docs/spec/06_Invariants.md
 //! to ensure data integrity across the system
 
-use framecast_domain::entities::*;
+use framecast_teams::*;
 use chrono::Utc;
 use uuid::Uuid;
 

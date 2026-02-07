@@ -18,8 +18,7 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use framecast_api::routes;
-use framecast_domain::entities::InvitationRole;
+use framecast_teams::{routes, InvitationRole};
 
 use crate::common::{
     email_mock::{test_utils::InvitationTestScenario, MockEmailService},
@@ -37,7 +36,7 @@ fn invitation_role_to_str(role: &InvitationRole) -> &'static str {
 
 /// Create test router with all routes
 async fn create_test_router(app: &TestApp) -> Router {
-    routes::create_routes().with_state(app.state.clone())
+    routes().with_state(app.state.clone())
 }
 
 mod test_invite_member {
@@ -1617,7 +1616,7 @@ mod test_invitation_lifecycle_with_email {
         let router = create_test_router(&scenario.app).await;
 
         // Create expired invitation directly in database
-        let invitation = framecast_domain::entities::Invitation {
+        let invitation = framecast_teams::Invitation {
             id: Uuid::new_v4(),
             team_id: scenario.team.id,
             email: scenario.invitee_email.clone(),
