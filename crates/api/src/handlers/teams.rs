@@ -315,10 +315,7 @@ pub async fn update_team(
         })?;
 
     // Permission check: owner or admin can edit team settings
-    if !matches!(
-        membership.role,
-        MembershipRole::Owner | MembershipRole::Admin
-    ) {
+    if !membership.role.can_modify_team() {
         return Err(Error::Authorization(
             "Access denied: Must be owner or admin to update team".to_string(),
         ));
@@ -391,7 +388,7 @@ pub async fn delete_team(
         })?;
 
     // Permission check: only owners can delete teams
-    if membership.role != MembershipRole::Owner {
+    if !membership.role.is_owner() {
         return Err(Error::Authorization(
             "Access denied: Only team owners can delete teams".to_string(),
         ));

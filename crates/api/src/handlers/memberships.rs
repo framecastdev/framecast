@@ -175,7 +175,7 @@ pub async fn leave_team(
         .await
         .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
 
-    if membership.role == MembershipRole::Owner {
+    if membership.role.is_owner() {
         let owner_count = state
             .repos
             .memberships
@@ -270,10 +270,7 @@ pub async fn invite_member(
         })?;
 
     // Permission check: only owners and admins can invite
-    if !matches!(
-        membership.role,
-        MembershipRole::Owner | MembershipRole::Admin
-    ) {
+    if !membership.role.can_invite() {
         return Err(Error::Authorization(
             "Access denied: Must be owner or admin to invite members".to_string(),
         ));
@@ -563,10 +560,7 @@ pub async fn list_invitations(
             Error::Authorization("Access denied: Not a member of this team".to_string())
         })?;
 
-    if !matches!(
-        membership.role,
-        MembershipRole::Owner | MembershipRole::Admin
-    ) {
+    if !membership.role.can_admin() {
         return Err(Error::Authorization(
             "Access denied: Must be owner or admin to view invitations".to_string(),
         ));
@@ -610,10 +604,7 @@ pub async fn revoke_invitation(
             Error::Authorization("Access denied: Not a member of this team".to_string())
         })?;
 
-    if !matches!(
-        membership.role,
-        MembershipRole::Owner | MembershipRole::Admin
-    ) {
+    if !membership.role.can_admin() {
         return Err(Error::Authorization(
             "Access denied: Must be owner or admin to revoke invitations".to_string(),
         ));
@@ -672,10 +663,7 @@ pub async fn resend_invitation(
             Error::Authorization("Access denied: Not a member of this team".to_string())
         })?;
 
-    if !matches!(
-        membership.role,
-        MembershipRole::Owner | MembershipRole::Admin
-    ) {
+    if !membership.role.can_admin() {
         return Err(Error::Authorization(
             "Access denied: Must be owner or admin to resend invitations".to_string(),
         ));
@@ -774,10 +762,7 @@ pub async fn remove_member(
         })?;
 
     // Permission check: only owners and admins can remove members
-    if !matches!(
-        acting_membership.role,
-        MembershipRole::Owner | MembershipRole::Admin
-    ) {
+    if !acting_membership.role.can_admin() {
         return Err(Error::Authorization(
             "Access denied: Must be owner or admin to remove members".to_string(),
         ));
@@ -793,9 +778,7 @@ pub async fn remove_member(
         .ok_or_else(|| Error::NotFound("Member not found in this team".to_string()))?;
 
     // Business rule: Admins cannot remove owners
-    if acting_membership.role == MembershipRole::Admin
-        && target_membership.role == MembershipRole::Owner
-    {
+    if !acting_membership.role.is_owner() && target_membership.role == MembershipRole::Owner {
         return Err(Error::Authorization(
             "Admins cannot remove team owners".to_string(),
         ));
@@ -886,10 +869,7 @@ pub async fn update_member_role(
         })?;
 
     // Permission check: only owners and admins can update roles
-    if !matches!(
-        acting_membership.role,
-        MembershipRole::Owner | MembershipRole::Admin
-    ) {
+    if !acting_membership.role.can_admin() {
         return Err(Error::Authorization(
             "Access denied: Must be owner or admin to update member roles".to_string(),
         ));
