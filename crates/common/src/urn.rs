@@ -147,6 +147,7 @@ impl FromStr for Urn {
     }
 }
 
+#[mutants::skip] // Trivial conversion — no behavioral logic to test
 impl From<Urn> for String {
     fn from(urn: Urn) -> Self {
         urn.0

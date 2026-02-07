@@ -419,6 +419,26 @@ ci-test-e2e:
     cd tests/e2e && uv run pytest tests/ -m "real_services" -v --tb=short
 
 # ============================================================================
+# MUTATION TESTING
+# ============================================================================
+
+# Run mutation testing on domain + common crates
+mutants *args="":
+    cargo mutants --jobs 4 {{args}}
+
+# Run mutation testing on domain crate only (most valuable)
+mutants-domain *args="":
+    cargo mutants --jobs 4 -p framecast-domain {{args}}
+
+# Quick check — only test missed mutants from last run
+mutants-check *args="":
+    cargo mutants --jobs 4 --iterate {{args}}
+
+# CI mutation testing (uses --in-place for speed, outputs results)
+ci-mutants:
+    cargo mutants --jobs 2 --in-place -p framecast-domain -p framecast-common -- --test-threads=2
+
+# ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)
 # ============================================================================
 

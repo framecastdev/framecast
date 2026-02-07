@@ -134,6 +134,18 @@ git commit -m "some changes"
 5. Switch to new branch for next task
 6. Merge to main via PR (when ready for deployment)
 
+### Rule 11: Mutation-Test Critical Logic
+
+**YOU MUST** run `just mutants-domain` after adding or modifying business logic
+in `crates/domain/` or `crates/common/`. Fix surviving mutants by adding
+targeted test assertions — do NOT use `#[mutants::skip]` to silence legitimate gaps.
+
+Use `#[mutants::skip]` ONLY for:
+
+- Display/Debug impls (cosmetic output)
+- Trivial From/Default conversions
+- Functions where mutation is meaningless (logging, metrics)
+
 ### Compliance Check
 
 Before executing ANY command, ask yourself:
@@ -150,6 +162,7 @@ Before executing ANY command, ask yourself:
 - Am I following best practices? → Review SOLID, DRY, YAGNI principles
 - Did I break this into phases/tasks? → Plan before implementing
 - Am I working on main branch? → STOP, create feature branch
+- Did I modify domain/common logic? → Run `just mutants-domain`
 </law>
 
 ---
@@ -190,6 +203,11 @@ just lambda-watch             # Hot reload for local Lambda dev
 just deploy-local             # Deploy full stack to LocalStack
 just deploy-dev               # Deploy to AWS dev
 just deploy-prod              # Deploy to AWS production
+
+# Mutation Testing
+just mutants                  # Run mutation tests (domain + common)
+just mutants-domain           # Run mutation tests (domain only)
+just mutants-check            # Re-test only previously missed mutants
 
 # Infrastructure
 just infra-init               # Initialize OpenTofu
@@ -252,6 +270,10 @@ db   email/inngest/comfyui
 **Repository Pattern:** Database access via trait-based repositories in `db/` crate, injected into handlers.
 
 **State Machines:** Job/Project/Invitation states defined in `domain/src/state.rs` with explicit transitions.
+
+**Mutation Testing:** `cargo-mutants` validates test effectiveness on domain/common crates.
+Surviving mutants indicate tests that don't catch injected bugs — fix by adding assertions.
+Config in `.cargo/mutants.toml`. Results in `mutants.out/`.
 
 ---
 

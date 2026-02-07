@@ -137,6 +137,41 @@ jobs:
           path: target/lambda/lambda/bootstrap.zip
           retention-days: 5
 
+  mutation-tests:
+    name: Mutation Tests
+    needs: ci  # Only run after unit tests pass
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/framecastdev/framecast-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    env:
+      SQLX_OFFLINE: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci"
+
+      - name: Install cargo-mutants
+        run: cargo install --locked cargo-mutants
+
+      - name: Run mutation tests (domain + common)
+        run: just ci-mutants
+
+      - name: Upload mutation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-results
+          path: mutants.out/
+
   e2e-tests:
     name: E2E Tests
     runs-on: self-hosted
