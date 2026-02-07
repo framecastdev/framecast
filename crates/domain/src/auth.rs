@@ -219,7 +219,6 @@ impl PermissionChecker {
     pub fn can_remove_member(
         ctx: &AuthContext,
         team_id: uuid::Uuid,
-        _target_user_id: uuid::Uuid,
         target_role: MembershipRole,
     ) -> Result<()> {
         // Check basic admin permissions
@@ -235,9 +234,6 @@ impl PermissionChecker {
                 AuthError::InsufficientPermissions("Cannot remove team owner".to_string()).into(),
             );
         }
-
-        // INV-T2: "sole owner" check is enforced at the repository layer,
-        // which can query the actual owner count before allowing removal.
 
         Ok(())
     }
@@ -776,17 +772,11 @@ mod tests {
         let user = create_test_user(UserTier::Creator);
         let team = create_test_team();
         let team_id = team.id;
-        let target_user_id = Uuid::new_v4();
 
         // User is admin, target is owner
         let ctx = AuthContext::new(user, vec![(team, MembershipRole::Admin)], None);
 
-        let result = PermissionChecker::can_remove_member(
-            &ctx,
-            team_id,
-            target_user_id,
-            MembershipRole::Owner,
-        );
+        let result = PermissionChecker::can_remove_member(&ctx, team_id, MembershipRole::Owner);
         assert!(result.is_err(), "Admin should not be able to remove owner");
     }
 
@@ -797,17 +787,11 @@ mod tests {
         let user = create_test_user(UserTier::Creator);
         let team = create_test_team();
         let team_id = team.id;
-        let target_user_id = Uuid::new_v4();
 
         // User is owner, target is also owner
         let ctx = AuthContext::new(user, vec![(team, MembershipRole::Owner)], None);
 
-        let result = PermissionChecker::can_remove_member(
-            &ctx,
-            team_id,
-            target_user_id,
-            MembershipRole::Owner,
-        );
+        let result = PermissionChecker::can_remove_member(&ctx, team_id, MembershipRole::Owner);
         assert!(
             result.is_ok(),
             "Owner should be able to remove another owner"
@@ -820,76 +804,11 @@ mod tests {
         let user = create_test_user(UserTier::Creator);
         let team = create_test_team();
         let team_id = team.id;
-        let target_user_id = Uuid::new_v4();
 
         let ctx = AuthContext::new(user, vec![(team, MembershipRole::Admin)], None);
 
-        let result = PermissionChecker::can_remove_member(
-            &ctx,
-            team_id,
-            target_user_id,
-            MembershipRole::Member,
-        );
+        let result = PermissionChecker::can_remove_member(&ctx, team_id, MembershipRole::Member);
         assert!(result.is_ok(), "Admin should be able to remove a member");
-    }
-
-    // Owner self-removal: permission check passes — INV-T2 sole-owner guard
-    // is enforced at the repository layer, not here.
-    #[test]
-    fn test_can_remove_member_self_removal_owner() {
-        let user = create_test_user(UserTier::Creator);
-        let user_id = user.id;
-        let team = create_test_team();
-        let team_id = team.id;
-
-        // Owner removing themselves - currently allowed (deferred to repo layer)
-        let ctx = AuthContext::new(user, vec![(team, MembershipRole::Owner)], None);
-
-        let result = PermissionChecker::can_remove_member(
-            &ctx,
-            team_id,
-            user_id, // self
-            MembershipRole::Owner,
-        );
-        assert!(
-            result.is_ok(),
-            "Owner self-removal should pass permission check"
-        );
-    }
-
-    // Owner can remove another member
-    #[test]
-    fn test_can_remove_member_owner_removes_non_self_member() {
-        let user = create_test_user(UserTier::Creator);
-        let team = create_test_team();
-        let team_id = team.id;
-        let other_user_id = Uuid::new_v4();
-
-        let ctx = AuthContext::new(user, vec![(team, MembershipRole::Owner)], None);
-
-        let result = PermissionChecker::can_remove_member(
-            &ctx,
-            team_id,
-            other_user_id,
-            MembershipRole::Member,
-        );
-        assert!(result.is_ok());
-    }
-
-    // Owner removing self with non-owner target role
-    #[test]
-    fn test_can_remove_member_self_removal_non_owner_role() {
-        let user = create_test_user(UserTier::Creator);
-        let user_id = user.id;
-        let team = create_test_team();
-        let team_id = team.id;
-
-        let ctx = AuthContext::new(user, vec![(team, MembershipRole::Owner)], None);
-
-        // target is self but role is Member (not Owner)
-        let result =
-            PermissionChecker::can_remove_member(&ctx, team_id, user_id, MembershipRole::Member);
-        assert!(result.is_ok());
     }
 
     // Kills: crates/domain/src/auth.rs:254:9 replace can_change_member_role -> Result<()> with Ok(())
@@ -1245,16 +1164,10 @@ mod tests {
         let user = create_test_user(UserTier::Creator);
         let team = create_test_team();
         let team_id = team.id;
-        let target_user_id = Uuid::new_v4();
 
         let ctx = AuthContext::new(user, vec![(team, MembershipRole::Viewer)], None);
 
-        let result = PermissionChecker::can_remove_member(
-            &ctx,
-            team_id,
-            target_user_id,
-            MembershipRole::Member,
-        );
+        let result = PermissionChecker::can_remove_member(&ctx, team_id, MembershipRole::Member);
         assert!(
             result.is_err(),
             "Viewer should not be able to remove members"

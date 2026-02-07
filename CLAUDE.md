@@ -146,6 +146,21 @@ Use `#[mutants::skip]` ONLY for:
 - Trivial From/Default conversions
 - Functions where mutation is meaningless (logging, metrics)
 
+### Rule 12: No Placeholder Code
+
+**NEVER** add code "for future use." This includes:
+
+- Function parameters not used by the current implementation
+- Empty function bodies, if-blocks, or match arms with only comments
+- Stub files containing only comments ("will be expanded in the next phase")
+- Feature-flag-style dead code paths
+
+If logic is deferred to another layer (e.g., repository), do NOT scaffold it
+in the current layer. Add it when it's actually implemented.
+
+YAGNI: code that does nothing today is noise — it creates unused API surface,
+confuses mutation testing, and misleads readers about what the code actually does.
+
 ### Compliance Check
 
 Before executing ANY command, ask yourself:
@@ -163,6 +178,7 @@ Before executing ANY command, ask yourself:
 - Did I break this into phases/tasks? → Plan before implementing
 - Am I working on main branch? → STOP, create feature branch
 - Did I modify domain/common logic? → Run `just mutants-domain`
+- Am I adding placeholder code? → STOP, YAGNI — add it when it's needed
 </law>
 
 ---
