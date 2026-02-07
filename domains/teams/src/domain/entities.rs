@@ -231,13 +231,27 @@ impl Team {
 
     /// Generate slug from name with random suffix if needed
     fn generate_slug(name: &str) -> Result<String> {
-        let base = name
+        let raw = name
             .to_lowercase()
             .chars()
             .map(|c| if c.is_alphanumeric() { c } else { '-' })
-            .collect::<String>()
-            .trim_matches('-')
-            .to_string();
+            .collect::<String>();
+
+        // Collapse consecutive hyphens and trim leading/trailing
+        let mut base = String::with_capacity(raw.len());
+        let mut prev_hyphen = false;
+        for ch in raw.chars() {
+            if ch == '-' {
+                if !prev_hyphen {
+                    base.push(ch);
+                }
+                prev_hyphen = true;
+            } else {
+                base.push(ch);
+                prev_hyphen = false;
+            }
+        }
+        let base = base.trim_matches('-').to_string();
 
         if base.is_empty() {
             return Err(Error::Validation(
@@ -830,6 +844,11 @@ mod tests {
 
         let team2 = Team::new("Special@Characters#Here".to_string(), None).unwrap();
         assert!(team2.slug.starts_with("special-characters-here-"));
+
+        // HTML in name: consecutive special chars collapse to single hyphen
+        let team3 = Team::new("<b>Bold Team</b>".to_string(), None).unwrap();
+        assert!(team3.slug.starts_with("b-bold-team-b-"));
+        assert!(!team3.slug.contains("--"));
     }
 
     #[test]
