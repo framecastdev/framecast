@@ -14,11 +14,12 @@ use uuid::Uuid;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use framecast_common::{Error, Result, Urn};
 
+pub use crate::state::InvitationState;
 use crate::state::{
-    InvitationEvent, InvitationGuardContext, InvitationState as StateMachineInvitationState,
-    InvitationStateMachine, JobEvent, JobState, JobStateMachine, ProjectEvent, ProjectState,
-    ProjectStateMachine, StateError, WebhookDeliveryEvent, WebhookDeliveryGuardContext,
-    WebhookDeliveryState, WebhookDeliveryStateMachine,
+    InvitationEvent, InvitationGuardContext, InvitationStateMachine, JobEvent, JobState,
+    JobStateMachine, ProjectEvent, ProjectState, ProjectStateMachine, StateError,
+    WebhookDeliveryEvent, WebhookDeliveryGuardContext, WebhookDeliveryState,
+    WebhookDeliveryStateMachine,
 };
 
 /// Maximum number of team memberships a single user can hold (INV-T8)
@@ -314,7 +315,7 @@ impl MembershipRole {
 
     /// Check if this role can modify team settings
     pub fn can_modify_team(&self) -> bool {
-        self.is_owner()
+        self.can_admin()
     }
 }
 
@@ -391,55 +392,6 @@ impl Membership {
     pub fn validate(&self) -> Result<()> {
         // Basic reference validation is handled by database constraints
         Ok(())
-    }
-}
-
-/// Invitation states (derived from timestamps)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum InvitationState {
-    Pending,
-    Accepted,
-    Declined,
-    Revoked,
-    Expired,
-}
-
-impl InvitationState {
-    /// Check if this is a terminal state
-    pub fn is_terminal(&self) -> bool {
-        self.to_state().is_terminal()
-    }
-
-    /// Convert to state machine state
-    pub fn to_state(&self) -> StateMachineInvitationState {
-        match self {
-            InvitationState::Pending => StateMachineInvitationState::Pending,
-            InvitationState::Accepted => StateMachineInvitationState::Accepted,
-            InvitationState::Declined => StateMachineInvitationState::Declined,
-            InvitationState::Revoked => StateMachineInvitationState::Revoked,
-            InvitationState::Expired => StateMachineInvitationState::Expired,
-        }
-    }
-
-    /// Create from state machine state
-    pub fn from_state(state: StateMachineInvitationState) -> Self {
-        match state {
-            StateMachineInvitationState::Pending => InvitationState::Pending,
-            StateMachineInvitationState::Accepted => InvitationState::Accepted,
-            StateMachineInvitationState::Declined => InvitationState::Declined,
-            StateMachineInvitationState::Revoked => InvitationState::Revoked,
-            StateMachineInvitationState::Expired => InvitationState::Expired,
-        }
-    }
-
-    /// Get valid next states from current state
-    pub fn valid_transitions(&self) -> Vec<InvitationState> {
-        self.to_state()
-            .valid_transitions()
-            .iter()
-            .map(|s| InvitationState::from_state(*s))
-            .collect()
     }
 }
 
@@ -541,8 +493,8 @@ impl Invitation {
     }
 
     /// Apply a state transition using the state machine
-    fn apply_transition(&self, event: InvitationEvent) -> Result<StateMachineInvitationState> {
-        let current_state = self.state().to_state();
+    fn apply_transition(&self, event: InvitationEvent) -> Result<InvitationState> {
+        let current_state = self.state();
         let context = InvitationGuardContext {
             is_expired: self.is_expired(),
         };
@@ -566,7 +518,7 @@ impl Invitation {
         let context = InvitationGuardContext {
             is_expired: self.is_expired(),
         };
-        InvitationStateMachine::can_transition(self.state().to_state(), event, Some(&context))
+        InvitationStateMachine::can_transition(self.state(), event, Some(&context))
     }
 
     /// Validate invariants per spec
@@ -2073,7 +2025,9 @@ mod tests {
         assert!(!MembershipRole::Viewer.can_admin());
 
         assert!(MembershipRole::Owner.can_modify_team());
-        assert!(!MembershipRole::Admin.can_modify_team());
+        assert!(MembershipRole::Admin.can_modify_team());
+        assert!(!MembershipRole::Member.can_modify_team());
+        assert!(!MembershipRole::Viewer.can_modify_team());
     }
 
     #[test]

@@ -7,6 +7,7 @@
 //! - Guard conditions for transitions
 //! - Terminal states
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Errors that can occur during state transitions
@@ -258,7 +259,8 @@ impl ProjectStateMachine {
 
 /// Invitation states as defined in spec section 6.4
 /// Note: This is a derived/computed state, not stored directly
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum InvitationState {
     Pending,
     Accepted,
