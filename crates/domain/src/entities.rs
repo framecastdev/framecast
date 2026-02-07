@@ -772,6 +772,7 @@ pub enum ProjectStatus {
 
 impl ProjectStatus {
     /// Check if this is a terminal state (Project has no terminal states)
+    #[mutants::skip] // Delegates to ProjectState::is_terminal() which always returns false
     pub fn is_terminal(&self) -> bool {
         self.to_state().is_terminal()
     }
@@ -3478,5 +3479,1748 @@ mod tests {
     fn test_slug_path_traversal_rejected() {
         assert!(Team::validate_slug("../etc/passwd").is_err());
         assert!(Team::validate_slug("..%2f..%2f").is_err());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: User::validate
+    // ========================================================================
+
+    #[test]
+    fn test_user_validate_credits_boundary() {
+        // Kill: replace < with > (credits < 0)
+        let now = Utc::now();
+        let mut user = User {
+            id: Uuid::new_v4(),
+            email: "test@example.com".to_string(),
+            name: None,
+            avatar_url: None,
+            tier: UserTier::Starter,
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            upgraded_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        // credits = 0 should be valid
+        assert!(user.validate().is_ok());
+        // credits = -1 should be invalid
+        user.credits = -1;
+        assert!(user.validate().is_err());
+        // credits = 1 should be valid
+        user.credits = 1;
+        assert!(user.validate().is_ok());
+    }
+
+    #[test]
+    fn test_user_validate_storage_boundary() {
+        // Kill: replace < with > (ephemeral_storage_bytes < 0)
+        let now = Utc::now();
+        let mut user = User {
+            id: Uuid::new_v4(),
+            email: "test@example.com".to_string(),
+            name: None,
+            avatar_url: None,
+            tier: UserTier::Starter,
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            upgraded_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(user.validate().is_ok());
+        user.ephemeral_storage_bytes = -1;
+        assert!(user.validate().is_err());
+    }
+
+    #[test]
+    fn test_user_validate_email_or_conditions() {
+        // Kill: replace || with && in email check
+        // Test email without '@' but within length limit -> should fail
+        let now = Utc::now();
+        let mut user = User {
+            id: Uuid::new_v4(),
+            email: "noemailatall".to_string(),
+            name: None,
+            avatar_url: None,
+            tier: UserTier::Starter,
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            upgraded_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(user.validate().is_err());
+
+        // Test email with '@' but too long -> should fail
+        user.email = format!("{}@example.com", "a".repeat(250));
+        assert!(user.email.len() > 255);
+        assert!(user.validate().is_err());
+
+        // Test email with '@' and within length limit -> should pass
+        user.email = "ok@example.com".to_string();
+        assert!(user.validate().is_ok());
+    }
+
+    #[test]
+    fn test_user_validate_email_len_boundary() {
+        // Kill: replace > with == and >= (email.len() > 255)
+        let now = Utc::now();
+        let mut user = User {
+            id: Uuid::new_v4(),
+            email: "ok@example.com".to_string(),
+            name: None,
+            avatar_url: None,
+            tier: UserTier::Starter,
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            upgraded_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+
+        // "@example.com" is 12 chars, so local_part needs to be 243 for 255 total
+        // 255-char email with '@' should be valid
+        let local_part = "a".repeat(243);
+        user.email = format!("{}@example.com", local_part);
+        assert_eq!(user.email.len(), 255);
+        assert!(user.validate().is_ok());
+
+        // 256-char email should be invalid
+        let local_part = "a".repeat(244);
+        user.email = format!("{}@example.com", local_part);
+        assert_eq!(user.email.len(), 256);
+        assert!(user.validate().is_err());
+    }
+
+    #[test]
+    fn test_user_validate_name_or_conditions() {
+        // Kill: replace || with && in name check
+        let now = Utc::now();
+        let mut user = User {
+            id: Uuid::new_v4(),
+            email: "test@example.com".to_string(),
+            name: Some("".to_string()),
+            avatar_url: None,
+            tier: UserTier::Starter,
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            upgraded_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        // Empty name should fail (empty but not > 100)
+        assert!(user.validate().is_err());
+
+        // Name > 100 but not empty should fail
+        user.name = Some("a".repeat(101));
+        assert!(user.validate().is_err());
+    }
+
+    #[test]
+    fn test_user_validate_name_len_boundary() {
+        // Kill: replace > with ==, <, >= (name.len() > 100)
+        let now = Utc::now();
+        let mut user = User {
+            id: Uuid::new_v4(),
+            email: "test@example.com".to_string(),
+            name: Some("a".repeat(100)),
+            avatar_url: None,
+            tier: UserTier::Starter,
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            upgraded_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        // 100-char name should be valid
+        assert!(user.validate().is_ok());
+
+        // 101-char name should be invalid
+        user.name = Some("a".repeat(101));
+        assert!(user.validate().is_err());
+
+        // 99-char name should be valid
+        user.name = Some("a".repeat(99));
+        assert!(user.validate().is_ok());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: Team::validate
+    // ========================================================================
+
+    #[test]
+    fn test_team_validate_returns_err_on_invalid() {
+        // Kill: replace Result with Ok(()) (entire validate)
+        let now = Utc::now();
+        let team = Team {
+            id: Uuid::new_v4(),
+            name: "".to_string(), // invalid - empty name
+            slug: "valid-slug".to_string(),
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            settings: Json(HashMap::new()),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(team.validate().is_err());
+    }
+
+    #[test]
+    fn test_team_validate_name_or_conditions() {
+        // Kill: replace || with && (name check)
+        let now = Utc::now();
+        // Empty name but not > 100 -> should fail
+        let team1 = Team {
+            id: Uuid::new_v4(),
+            name: "".to_string(),
+            slug: "valid-slug".to_string(),
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            settings: Json(HashMap::new()),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(team1.validate().is_err());
+
+        // Name > 100 but not empty -> should fail
+        let team2 = Team {
+            id: Uuid::new_v4(),
+            name: "a".repeat(101),
+            slug: "valid-slug".to_string(),
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            settings: Json(HashMap::new()),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(team2.validate().is_err());
+    }
+
+    #[test]
+    fn test_team_validate_name_len_boundary() {
+        // Kill: replace > with ==, <, >= (name.len() > 100)
+        let now = Utc::now();
+        // 100-char name should be valid
+        let team100 = Team {
+            id: Uuid::new_v4(),
+            name: "a".repeat(100),
+            slug: "valid-slug".to_string(),
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            settings: Json(HashMap::new()),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(team100.validate().is_ok());
+
+        // 101-char name should be invalid
+        let team101 = Team {
+            id: Uuid::new_v4(),
+            name: "a".repeat(101),
+            slug: "valid-slug".to_string(),
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            settings: Json(HashMap::new()),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(team101.validate().is_err());
+
+        // 99-char name should be valid
+        let team99 = Team {
+            id: Uuid::new_v4(),
+            name: "a".repeat(99),
+            slug: "valid-slug".to_string(),
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            settings: Json(HashMap::new()),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(team99.validate().is_ok());
+    }
+
+    #[test]
+    fn test_team_validate_credits_boundary() {
+        // Kill: replace < with ==, >, <= (credits < 0)
+        let now = Utc::now();
+        let mut team = Team {
+            id: Uuid::new_v4(),
+            name: "Valid Team".to_string(),
+            slug: "valid-team".to_string(),
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            settings: Json(HashMap::new()),
+            created_at: now,
+            updated_at: now,
+        };
+        // credits = 0 should be valid
+        assert!(team.validate().is_ok());
+        // credits = -1 should be invalid
+        team.credits = -1;
+        assert!(team.validate().is_err());
+        // credits = 1 should be valid
+        team.credits = 1;
+        assert!(team.validate().is_ok());
+    }
+
+    #[test]
+    fn test_team_validate_storage_boundary() {
+        // Kill: replace < with ==, >, <= (storage < 0)
+        let now = Utc::now();
+        let mut team = Team {
+            id: Uuid::new_v4(),
+            name: "Valid Team".to_string(),
+            slug: "valid-team".to_string(),
+            credits: 0,
+            ephemeral_storage_bytes: 0,
+            settings: Json(HashMap::new()),
+            created_at: now,
+            updated_at: now,
+        };
+        // storage = 0 should be valid
+        assert!(team.validate().is_ok());
+        // storage = -1 should be invalid
+        team.ephemeral_storage_bytes = -1;
+        assert!(team.validate().is_err());
+        // storage = 1 should be valid
+        team.ephemeral_storage_bytes = 1;
+        assert!(team.validate().is_ok());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: MembershipRole::can_invite
+    // ========================================================================
+
+    #[test]
+    fn test_membership_role_can_invite_true_false() {
+        // Kill: replace -> bool with true and replace -> bool with false
+        assert!(MembershipRole::Owner.can_invite());
+        assert!(MembershipRole::Admin.can_invite());
+        assert!(!MembershipRole::Member.can_invite());
+        assert!(!MembershipRole::Viewer.can_invite());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: InvitationRole::to_membership_role
+    // ========================================================================
+
+    #[test]
+    fn test_invitation_role_to_membership_role_all_variants() {
+        // Kill: replace -> MembershipRole with Default::default()
+        // Default for MembershipRole is Member, so test Admin and Viewer specifically
+        assert_eq!(
+            InvitationRole::Admin.to_membership_role(),
+            MembershipRole::Admin
+        );
+        assert_eq!(
+            InvitationRole::Member.to_membership_role(),
+            MembershipRole::Member
+        );
+        assert_eq!(
+            InvitationRole::Viewer.to_membership_role(),
+            MembershipRole::Viewer
+        );
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: InvitationState::valid_transitions
+    // ========================================================================
+
+    #[test]
+    fn test_invitation_state_valid_transitions_not_empty() {
+        // Kill: replace -> Vec with vec![]
+        let transitions = InvitationState::Pending.valid_transitions();
+        assert!(!transitions.is_empty());
+        assert!(transitions.contains(&InvitationState::Accepted));
+        assert!(transitions.contains(&InvitationState::Declined));
+        assert!(transitions.contains(&InvitationState::Revoked));
+
+        // Terminal states should have empty transitions
+        assert!(InvitationState::Accepted.valid_transitions().is_empty());
+        assert!(InvitationState::Declined.valid_transitions().is_empty());
+        assert!(InvitationState::Revoked.valid_transitions().is_empty());
+        assert!(InvitationState::Expired.valid_transitions().is_empty());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: Invitation
+    // ========================================================================
+
+    #[test]
+    fn test_invitation_state_expired_boundary() {
+        // Kill: replace < with ==, <= (expires_at < Utc::now() in state())
+        let now = Utc::now();
+        let mut invitation = Invitation {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            invited_by: Uuid::new_v4(),
+            email: "test@example.com".to_string(),
+            role: InvitationRole::Member,
+            token: "token123".to_string(),
+            expires_at: now - chrono::Duration::seconds(10),
+            accepted_at: None,
+            declined_at: None,
+            revoked_at: None,
+            created_at: now - chrono::Duration::days(8),
+        };
+        // Expired invitation should be in Expired state
+        assert_eq!(invitation.state(), InvitationState::Expired);
+
+        // Future expiry should be Pending
+        invitation.expires_at = now + chrono::Duration::days(7);
+        assert_eq!(invitation.state(), InvitationState::Pending);
+    }
+
+    #[test]
+    fn test_invitation_is_expired_method() {
+        // Kill: replace is_expired with false; replace < with ==, <=
+        let now = Utc::now();
+        let mut invitation = Invitation {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            invited_by: Uuid::new_v4(),
+            email: "test@example.com".to_string(),
+            role: InvitationRole::Member,
+            token: "token123".to_string(),
+            expires_at: now - chrono::Duration::seconds(10),
+            accepted_at: None,
+            declined_at: None,
+            revoked_at: None,
+            created_at: now - chrono::Duration::days(8),
+        };
+        assert!(invitation.is_expired());
+
+        invitation.expires_at = now + chrono::Duration::days(7);
+        assert!(!invitation.is_expired());
+    }
+
+    #[test]
+    fn test_invitation_can_transition_true_false() {
+        // Kill: replace can_transition with true and false
+        let now = Utc::now();
+        let invitation = Invitation {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            invited_by: Uuid::new_v4(),
+            email: "test@example.com".to_string(),
+            role: InvitationRole::Member,
+            token: "token123".to_string(),
+            expires_at: now + chrono::Duration::days(7),
+            accepted_at: None,
+            declined_at: None,
+            revoked_at: None,
+            created_at: now,
+        };
+        // Pending invitation can accept
+        assert!(invitation.can_transition(&InvitationEvent::Accept));
+        // Pending invitation can decline
+        assert!(invitation.can_transition(&InvitationEvent::Decline));
+
+        // Accepted invitation cannot do anything
+        let accepted = Invitation {
+            accepted_at: Some(now),
+            ..invitation.clone()
+        };
+        assert!(!accepted.can_transition(&InvitationEvent::Accept));
+        assert!(!accepted.can_transition(&InvitationEvent::Decline));
+        assert!(!accepted.can_transition(&InvitationEvent::Revoke));
+    }
+
+    #[test]
+    fn test_invitation_validate_email_or_conditions() {
+        // Kill: replace || with &&, delete ! (validate email)
+        let now = Utc::now();
+        // Email without '@' -> should fail
+        let inv1 = Invitation {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            invited_by: Uuid::new_v4(),
+            email: "noemail".to_string(),
+            role: InvitationRole::Member,
+            token: "token123".to_string(),
+            expires_at: now + chrono::Duration::days(7),
+            accepted_at: None,
+            declined_at: None,
+            revoked_at: None,
+            created_at: now,
+        };
+        assert!(inv1.validate().is_err());
+
+        // Empty email -> should fail
+        let inv2 = Invitation {
+            email: "".to_string(),
+            ..inv1.clone()
+        };
+        assert!(inv2.validate().is_err());
+
+        // Valid email -> should pass
+        let inv3 = Invitation {
+            email: "test@example.com".to_string(),
+            ..inv1.clone()
+        };
+        assert!(inv3.validate().is_ok());
+    }
+
+    #[test]
+    fn test_invitation_validate_terminal_count_boundary() {
+        // Kill: replace > with >= (terminal_count > 1)
+        let now = Utc::now();
+        // Exactly 1 terminal timestamp is valid
+        let inv_one = Invitation {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            invited_by: Uuid::new_v4(),
+            email: "test@example.com".to_string(),
+            role: InvitationRole::Member,
+            token: "token123".to_string(),
+            expires_at: now + chrono::Duration::days(7),
+            accepted_at: Some(now),
+            declined_at: None,
+            revoked_at: None,
+            created_at: now,
+        };
+        assert!(inv_one.validate().is_ok());
+
+        // 2 terminal timestamps is invalid
+        let inv_two = Invitation {
+            accepted_at: Some(now),
+            declined_at: Some(now),
+            ..inv_one.clone()
+        };
+        assert!(inv_two.validate().is_err());
+    }
+
+    #[test]
+    fn test_invitation_validate_time_boundary() {
+        // Kill: replace >= with < (created_at >= expires_at)
+        let now = Utc::now();
+        // created_at == expires_at should fail
+        let inv_eq = Invitation {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            invited_by: Uuid::new_v4(),
+            email: "test@example.com".to_string(),
+            role: InvitationRole::Member,
+            token: "token123".to_string(),
+            expires_at: now,
+            accepted_at: None,
+            declined_at: None,
+            revoked_at: None,
+            created_at: now,
+        };
+        assert!(inv_eq.validate().is_err());
+
+        // created_at < expires_at should pass
+        let inv_ok = Invitation {
+            expires_at: now + chrono::Duration::days(7),
+            ..inv_eq.clone()
+        };
+        assert!(inv_ok.validate().is_ok());
+
+        // created_at > expires_at should fail
+        let inv_bad = Invitation {
+            expires_at: now - chrono::Duration::days(1),
+            ..inv_eq.clone()
+        };
+        assert!(inv_bad.validate().is_err());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: ApiKey
+    // ========================================================================
+
+    #[test]
+    fn test_api_key_is_valid_expires_boundary() {
+        // Kill: replace < with ==, >, <= (is_valid expires check)
+        let user_id = Uuid::new_v4();
+        let owner = Urn::user(user_id);
+        let now = Utc::now();
+
+        let mut api_key = ApiKey {
+            id: Uuid::new_v4(),
+            user_id,
+            owner: owner.to_string(),
+            name: "Test".to_string(),
+            key_prefix: "sk_live_".to_string(),
+            key_hash: "abcd:ef01".to_string(),
+            scopes: Json(vec!["*".to_string()]),
+            last_used_at: None,
+            expires_at: Some(now - chrono::Duration::seconds(10)),
+            revoked_at: None,
+            created_at: now,
+        };
+        // Expired key should be invalid
+        assert!(!api_key.is_valid());
+
+        // Future expiry should be valid
+        api_key.expires_at = Some(now + chrono::Duration::days(1));
+        assert!(api_key.is_valid());
+
+        // No expiry should be valid
+        api_key.expires_at = None;
+        assert!(api_key.is_valid());
+    }
+
+    #[test]
+    fn test_api_key_validate_returns_err_on_invalid() {
+        // Kill: replace validate with Ok(())
+        let user_id = Uuid::new_v4();
+        let api_key = ApiKey {
+            id: Uuid::new_v4(),
+            user_id,
+            owner: Urn::user(user_id).to_string(),
+            name: "a".repeat(101),
+            key_prefix: "sk_live_".to_string(),
+            key_hash: "abcd:ef01".to_string(),
+            scopes: Json(vec!["*".to_string()]),
+            last_used_at: None,
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+        };
+        assert!(api_key.validate().is_err());
+    }
+
+    #[test]
+    fn test_api_key_validate_name_len_boundary() {
+        // Kill: replace > with ==, >= (name len)
+        let user_id = Uuid::new_v4();
+        let owner = Urn::user(user_id);
+
+        let key100 = ApiKey {
+            id: Uuid::new_v4(),
+            user_id,
+            owner: owner.to_string(),
+            name: "a".repeat(100),
+            key_prefix: "sk_live_".to_string(),
+            key_hash: "abcd:ef01".to_string(),
+            scopes: Json(vec!["*".to_string()]),
+            last_used_at: None,
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+        };
+        assert!(key100.validate().is_ok());
+
+        let key101 = ApiKey {
+            name: "a".repeat(101),
+            ..key100.clone()
+        };
+        assert!(key101.validate().is_err());
+
+        let key99 = ApiKey {
+            name: "a".repeat(99),
+            ..key100.clone()
+        };
+        assert!(key99.validate().is_ok());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: ProjectStatus
+    // ========================================================================
+
+    #[test]
+    fn test_project_status_is_terminal_true_false() {
+        // Kill: replace is_terminal with true and false
+        // Project has no terminal states per spec
+        assert!(!ProjectStatus::Draft.is_terminal());
+        assert!(!ProjectStatus::Rendering.is_terminal());
+        assert!(!ProjectStatus::Completed.is_terminal());
+        assert!(!ProjectStatus::Archived.is_terminal());
+    }
+
+    #[test]
+    fn test_project_status_from_state_all_variants() {
+        // Kill: replace from_state with Default::default()
+        // Default is Draft, so test non-Draft variants
+        assert_eq!(
+            ProjectStatus::from_state(ProjectState::Rendering),
+            ProjectStatus::Rendering
+        );
+        assert_eq!(
+            ProjectStatus::from_state(ProjectState::Completed),
+            ProjectStatus::Completed
+        );
+        assert_eq!(
+            ProjectStatus::from_state(ProjectState::Archived),
+            ProjectStatus::Archived
+        );
+        assert_eq!(
+            ProjectStatus::from_state(ProjectState::Draft),
+            ProjectStatus::Draft
+        );
+    }
+
+    #[test]
+    fn test_project_status_valid_transitions_not_empty() {
+        // Kill: replace valid_transitions with vec![] and vec![Default::default()]
+        let draft_transitions = ProjectStatus::Draft.valid_transitions();
+        assert!(!draft_transitions.is_empty());
+        assert!(draft_transitions.contains(&ProjectStatus::Rendering));
+        assert!(draft_transitions.contains(&ProjectStatus::Archived));
+
+        let rendering_transitions = ProjectStatus::Rendering.valid_transitions();
+        assert!(!rendering_transitions.is_empty());
+        assert!(rendering_transitions.contains(&ProjectStatus::Completed));
+
+        let completed_transitions = ProjectStatus::Completed.valid_transitions();
+        assert!(!completed_transitions.is_empty());
+        assert!(completed_transitions.contains(&ProjectStatus::Archived));
+
+        let archived_transitions = ProjectStatus::Archived.valid_transitions();
+        assert!(!archived_transitions.is_empty());
+        assert!(archived_transitions.contains(&ProjectStatus::Draft));
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: Project
+    // ========================================================================
+
+    #[test]
+    fn test_project_validate_returns_err_on_invalid() {
+        // Kill: replace validate with Ok(())
+        let now = Utc::now();
+        let project = Project {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            name: "a".repeat(201),
+            status: ProjectStatus::Draft,
+            spec: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(project.validate().is_err());
+    }
+
+    #[test]
+    fn test_project_validate_name_len_boundary() {
+        // Kill: replace > with ==, <, >= (name len)
+        let now = Utc::now();
+        let mut project = Project {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            name: "a".repeat(200),
+            status: ProjectStatus::Draft,
+            spec: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        // 200 chars should be valid
+        assert!(project.validate().is_ok());
+        // 201 chars should be invalid
+        project.name = "a".repeat(201);
+        assert!(project.validate().is_err());
+        // 199 chars should be valid
+        project.name = "a".repeat(199);
+        assert!(project.validate().is_ok());
+    }
+
+    #[test]
+    fn test_project_start_render_changes_status() {
+        // Kill: replace start_render with Ok(())
+        let now = Utc::now();
+        let mut project = Project {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            name: "Test".to_string(),
+            status: ProjectStatus::Draft,
+            spec: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        project.start_render().unwrap();
+        assert_eq!(project.status, ProjectStatus::Rendering);
+    }
+
+    #[test]
+    fn test_project_on_job_completed_changes_status() {
+        // Kill: replace on_job_completed with Ok(())
+        let now = Utc::now();
+        let mut project = Project {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            name: "Test".to_string(),
+            status: ProjectStatus::Rendering,
+            spec: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        project.on_job_completed().unwrap();
+        assert_eq!(project.status, ProjectStatus::Completed);
+    }
+
+    #[test]
+    fn test_project_on_job_failed_changes_status() {
+        // Kill: replace on_job_failed with Ok(())
+        let now = Utc::now();
+        let mut project = Project {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            name: "Test".to_string(),
+            status: ProjectStatus::Rendering,
+            spec: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        project.on_job_failed().unwrap();
+        assert_eq!(project.status, ProjectStatus::Draft);
+    }
+
+    #[test]
+    fn test_project_on_job_canceled_changes_status() {
+        // Kill: replace on_job_canceled with Ok(())
+        let now = Utc::now();
+        let mut project = Project {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            name: "Test".to_string(),
+            status: ProjectStatus::Rendering,
+            spec: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        project.on_job_canceled().unwrap();
+        assert_eq!(project.status, ProjectStatus::Draft);
+    }
+
+    #[test]
+    fn test_project_archive_changes_status() {
+        // Kill: replace archive with Ok(())
+        let now = Utc::now();
+        let mut project = Project {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            name: "Test".to_string(),
+            status: ProjectStatus::Draft,
+            spec: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        project.archive().unwrap();
+        assert_eq!(project.status, ProjectStatus::Archived);
+    }
+
+    #[test]
+    fn test_project_unarchive_changes_status() {
+        // Kill: replace unarchive with Ok(())
+        let now = Utc::now();
+        let mut project = Project {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            name: "Test".to_string(),
+            status: ProjectStatus::Archived,
+            spec: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        project.unarchive().unwrap();
+        assert_eq!(project.status, ProjectStatus::Draft);
+    }
+
+    #[test]
+    fn test_project_can_transition_true_false() {
+        // Kill: replace can_transition with true and false
+        let now = Utc::now();
+        let project = Project {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            name: "Test".to_string(),
+            status: ProjectStatus::Draft,
+            spec: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        // Draft can render
+        assert!(project.can_transition(&ProjectEvent::Render));
+        // Draft cannot unarchive
+        assert!(!project.can_transition(&ProjectEvent::Unarchive));
+        // Draft cannot complete a job
+        assert!(!project.can_transition(&ProjectEvent::JobCompleted));
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: JobStatus::valid_transitions
+    // ========================================================================
+
+    #[test]
+    fn test_job_status_valid_transitions_not_empty() {
+        // Kill: replace with vec![] and vec![Default::default()]
+        let queued_transitions = JobStatus::Queued.valid_transitions();
+        assert!(!queued_transitions.is_empty());
+        assert!(queued_transitions.contains(&JobStatus::Processing));
+        assert!(queued_transitions.contains(&JobStatus::Canceled));
+
+        let processing_transitions = JobStatus::Processing.valid_transitions();
+        assert!(!processing_transitions.is_empty());
+        assert!(processing_transitions.contains(&JobStatus::Completed));
+        assert!(processing_transitions.contains(&JobStatus::Failed));
+        assert!(processing_transitions.contains(&JobStatus::Canceled));
+
+        // Terminal states have no transitions
+        assert!(JobStatus::Completed.valid_transitions().is_empty());
+        assert!(JobStatus::Failed.valid_transitions().is_empty());
+        assert!(JobStatus::Canceled.valid_transitions().is_empty());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: Job
+    // ========================================================================
+
+    #[test]
+    fn test_job_is_ephemeral_with_project() {
+        // Kill: replace is_ephemeral with true
+        let user_id = Uuid::new_v4();
+        let team_id = Uuid::new_v4();
+        let owner = Urn::team(team_id);
+        let project_id = Some(Uuid::new_v4());
+        let job = Job::new(owner, user_id, project_id, json!({}), 100, None).unwrap();
+        assert!(!job.is_ephemeral());
+
+        // Without project
+        let owner2 = Urn::user(user_id);
+        let job2 = Job::new(owner2, user_id, None, json!({}), 100, None).unwrap();
+        assert!(job2.is_ephemeral());
+    }
+
+    #[test]
+    fn test_job_net_credits_calculation() {
+        // Kill: replace net_credits with 0, 1, -1; replace - with +, /
+        let user_id = Uuid::new_v4();
+        let owner = Urn::user(user_id);
+        let mut job = Job::new(owner, user_id, None, json!({}), 100, None).unwrap();
+        assert_eq!(job.net_credits(), 100); // 100 - 0
+
+        job.credits_refunded = 30;
+        assert_eq!(job.net_credits(), 70); // 100 - 30
+
+        job.credits_refunded = 100;
+        assert_eq!(job.net_credits(), 0); // 100 - 100
+
+        // Use specific values to detect + vs - mutation
+        job.credits_charged = 50;
+        job.credits_refunded = 20;
+        assert_eq!(job.net_credits(), 30); // 50 - 20, NOT 50 + 20 = 70
+    }
+
+    #[test]
+    fn test_job_can_transition_true_false() {
+        // Kill: replace can_transition with true and false
+        let user_id = Uuid::new_v4();
+        let owner = Urn::user(user_id);
+        let job = Job::new(owner, user_id, None, json!({}), 100, None).unwrap();
+        // Queued can start
+        assert!(job.can_transition(&JobEvent::WorkerPicksUp));
+        // Queued cannot complete
+        assert!(!job.can_transition(&JobEvent::Success));
+    }
+
+    #[test]
+    fn test_job_validate_refunded_gt_charged() {
+        // Kill: replace > with >= (refunded > charged)
+        let user_id = Uuid::new_v4();
+        let owner = Urn::user(user_id);
+        let mut job = Job::new(owner, user_id, None, json!({}), 100, None).unwrap();
+
+        // refunded == charged should be valid
+        job.credits_refunded = 100;
+        assert!(job.validate().is_ok());
+
+        // refunded > charged should be invalid
+        job.credits_refunded = 101;
+        assert!(job.validate().is_err());
+    }
+
+    #[test]
+    fn test_job_validate_negative_credits_or_conditions() {
+        // Kill: replace || with &&; replace < with > for refunded and charged
+        let user_id = Uuid::new_v4();
+        let owner = Urn::user(user_id);
+        let now = Utc::now();
+
+        // Negative refunded only (not negative charged) -> should fail
+        let job1 = Job {
+            id: Uuid::new_v4(),
+            owner: owner.to_string(),
+            triggered_by: user_id,
+            project_id: None,
+            status: JobStatus::Queued,
+            spec_snapshot: Json(json!({})),
+            options: Json(json!({})),
+            progress: Json(json!({})),
+            output: None,
+            output_size_bytes: None,
+            error: None,
+            credits_charged: 100,
+            failure_type: None,
+            credits_refunded: -1,
+            idempotency_key: None,
+            started_at: None,
+            completed_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(job1.validate().is_err());
+
+        // Negative charged only (not negative refunded) -> should fail
+        let job2 = Job {
+            credits_charged: -1,
+            credits_refunded: 0,
+            ..job1.clone()
+        };
+        assert!(job2.validate().is_err());
+
+        // Both zero -> should pass
+        let job3 = Job {
+            credits_charged: 0,
+            credits_refunded: 0,
+            ..job1.clone()
+        };
+        assert!(job3.validate().is_ok());
+    }
+
+    #[test]
+    fn test_job_validate_failure_type_match_arms() {
+        // Kill: delete match arm (Failed|Canceled, None) and (Completed, Some(_))
+        let user_id = Uuid::new_v4();
+        let owner = Urn::user(user_id);
+        let now = Utc::now();
+
+        // Failed job without failure_type -> should fail
+        let job_failed_no_type = Job {
+            id: Uuid::new_v4(),
+            owner: owner.to_string(),
+            triggered_by: user_id,
+            project_id: None,
+            status: JobStatus::Failed,
+            spec_snapshot: Json(json!({})),
+            options: Json(json!({})),
+            progress: Json(json!({})),
+            output: None,
+            output_size_bytes: None,
+            error: Some(Json(json!({"msg": "error"}))),
+            credits_charged: 100,
+            failure_type: None,
+            credits_refunded: 0,
+            idempotency_key: None,
+            started_at: Some(now),
+            completed_at: Some(now),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(job_failed_no_type.validate().is_err());
+
+        // Canceled job without failure_type -> should fail
+        let job_canceled_no_type = Job {
+            status: JobStatus::Canceled,
+            ..job_failed_no_type.clone()
+        };
+        assert!(job_canceled_no_type.validate().is_err());
+
+        // Completed job WITH failure_type -> should fail
+        let job_completed_with_type = Job {
+            status: JobStatus::Completed,
+            output: Some(Json(json!({"url": "test"}))),
+            error: None,
+            failure_type: Some(JobFailureType::System),
+            ..job_failed_no_type.clone()
+        };
+        assert!(job_completed_with_type.validate().is_err());
+    }
+
+    #[test]
+    fn test_job_validate_cancellation_charge_arithmetic() {
+        // Kill: arithmetic mutations (*, /, -, <) in cancellation charge calc
+        let user_id = Uuid::new_v4();
+        let owner = Urn::user(user_id);
+        let now = Utc::now();
+
+        // Cancellation with 100 credits: min_charge = 10, max refund = 90
+        let mut job = Job {
+            id: Uuid::new_v4(),
+            owner: owner.to_string(),
+            triggered_by: user_id,
+            project_id: None,
+            status: JobStatus::Canceled,
+            spec_snapshot: Json(json!({})),
+            options: Json(json!({})),
+            progress: Json(json!({})),
+            output: None,
+            output_size_bytes: None,
+            error: None,
+            credits_charged: 100,
+            failure_type: Some(JobFailureType::Canceled),
+            credits_refunded: 90, // exactly 90% refund
+            idempotency_key: None,
+            started_at: Some(now),
+            completed_at: Some(now),
+            created_at: now,
+            updated_at: now,
+        };
+        // actual_charge = 100 - 90 = 10, min_charge = 10 -> valid
+        assert!(job.validate().is_ok());
+
+        // Refund 91 -> charge 9 < min_charge 10 -> invalid
+        job.credits_refunded = 91;
+        assert!(job.validate().is_err());
+    }
+
+    #[test]
+    fn test_job_max_size_bytes_arithmetic() {
+        // Kill: replace * with + (MAX_SIZE_BYTES calc - 2 mutants)
+        // MAX_SIZE_BYTES = 50 * 1024 * 1024 = 52428800
+        assert_eq!(AssetFile::MAX_SIZE_BYTES, 50 * 1024 * 1024);
+        assert_eq!(AssetFile::MAX_SIZE_BYTES, 52_428_800);
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: AssetFile::validate
+    // ========================================================================
+
+    #[test]
+    fn test_asset_file_validate_returns_err_on_invalid() {
+        // Kill: replace with Ok(())
+        let now = Utc::now();
+        let asset = AssetFile {
+            id: Uuid::new_v4(),
+            owner: Urn::user(Uuid::new_v4()).to_string(),
+            uploaded_by: Uuid::new_v4(),
+            project_id: None,
+            filename: "".to_string(), // invalid
+            s3_key: "key".to_string(),
+            content_type: "image/jpeg".to_string(),
+            size_bytes: 1024,
+            status: AssetStatus::Pending,
+            metadata: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(asset.validate().is_err());
+    }
+
+    #[test]
+    fn test_asset_file_validate_or_conditions() {
+        // Kill: replace || with && in filename check
+        let now = Utc::now();
+        // Empty filename (but not > 255) -> should fail
+        let asset1 = AssetFile {
+            id: Uuid::new_v4(),
+            owner: Urn::user(Uuid::new_v4()).to_string(),
+            uploaded_by: Uuid::new_v4(),
+            project_id: None,
+            filename: "".to_string(),
+            s3_key: "key".to_string(),
+            content_type: "image/jpeg".to_string(),
+            size_bytes: 1024,
+            status: AssetStatus::Pending,
+            metadata: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(asset1.validate().is_err());
+
+        // Filename > 255 (but not empty) -> should fail
+        let asset2 = AssetFile {
+            filename: "a".repeat(256),
+            ..asset1.clone()
+        };
+        assert!(asset2.validate().is_err());
+    }
+
+    #[test]
+    fn test_asset_file_validate_filename_len_boundary() {
+        // Kill: replace > with ==, >= (filename len)
+        let now = Utc::now();
+        let base = AssetFile {
+            id: Uuid::new_v4(),
+            owner: Urn::user(Uuid::new_v4()).to_string(),
+            uploaded_by: Uuid::new_v4(),
+            project_id: None,
+            filename: "a".repeat(255),
+            s3_key: "key".to_string(),
+            content_type: "image/jpeg".to_string(),
+            size_bytes: 1024,
+            status: AssetStatus::Pending,
+            metadata: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        // 255 chars should be valid
+        assert!(base.validate().is_ok());
+
+        // 256 chars should be invalid
+        let asset256 = AssetFile {
+            filename: "a".repeat(256),
+            ..base.clone()
+        };
+        assert!(asset256.validate().is_err());
+    }
+
+    #[test]
+    fn test_asset_file_validate_size_boundary() {
+        // Kill: replace > with ==, >= (size > MAX_SIZE_BYTES)
+        let now = Utc::now();
+        let mut asset = AssetFile {
+            id: Uuid::new_v4(),
+            owner: Urn::user(Uuid::new_v4()).to_string(),
+            uploaded_by: Uuid::new_v4(),
+            project_id: None,
+            filename: "test.jpg".to_string(),
+            s3_key: "key".to_string(),
+            content_type: "image/jpeg".to_string(),
+            size_bytes: AssetFile::MAX_SIZE_BYTES,
+            status: AssetStatus::Pending,
+            metadata: Json(json!({})),
+            created_at: now,
+            updated_at: now,
+        };
+        // Exactly MAX should be valid
+        assert!(asset.validate().is_ok());
+
+        // MAX + 1 should be invalid
+        asset.size_bytes = AssetFile::MAX_SIZE_BYTES + 1;
+        assert!(asset.validate().is_err());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: Webhook::validate
+    // ========================================================================
+
+    #[test]
+    fn test_webhook_validate_returns_err_on_invalid() {
+        // Kill: replace with Ok(())
+        let now = Utc::now();
+        let webhook = Webhook {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            url: "http://not-https.com/webhook".to_string(), // invalid
+            events: Json(vec!["job.completed".to_string()]),
+            secret: "secret".to_string(), // pragma: allowlist secret // pragma: allowlist secret
+            is_active: true,
+            last_triggered_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(webhook.validate().is_err());
+    }
+
+    #[test]
+    fn test_webhook_validate_url_not_starts_with_https() {
+        // Kill: delete ! (url starts_with)
+        let now = Utc::now();
+        // HTTP URL -> should fail
+        let webhook_http = Webhook {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            url: "http://example.com/webhook".to_string(),
+            events: Json(vec!["job.completed".to_string()]),
+            secret: "secret".to_string(), // pragma: allowlist secret
+            is_active: true,
+            last_triggered_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(webhook_http.validate().is_err());
+
+        // HTTPS URL -> should pass
+        let webhook_https = Webhook {
+            url: "https://example.com/webhook".to_string(),
+            ..webhook_http.clone()
+        };
+        assert!(webhook_https.validate().is_ok());
+    }
+
+    #[test]
+    fn test_webhook_validate_url_len_boundary() {
+        // Kill: replace > with ==, <, >= (url len)
+        let now = Utc::now();
+        // URL at 2048 chars should be valid
+        let long_path = "a".repeat(2048 - "https://example.com/".len());
+        let url_2048 = format!("https://example.com/{}", long_path);
+        assert_eq!(url_2048.len(), 2048);
+        let webhook_ok = Webhook {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            url: url_2048,
+            events: Json(vec!["job.completed".to_string()]),
+            secret: "secret".to_string(), // pragma: allowlist secret
+            is_active: true,
+            last_triggered_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(webhook_ok.validate().is_ok());
+
+        // URL at 2049 chars should be invalid
+        let long_path2 = "a".repeat(2049 - "https://example.com/".len());
+        let url_2049 = format!("https://example.com/{}", long_path2);
+        assert_eq!(url_2049.len(), 2049);
+        let webhook_bad = Webhook {
+            url: url_2049,
+            ..webhook_ok.clone()
+        };
+        assert!(webhook_bad.validate().is_err());
+    }
+
+    #[test]
+    fn test_webhook_validate_event_not_valid() {
+        // Kill: delete ! (event validation)
+        let now = Utc::now();
+        // Invalid event -> should fail
+        let webhook_bad = Webhook {
+            id: Uuid::new_v4(),
+            team_id: Uuid::new_v4(),
+            created_by: Uuid::new_v4(),
+            url: "https://example.com/webhook".to_string(),
+            events: Json(vec!["invalid.event".to_string()]),
+            secret: "secret".to_string(), // pragma: allowlist secret
+            is_active: true,
+            last_triggered_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(webhook_bad.validate().is_err());
+
+        // Valid event -> should pass
+        let webhook_ok = Webhook {
+            events: Json(vec!["job.completed".to_string()]),
+            ..webhook_bad.clone()
+        };
+        assert!(webhook_ok.validate().is_ok());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: WebhookDeliveryStatus
+    // ========================================================================
+
+    #[test]
+    fn test_webhook_delivery_status_is_terminal_true_false() {
+        // Kill: replace is_terminal with true and false
+        assert!(!WebhookDeliveryStatus::Pending.is_terminal());
+        assert!(!WebhookDeliveryStatus::Attempting.is_terminal());
+        assert!(WebhookDeliveryStatus::Delivered.is_terminal());
+        assert!(!WebhookDeliveryStatus::Retrying.is_terminal());
+        assert!(WebhookDeliveryStatus::Failed.is_terminal());
+    }
+
+    #[test]
+    fn test_webhook_delivery_status_from_state_all_variants() {
+        // Kill: replace from_state with Default::default()
+        // Default is Pending, so test non-Pending variants
+        assert_eq!(
+            WebhookDeliveryStatus::from_state(WebhookDeliveryState::Attempting),
+            WebhookDeliveryStatus::Attempting
+        );
+        assert_eq!(
+            WebhookDeliveryStatus::from_state(WebhookDeliveryState::Delivered),
+            WebhookDeliveryStatus::Delivered
+        );
+        assert_eq!(
+            WebhookDeliveryStatus::from_state(WebhookDeliveryState::Retrying),
+            WebhookDeliveryStatus::Retrying
+        );
+        assert_eq!(
+            WebhookDeliveryStatus::from_state(WebhookDeliveryState::Failed),
+            WebhookDeliveryStatus::Failed
+        );
+    }
+
+    #[test]
+    fn test_webhook_delivery_status_valid_transitions_not_empty() {
+        // Kill: replace valid_transitions with vec![] and vec![Default::default()]
+        let pending_transitions = WebhookDeliveryStatus::Pending.valid_transitions();
+        assert!(!pending_transitions.is_empty());
+        assert!(pending_transitions.contains(&WebhookDeliveryStatus::Attempting));
+
+        let attempting_transitions = WebhookDeliveryStatus::Attempting.valid_transitions();
+        assert!(!attempting_transitions.is_empty());
+
+        // Terminal states have no transitions
+        assert!(WebhookDeliveryStatus::Delivered
+            .valid_transitions()
+            .is_empty());
+        assert!(WebhookDeliveryStatus::Failed.valid_transitions().is_empty());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: WebhookDelivery
+    // ========================================================================
+
+    #[test]
+    fn test_webhook_delivery_validate_returns_err_on_invalid() {
+        // Kill: replace validate with Ok(())
+        let delivery = WebhookDelivery {
+            id: Uuid::new_v4(),
+            webhook_id: Uuid::new_v4(),
+            job_id: None,
+            event_type: "job.completed".to_string(),
+            status: WebhookDeliveryStatus::Pending,
+            payload: Json(json!({})),
+            response_status: None,
+            response_body: None,
+            attempts: 6, // exceeds max
+            max_attempts: 5,
+            next_retry_at: None,
+            delivered_at: None,
+            created_at: Utc::now(),
+        };
+        assert!(delivery.validate().is_err());
+    }
+
+    #[test]
+    fn test_webhook_delivery_validate_attempts_boundary() {
+        // Kill: replace > with ==, <, >= (attempts > max)
+        let mut delivery =
+            WebhookDelivery::new(Uuid::new_v4(), None, "job.completed".to_string(), json!({}));
+        delivery.max_attempts = 5;
+
+        // attempts == max should be valid
+        delivery.attempts = 5;
+        assert!(delivery.validate().is_ok());
+
+        // attempts = max + 1 should be invalid
+        delivery.attempts = 6;
+        assert!(delivery.validate().is_err());
+
+        // attempts < max should be valid
+        delivery.attempts = 4;
+        assert!(delivery.validate().is_ok());
+    }
+
+    #[test]
+    fn test_webhook_delivery_validate_delivered_status() {
+        // Kill: replace && with ||; replace == with != (delivered status check)
+        let now = Utc::now();
+        // Delivered without delivered_at -> should fail
+        let delivery_bad = WebhookDelivery {
+            id: Uuid::new_v4(),
+            webhook_id: Uuid::new_v4(),
+            job_id: None,
+            event_type: "job.completed".to_string(),
+            status: WebhookDeliveryStatus::Delivered,
+            payload: Json(json!({})),
+            response_status: None,
+            response_body: None,
+            attempts: 1,
+            max_attempts: 5,
+            next_retry_at: None,
+            delivered_at: None,
+            created_at: now,
+        };
+        assert!(delivery_bad.validate().is_err());
+
+        // Delivered with delivered_at -> should pass
+        let delivery_ok = WebhookDelivery {
+            delivered_at: Some(now),
+            ..delivery_bad.clone()
+        };
+        assert!(delivery_ok.validate().is_ok());
+
+        // Pending without delivered_at -> should pass (not delivered status)
+        let delivery_pending = WebhookDelivery {
+            status: WebhookDeliveryStatus::Pending,
+            delivered_at: None,
+            ..delivery_bad.clone()
+        };
+        assert!(delivery_pending.validate().is_ok());
+    }
+
+    #[test]
+    fn test_webhook_delivery_start_attempt_changes_state() {
+        // Kill: replace start_attempt with Ok(())
+        let mut delivery =
+            WebhookDelivery::new(Uuid::new_v4(), None, "job.completed".to_string(), json!({}));
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Pending);
+        assert_eq!(delivery.attempts, 0);
+
+        delivery.start_attempt().unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Attempting);
+        assert_eq!(delivery.attempts, 1);
+    }
+
+    #[test]
+    fn test_webhook_delivery_start_attempt_increments_counter() {
+        // Kill: replace += with -=, *= (attempts counter)
+        let mut delivery =
+            WebhookDelivery::new(Uuid::new_v4(), None, "job.completed".to_string(), json!({}));
+        assert_eq!(delivery.attempts, 0);
+        delivery.start_attempt().unwrap();
+        assert_eq!(delivery.attempts, 1);
+    }
+
+    #[test]
+    fn test_webhook_delivery_mark_delivered_changes_state() {
+        // Kill: replace mark_delivered with Ok(())
+        let mut delivery =
+            WebhookDelivery::new(Uuid::new_v4(), None, "job.completed".to_string(), json!({}));
+        delivery.start_attempt().unwrap();
+
+        delivery.mark_delivered(200, None).unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Delivered);
+        assert!(delivery.delivered_at.is_some());
+        assert_eq!(delivery.response_status, Some(200));
+    }
+
+    #[test]
+    fn test_webhook_delivery_mark_for_retry_changes_state() {
+        // Kill: replace mark_for_retry with Ok(())
+        let mut delivery =
+            WebhookDelivery::new(Uuid::new_v4(), None, "job.completed".to_string(), json!({}));
+        delivery.start_attempt().unwrap();
+
+        let retry_at = Utc::now() + chrono::Duration::minutes(5);
+        delivery.mark_for_retry(Some(500), None, retry_at).unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Retrying);
+        assert_eq!(delivery.next_retry_at, Some(retry_at));
+    }
+
+    #[test]
+    fn test_webhook_delivery_mark_failed_permanent_changes_state() {
+        // Kill: replace mark_failed_permanent with Ok(())
+        let mut delivery =
+            WebhookDelivery::new(Uuid::new_v4(), None, "job.completed".to_string(), json!({}));
+        delivery.start_attempt().unwrap();
+
+        delivery.mark_failed_permanent(404, None).unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Failed);
+        assert_eq!(delivery.response_status, Some(404));
+    }
+
+    #[test]
+    fn test_webhook_delivery_mark_failed_max_attempts_changes_state() {
+        // Kill: replace mark_failed_max_attempts with Ok(())
+        // MaxAttemptsExceeded event is only valid from Retrying state
+        let mut delivery =
+            WebhookDelivery::new(Uuid::new_v4(), None, "job.completed".to_string(), json!({}));
+        // Go through: Pending -> Attempting -> Retrying
+        delivery.start_attempt().unwrap();
+        let retry_at = Utc::now() + chrono::Duration::minutes(5);
+        delivery.mark_for_retry(Some(500), None, retry_at).unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Retrying);
+
+        // From Retrying, mark as failed due to max attempts
+        delivery.mark_failed_max_attempts().unwrap();
+        assert_eq!(delivery.status, WebhookDeliveryStatus::Failed);
+        assert!(delivery.next_retry_at.is_none());
+    }
+
+    #[test]
+    fn test_webhook_delivery_can_transition_true_false() {
+        // Kill: replace can_transition with true and false
+        let delivery =
+            WebhookDelivery::new(Uuid::new_v4(), None, "job.completed".to_string(), json!({}));
+        // Pending can attempt
+        assert!(delivery.can_transition(&WebhookDeliveryEvent::Attempt));
+        // Pending cannot be delivered directly
+        assert!(!delivery.can_transition(&WebhookDeliveryEvent::Success));
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: Usage
+    // ========================================================================
+
+    #[test]
+    fn test_usage_net_credits_calculation() {
+        // Kill: replace net_credits with 0; replace - with +
+        let owner = Urn::user(Uuid::new_v4());
+        let mut usage = Usage::new(owner, "2025-01".to_string()).unwrap();
+        usage.credits_used = 100;
+        usage.credits_refunded = 30;
+        assert_eq!(usage.net_credits(), 70); // 100 - 30
+
+        // Verify it's subtraction, not addition
+        usage.credits_used = 50;
+        usage.credits_refunded = 20;
+        assert_eq!(usage.net_credits(), 30); // 50 - 20, NOT 50 + 20 = 70
+    }
+
+    #[test]
+    fn test_usage_validate_returns_err_on_invalid() {
+        // Kill: replace validate with Ok(())
+        let mut usage = Usage::new(Urn::user(Uuid::new_v4()), "2025-01".to_string()).unwrap();
+        usage.period = "invalid".to_string();
+        assert!(usage.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_validate_period_len() {
+        // Kill: replace != with == (period len)
+        let mut usage = Usage::new(Urn::user(Uuid::new_v4()), "2025-01".to_string()).unwrap();
+        // Correct length (7) should pass
+        assert!(usage.validate().is_ok());
+
+        // Wrong length should fail
+        usage.period = "25-01".to_string(); // 5 chars
+        assert!(usage.validate().is_err());
+
+        usage.period = "2025-012".to_string(); // 8 chars
+        assert!(usage.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_validate_period_regex() {
+        // Kill: delete ! (regex match)
+        let mut usage = Usage::new(Urn::user(Uuid::new_v4()), "2025-01".to_string()).unwrap();
+        // Valid period should pass
+        assert!(usage.validate().is_ok());
+
+        // Invalid period format (right length, wrong format) should fail
+        usage.period = "abcd-xy".to_string(); // 7 chars but doesn't match
+        assert!(usage.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_validate_counts_or_conditions() {
+        // Kill: replace || with && (x2)
+        let owner = Urn::user(Uuid::new_v4());
+
+        // Only renders_count negative -> should fail
+        let mut usage1 = Usage::new(owner.clone(), "2025-01".to_string()).unwrap();
+        usage1.renders_count = -1;
+        usage1.credits_used = 0;
+        usage1.api_calls = 0;
+        assert!(usage1.validate().is_err());
+
+        // Only credits_used negative -> should fail
+        let mut usage2 = Usage::new(owner.clone(), "2025-01".to_string()).unwrap();
+        usage2.renders_count = 0;
+        usage2.credits_used = -1;
+        usage2.api_calls = 0;
+        assert!(usage2.validate().is_err());
+
+        // Only api_calls negative -> should fail
+        let mut usage3 = Usage::new(owner.clone(), "2025-01".to_string()).unwrap();
+        usage3.renders_count = 0;
+        usage3.credits_used = 0;
+        usage3.api_calls = -1;
+        assert!(usage3.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_validate_counts_boundary() {
+        // Kill: replace < with ==, >, <= for all three count checks
+        let owner = Urn::user(Uuid::new_v4());
+
+        // All counts at 0 should be valid
+        let mut usage = Usage::new(owner.clone(), "2025-01".to_string()).unwrap();
+        usage.renders_count = 0;
+        usage.credits_used = 0;
+        usage.api_calls = 0;
+        assert!(usage.validate().is_ok());
+
+        // All counts at 1 should be valid
+        usage.renders_count = 1;
+        usage.credits_used = 1;
+        usage.api_calls = 1;
+        assert!(usage.validate().is_ok());
+
+        // Each count at -1 individually should be invalid
+        usage.renders_count = -1;
+        usage.credits_used = 1;
+        usage.api_calls = 1;
+        assert!(usage.validate().is_err());
+
+        usage.renders_count = 1;
+        usage.credits_used = -1;
+        usage.api_calls = 1;
+        assert!(usage.validate().is_err());
+
+        usage.renders_count = 1;
+        usage.credits_used = 1;
+        usage.api_calls = -1;
+        assert!(usage.validate().is_err());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: SystemAsset
+    // ========================================================================
+
+    #[test]
+    fn test_system_asset_validate_returns_err_on_invalid() {
+        // Kill: replace validate with Ok(())
+        let asset = SystemAsset {
+            id: "INVALID_FORMAT".to_string(),
+            category: SystemAssetCategory::Sfx,
+            name: "test".to_string(),
+            description: "desc".to_string(),
+            duration_seconds: None,
+            s3_key: "key".to_string(),
+            content_type: "audio/wav".to_string(),
+            size_bytes: 1024,
+            tags: Json(vec![]),
+            created_at: Utc::now(),
+        };
+        assert!(asset.validate().is_err());
+    }
+
+    #[test]
+    fn test_system_asset_validate_id_regex() {
+        // Kill: delete ! (regex match)
+        // Valid ID should pass
+        let valid_asset = SystemAsset {
+            id: "asset_sfx_test".to_string(),
+            category: SystemAssetCategory::Sfx,
+            name: "test".to_string(),
+            description: "desc".to_string(),
+            duration_seconds: None,
+            s3_key: "key".to_string(),
+            content_type: "audio/wav".to_string(),
+            size_bytes: 1024,
+            tags: Json(vec![]),
+            created_at: Utc::now(),
+        };
+        assert!(valid_asset.validate().is_ok());
+
+        // Invalid ID should fail
+        let invalid_asset = SystemAsset {
+            id: "not-matching-format".to_string(),
+            ..valid_asset.clone()
+        };
+        assert!(invalid_asset.validate().is_err());
+    }
+
+    #[test]
+    fn test_system_asset_validate_description_len_boundary() {
+        // Kill: replace > with ==, <, >= (description len)
+        let base = SystemAsset {
+            id: "asset_sfx_test".to_string(),
+            category: SystemAssetCategory::Sfx,
+            name: "test".to_string(),
+            description: "a".repeat(500),
+            duration_seconds: None,
+            s3_key: "key".to_string(),
+            content_type: "audio/wav".to_string(),
+            size_bytes: 1024,
+            tags: Json(vec![]),
+            created_at: Utc::now(),
+        };
+        // 500 chars should be valid
+        assert!(base.validate().is_ok());
+
+        // 501 chars should be invalid
+        let asset_501 = SystemAsset {
+            description: "a".repeat(501),
+            ..base.clone()
+        };
+        assert!(asset_501.validate().is_err());
+
+        // 499 chars should be valid
+        let asset_499 = SystemAsset {
+            description: "a".repeat(499),
+            ..base.clone()
+        };
+        assert!(asset_499.validate().is_ok());
     }
 }

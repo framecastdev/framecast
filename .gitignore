@@ -178,6 +178,14 @@ $RECYCLE.BIN/
 # Root-level uv.lock is accidental - the real one is in tests/e2e/
 /uv.lock
 
+# === Mutation Testing ===
+mutants.out/
+
+# === CI Artifacts ===
+e2e-results.xml
+test-output.txt
+integration-test-output.txt
+
 # === Project Specific ===
 # Local development artifacts
 .framecast/

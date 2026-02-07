@@ -6,24 +6,16 @@ on:
 
 permissions:
   contents: read
-  packages: read  # Required for GHCR container auth
+  actions: write
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Rust toolchain location in CI image
-  RUSTUP_HOME: /opt/rust/rustup
-  CARGO_HOME: /opt/rust/cargo
 
 jobs:
   ci:
     name: CI Pipeline
-    runs-on: self-hosted
-    container:
-      image: ghcr.io/framecastdev/framecast-ci:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
 
     services:
       postgres:
@@ -32,6 +24,8 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
           POSTGRES_DB: framecast_test
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -39,12 +33,23 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-      TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+
+      - name: Install Rust tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-binstall
+
+      - name: Install sqlx-cli
+        run: cargo binstall --no-confirm sqlx-cli@0.8.3
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -52,66 +57,134 @@ jobs:
           shared-key: "ci"
 
       - name: Check formatting
+        id: fmt
         run: just fmt-check
 
       - name: Run clippy
+        id: clippy
         run: just ci-clippy
 
       - name: Run migrations
+        id: migrate
         run: just ci-migrate
 
       - name: Run tests
-        run: just ci-test
+        id: test
+        run: just ci-test 2>&1 | tee test-output.txt
 
       - name: Run integration tests
-        run: just ci-test-integration
+        id: integration-test
+        run: just ci-test-integration 2>&1 | tee integration-test-output.txt
 
       - name: Build API binary for E2E tests
+        id: build-binary
         run: cargo build --bin local
 
       - name: Upload API binary for E2E tests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: api-binary
           path: target/debug/local
           retention-days: 1
 
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## CI Pipeline"
+            echo ""
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+            echo "| Formatting | ${{ steps.fmt.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Clippy | ${{ steps.clippy.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Migrations | ${{ steps.migrate.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Unit Tests | ${{ steps.test.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Integration Tests | ${{ steps.integration-test.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| API Binary Build | ${{ steps.build-binary.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo ""
+
+            if [ -f test-output.txt ]; then
+              unit_summary=$(grep -E "^test result:" test-output.txt | tail -1 || true)
+              if [ -n "$unit_summary" ]; then
+                echo "**Unit tests:** \`$unit_summary\`"
+              fi
+            fi
+
+            if [ -f integration-test-output.txt ]; then
+              integ_summary=$(grep -E "^test result:" integration-test-output.txt | tail -1 || true)
+              if [ -n "$integ_summary" ]; then
+                echo "**Integration tests:** \`$integ_summary\`"
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
   infra-validate:
     name: Validate Infrastructure
-    runs-on: self-hosted
-    container:
-      image: ghcr.io/framecastdev/framecast-ci:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
 
       - name: Format check OpenTofu
+        id: tofu-fmt
         run: |
           cd infra/opentofu
           tofu fmt -check -recursive
 
       - name: Initialize OpenTofu
+        id: tofu-init
         run: just infra-init
 
       - name: Validate OpenTofu configuration
+        id: tofu-validate
         run: just infra-validate
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Infrastructure Validation"
+            echo ""
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+            echo "| Format (\`tofu fmt\`) | ${{ steps.tofu-fmt.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Init (\`tofu init\`) | ${{ steps.tofu-init.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| Validate (\`tofu validate\`) | ${{ steps.tofu-validate.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo ""
+            echo "OpenTofu $(tofu version -json | jq -r '.terraform_version')"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build-lambda:
     name: Build Lambda
-    runs-on: self-hosted
-    container:
-      image: ghcr.io/framecastdev/framecast-ci:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Install Rust tools (just, cargo-lambda)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-lambda
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -131,21 +204,204 @@ jobs:
           echo "Lambda artifact size: $(du -h target/lambda/lambda/bootstrap.zip | cut -f1)"
 
       - name: Upload Lambda artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: lambda-bootstrap
           path: target/lambda/lambda/bootstrap.zip
           retention-days: 5
 
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Build Lambda"
+            echo ""
+            if [ -f target/lambda/lambda/bootstrap.zip ]; then
+              size=$(du -h target/lambda/lambda/bootstrap.zip | cut -f1)
+              bytes=$(stat -c%s target/lambda/lambda/bootstrap.zip)
+              echo ":white_check_mark: **Lambda artifact built successfully**"
+              echo ""
+              echo "| Property | Value |"
+              echo "|----------|-------|"
+              echo "| Artifact | \`bootstrap.zip\` |"
+              echo "| Size | ${size} (${bytes} bytes) |"
+              echo "| Zig | $(zig version) |"
+              echo "| cargo-lambda | $(cargo lambda --version) |"
+            else
+              echo ":x: **Lambda build failed** — artifact not found"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  mutation-tests:
+    name: Mutants (shard ${{ matrix.shard }}/8)
+    needs: ci  # Only run after unit tests pass
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+
+    env:
+      SQLX_OFFLINE: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+
+      - name: Install Rust tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-binstall
+
+      - name: Install cargo-mutants
+        run: cargo binstall --no-confirm cargo-mutants
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci"
+
+      - name: Run mutation shard
+        run: just ci-mutants "${{ matrix.shard }}/8"
+
+      - name: Upload shard results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: mutation-results-${{ matrix.shard }}
+          path: mutants.out/
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Mutation Tests (shard ${{ matrix.shard }}/8)"
+            echo ""
+
+            if [ -f mutants.out/outcomes.json ]; then
+              total=$(jq '[.outcomes[] | select(.scenario != "Baseline")] | length' mutants.out/outcomes.json)
+              caught=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "CaughtMutant")] | length' mutants.out/outcomes.json)
+              missed=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "MissedMutant")] | length' mutants.out/outcomes.json)
+              unviable=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Unviable")] | length' mutants.out/outcomes.json)
+              timeout=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Timeout")] | length' mutants.out/outcomes.json)
+
+              echo "| Metric | Count |"
+              echo "|--------|-------|"
+              echo "| Total | ${total} |"
+              echo "| :white_check_mark: Caught | ${caught} |"
+              echo "| :x: Missed | ${missed} |"
+              echo "| :construction: Unviable | ${unviable} |"
+              echo "| :clock1: Timeout | ${timeout} |"
+
+              if [ "$missed" -gt 0 ] && [ -f mutants.out/missed.txt ]; then
+                echo ""
+                echo "<details><summary>Missed mutants</summary>"
+                echo ""
+                echo '```'
+                cat mutants.out/missed.txt
+                echo '```'
+                echo "</details>"
+              fi
+            else
+              echo ":x: **No results** — \`outcomes.json\` missing"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  mutation-summary:
+    name: Mutation Summary
+    needs: mutation-tests
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all shard results
+        uses: actions/download-artifact@v7
+        with:
+          pattern: mutation-results-*
+          path: shards/
+
+      - name: Aggregate and summarize
+        shell: bash
+        run: |
+          mkdir -p combined
+
+          # Merge text result files across all shards
+          for file in caught.txt missed.txt timeout.txt unviable.txt; do
+            > "combined/${file}"
+            for shard_dir in shards/mutation-results-*/; do
+              if [ -f "${shard_dir}${file}" ]; then
+                cat "${shard_dir}${file}" >> "combined/${file}"
+              fi
+            done
+          done
+
+          # Aggregate outcomes.json from all shards
+          jq -s '{outcomes: [.[].outcomes[]] }' shards/mutation-results-*/outcomes.json > combined/outcomes.json
+
+          # Compute totals
+          total=$(jq '[.outcomes[] | select(.scenario != "Baseline")] | length' combined/outcomes.json)
+          caught=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "CaughtMutant")] | length' combined/outcomes.json)
+          missed=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "MissedMutant")] | length' combined/outcomes.json)
+          unviable=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Unviable")] | length' combined/outcomes.json)
+          timeout=$(jq '[.outcomes[] | select(.scenario != "Baseline") | select(.summary == "Timeout")] | length' combined/outcomes.json)
+
+          if [ "$((caught + missed))" -gt 0 ]; then
+            score=$(( (caught * 100) / (caught + missed) ))
+          else
+            score=0
+          fi
+
+          {
+            echo "## Mutation Tests"
+            echo ""
+            if [ "$missed" -eq 0 ]; then
+              echo ":white_check_mark: **All mutants caught!**"
+            else
+              echo ":warning: **${missed} mutants survived**"
+            fi
+            echo ""
+            echo "| Metric | Count |"
+            echo "|--------|-------|"
+            echo "| Total mutants | ${total} |"
+            echo "| :white_check_mark: Caught | ${caught} |"
+            echo "| :x: Missed | ${missed} |"
+            echo "| :construction: Unviable | ${unviable} |"
+            echo "| :clock1: Timeout | ${timeout} |"
+            echo "| **Mutation score** | **${score}%** (caught / (caught + missed)) |"
+
+            if [ "$missed" -gt 0 ] && [ -s combined/missed.txt ]; then
+              echo ""
+              echo "<details><summary>Missed mutants</summary>"
+              echo ""
+              echo '```'
+              cat combined/missed.txt
+              echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload combined results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: mutation-results
+          path: combined/
+
+      - name: Clean up shard artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: mutation-results-*
+
   e2e-tests:
     name: E2E Tests
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: [ci]
-    container:
-      image: ghcr.io/framecastdev/framecast-ci:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
 
     services:
       postgres:
@@ -154,6 +410,8 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
           POSTGRES_DB: framecast_test
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -165,6 +423,8 @@ jobs:
         env:
           SERVICES: ses
           DEBUG: "0"
+        ports:
+          - 4566:4566
         options: >-
           --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
           --health-interval 10s
@@ -173,11 +433,11 @@ jobs:
           --health-start-period 30s
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test  # pragma: allowlist secret
       AWS_DEFAULT_REGION: us-east-1
-      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_ENDPOINT_URL: http://localhost:4566
       JWT_SECRET: test-e2e-secret-key-for-ci-only-0  # pragma: allowlist secret
       EMAIL_PROVIDER: ses
       FROM_EMAIL: invitations@framecast.app
@@ -196,10 +456,29 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+
+      - name: Install Rust tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-binstall
+
+      - name: Install sqlx-cli
+        run: cargo binstall --no-confirm sqlx-cli@0.8.3
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci"
 
       - name: Download API binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: api-binary
           path: ./api-binary
@@ -220,6 +499,45 @@ jobs:
       - name: Run Python E2E tests
         env:
           TEST_LOCAL_API_URL: http://localhost:3000
-          TEST_LOCALSTACK_SES_URL: http://localstack:4566
-          TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/framecast_test  # pragma: allowlist secret
-        run: just ci-test-e2e
+          TEST_LOCALSTACK_SES_URL: http://localhost:4566
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
+        run: |
+          cd tests/e2e && uv run pytest tests/ -m "real_services" -v --tb=short \
+            --junitxml=../../e2e-results.xml
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## E2E Tests"
+            echo ""
+
+            if [ -f e2e-results.xml ]; then
+              tests=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          root = ET.parse('e2e-results.xml').getroot().find('testsuite')
+          t, f, e, s = int(root.get('tests',0)), int(root.get('failures',0)), int(root.get('errors',0)), int(root.get('skipped',0))
+          passed = t - f - e - s
+          print(f'{t}|{passed}|{f}|{e}|{s}|{root.get(\"time\",\"?\")}')" || echo "?|?|?|?|?|?")
+
+              IFS='|' read -r total passed failed errors skipped duration <<< "$tests"
+
+              if [ "$failed" = "0" ] && [ "$errors" = "0" ]; then
+                echo ":white_check_mark: **All E2E tests passed**"
+              else
+                echo ":x: **E2E test failures detected**"
+              fi
+              echo ""
+              echo "| Metric | Count |"
+              echo "|--------|-------|"
+              echo "| Total | ${total} |"
+              echo "| :white_check_mark: Passed | ${passed} |"
+              echo "| :x: Failed | ${failed} |"
+              echo "| :boom: Errors | ${errors} |"
+              echo "| :fast_forward: Skipped | ${skipped} |"
+              echo "| Duration | ${duration}s |"
+            else
+              echo ":x: **No E2E results found** — \`e2e-results.xml\` missing"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

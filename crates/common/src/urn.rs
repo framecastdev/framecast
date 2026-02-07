@@ -147,6 +147,7 @@ impl FromStr for Urn {
     }
 }
 
+#[mutants::skip] // Trivial conversion — no behavioral logic to test
 impl From<Urn> for String {
     fn from(urn: Urn) -> Self {
         urn.0
@@ -369,6 +370,45 @@ mod tests {
         let system_urn = Urn::system("assets", "logo-template");
         let formatted = format!("{}", system_urn);
         assert_eq!(formatted, "framecast:system:assets:logo-template");
+    }
+
+    #[test]
+    fn test_urn_parse_guard_catches_single_part() {
+        // Kill mutant: replace < with == in Urn::parse (line 59)
+        // Single-part URN "framecast" (len=1) should be caught by guard (len < 2)
+        let urn = Urn("framecast".to_string());
+        let err = urn.parse().unwrap_err();
+        assert!(
+            err.to_string().contains("must start with"),
+            "Single-part URN should hit length guard, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_urn_parse_guard_catches_wrong_prefix() {
+        // Kill mutant: replace || with && in Urn::parse (line 59)
+        // Wrong prefix with 3+ parts should be caught by prefix guard
+        let urn = Urn("other:user:00000000-0000-0000-0000-000000000001".to_string());
+        let err = urn.parse().unwrap_err();
+        assert!(
+            err.to_string().contains("must start with"),
+            "Wrong prefix should hit prefix guard, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_urn_parse_two_part_reaches_match_fallthrough() {
+        // Kill mutant: replace < with <= in Urn::parse (line 59)
+        // "framecast:invalid" (len=2) should pass guard and reach match `_` arm
+        let urn = Urn("framecast:invalid".to_string());
+        let err = urn.parse().unwrap_err();
+        assert!(
+            err.to_string().contains("Invalid URN format"),
+            "Two-part URN should reach match fallthrough, got: {}",
+            err
+        );
     }
 
     #[test]

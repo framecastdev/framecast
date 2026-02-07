@@ -1,0 +1,34 @@
+# cargo-mutants configuration
+# Only mutate pure business logic crates — no I/O crates
+
+# Timeout: 30s minimum per mutant (domain tests are fast, 30s is generous)
+minimum_test_timeout = 30.0
+
+# Use a custom profile that disables debug info for faster builds
+# Defined in workspace Cargo.toml as [profile.mutants]
+profile = "mutants"
+
+# Skip doctests (--all-targets) and limit test threads (mutation testing is
+# CPU-bound from parallel builds, so fewer test threads per build is fine)
+additional_cargo_test_args = ["--all-targets", "--", "--test-threads=2"]
+
+# Only mutate domain and common crates
+examine_globs = ["crates/domain/src/**/*.rs", "crates/common/src/**/*.rs"]
+
+# Exclude patterns that generate noise without value
+exclude_re = [
+  # Display/Debug impls — cosmetic, not behavioral
+  "Display for",
+  "Debug for",
+  # Error type definitions (thiserror derive generates these)
+  "impl.*Error",
+  # Time-boundary mutations (< vs <=) are untestable at nanosecond precision
+  # without clock mocking — the difference is meaningless in practice
+  "replace < with <= in .*::is_expired",
+  "replace < with <= in .*::is_valid",
+  "replace < with <= in Invitation::state",
+]
+
+# Skip logging/tracing calls — mutations in logging have no behavioral impact
+skip_calls_defaults = true
+skip_calls = ["tracing::debug", "tracing::info", "tracing::warn", "tracing::error"]

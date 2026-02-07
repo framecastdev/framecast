@@ -419,6 +419,34 @@ ci-test-e2e:
     cd tests/e2e && uv run pytest tests/ -m "real_services" -v --tb=short
 
 # ============================================================================
+# MUTATION TESTING
+# ============================================================================
+
+# Run mutation testing on domain + common crates
+mutants *args="":
+    cargo mutants --jobs 4 {{args}}
+
+# Run mutation testing on domain crate only (most valuable)
+mutants-domain *args="":
+    cargo mutants --jobs 4 -p framecast-domain {{args}}
+
+# Quick check — only test missed mutants from last run
+mutants-check *args="":
+    cargo mutants --jobs 4 --iterate {{args}}
+
+# CI mutation testing (--in-place modifies source directly, faster in disposable CI environments)
+# Pass shard="k/n" to run a subset (e.g. just ci-mutants "0/8")
+ci-mutants shard="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "{{shard}}" ]; then
+      cargo mutants --in-place --shard "{{shard}}" --baseline skip \
+        -p framecast-domain -p framecast-common
+    else
+      cargo mutants --in-place -p framecast-domain -p framecast-common
+    fi
+
+# ============================================================================
 # CODE QUALITY (Rules I, IX: Codebase, Disposability)
 # ============================================================================
 
@@ -623,37 +651,6 @@ deploy-outputs env="dev":
 logs-lambda env="dev":
     @echo "Viewing Lambda logs for framecast-{{env}}-api..."
     aws logs tail /aws/lambda/framecast-{{env}}-api --follow
-
-# ============================================================================
-# CI BASE IMAGE
-# ============================================================================
-
-# Build CI base image for amd64 (contains all tools pre-installed)
-ci-image-build:
-    @echo "Building CI base image for linux/amd64..."
-    docker buildx build --platform linux/amd64 \
-        -t ghcr.io/framecastdev/framecast-ci:latest \
-        -f infra/ci/Dockerfile \
-        --load .
-    @echo "CI image built: ghcr.io/framecastdev/framecast-ci:latest"
-
-# Push CI base image to GitHub Container Registry
-ci-image-push:
-    @echo "Building and pushing CI base image for linux/amd64..."
-    docker buildx build --platform linux/amd64 \
-        -t ghcr.io/framecastdev/framecast-ci:latest \
-        -f infra/ci/Dockerfile \
-        --push .
-    @echo "CI image pushed to ghcr.io/framecastdev/framecast-ci:latest"
-
-# Build and push CI image with a specific tag
-ci-image-release tag:
-    @echo "Building and pushing CI image with tag: {{tag}}..."
-    docker buildx build --platform linux/amd64 \
-        -t ghcr.io/framecastdev/framecast-ci:{{tag}} \
-        -f infra/ci/Dockerfile \
-        --push .
-    @echo "CI image pushed: ghcr.io/framecastdev/framecast-ci:{{tag}}"
 
 # ============================================================================
 # ADMIN PROCESSES (Rule XII: Admin Processes)

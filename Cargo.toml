@@ -74,6 +74,9 @@ time = { version = "0.3", features = ["serde", "macros"] }
 regex = "1.10"
 lazy_static = "1.5"
 
+# === Mutation Testing ===
+mutants = "0.0.3"
+
 # === Testing ===
 tokio-test = "0.4"
 mockall = "0.12"
@@ -90,3 +93,8 @@ framecast-common = { path = "crates/common" }
 framecast-domain = { path = "crates/domain" }
 framecast-db = { path = "crates/db" }
 framecast-email = { path = "crates/email" }
+
+# Mutation testing profile — disables debug info for faster builds
+[profile.mutants]
+inherits = "test"
+debug = "none"

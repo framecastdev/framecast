@@ -1583,6 +1583,7 @@ dependencies = [
  "config",
  "dotenvy",
  "jsonwebtoken",
+ "mutants",
  "reqwest",
  "serde",
  "serde_json",
@@ -1624,6 +1625,7 @@ dependencies = [
  "framecast-common",
  "getrandom 0.2.17",
  "hex",
+ "mutants",
  "rand 0.8.5",
  "regex",
  "rust_decimal",
@@ -2681,6 +2683,12 @@ dependencies = [
  "spin 0.9.8",
  "version_check",
 ]
+
+[[package]]
+name = "mutants"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc0287524726960e07b119cebd01678f852f147742ae0d925e6a520dca956126"
 
 [[package]]
 name = "nom"

@@ -750,6 +750,65 @@ mod tests {
         }
 
         #[test]
+        fn test_project_valid_transitions() {
+            // Kill mutant: ProjectState::valid_transitions -> Vec::leak(Vec::new())
+            let draft = ProjectState::Draft.valid_transitions();
+            assert!(!draft.is_empty());
+            assert!(draft.contains(&ProjectState::Rendering));
+            assert!(draft.contains(&ProjectState::Archived));
+            assert_eq!(draft.len(), 2);
+
+            let rendering = ProjectState::Rendering.valid_transitions();
+            assert!(!rendering.is_empty());
+            assert!(rendering.contains(&ProjectState::Completed));
+            assert!(rendering.contains(&ProjectState::Draft));
+            assert_eq!(rendering.len(), 2);
+
+            let completed = ProjectState::Completed.valid_transitions();
+            assert!(!completed.is_empty());
+            assert!(completed.contains(&ProjectState::Archived));
+            assert!(completed.contains(&ProjectState::Rendering));
+            assert_eq!(completed.len(), 2);
+
+            let archived = ProjectState::Archived.valid_transitions();
+            assert!(!archived.is_empty());
+            assert!(archived.contains(&ProjectState::Draft));
+            assert_eq!(archived.len(), 1);
+        }
+
+        #[test]
+        fn test_project_can_transition() {
+            // Kill mutant: ProjectStateMachine::can_transition -> true / false
+            // Valid transitions
+            assert!(ProjectStateMachine::can_transition(
+                ProjectState::Draft,
+                &ProjectEvent::Render
+            ));
+            assert!(ProjectStateMachine::can_transition(
+                ProjectState::Draft,
+                &ProjectEvent::Archive
+            ));
+            assert!(ProjectStateMachine::can_transition(
+                ProjectState::Completed,
+                &ProjectEvent::Archive
+            ));
+
+            // Invalid transitions
+            assert!(!ProjectStateMachine::can_transition(
+                ProjectState::Draft,
+                &ProjectEvent::JobCompleted
+            ));
+            assert!(!ProjectStateMachine::can_transition(
+                ProjectState::Archived,
+                &ProjectEvent::Render
+            ));
+            assert!(!ProjectStateMachine::can_transition(
+                ProjectState::Completed,
+                &ProjectEvent::Unarchive
+            ));
+        }
+
+        #[test]
         fn test_project_has_no_terminal_states() {
             assert!(!ProjectState::Draft.is_terminal());
             assert!(!ProjectState::Rendering.is_terminal());
@@ -865,6 +924,64 @@ mod tests {
             assert!(InvitationState::Expired.is_terminal());
             assert!(InvitationState::Revoked.is_terminal());
         }
+
+        #[test]
+        fn test_invitation_valid_transitions() {
+            // Kill mutant: InvitationState::valid_transitions -> Vec::leak(Vec::new())
+            let pending = InvitationState::Pending.valid_transitions();
+            assert!(!pending.is_empty());
+            assert_eq!(pending.len(), 4);
+            assert!(pending.contains(&InvitationState::Accepted));
+            assert!(pending.contains(&InvitationState::Declined));
+            assert!(pending.contains(&InvitationState::Expired));
+            assert!(pending.contains(&InvitationState::Revoked));
+
+            // Terminal states should have no transitions
+            assert!(InvitationState::Accepted.valid_transitions().is_empty());
+            assert!(InvitationState::Declined.valid_transitions().is_empty());
+            assert!(InvitationState::Expired.valid_transitions().is_empty());
+            assert!(InvitationState::Revoked.valid_transitions().is_empty());
+        }
+
+        #[test]
+        fn test_invitation_can_transition() {
+            // Kill mutant: InvitationStateMachine::can_transition -> true / false
+            let ctx = InvitationGuardContext { is_expired: false };
+
+            // Valid transitions
+            assert!(InvitationStateMachine::can_transition(
+                InvitationState::Pending,
+                &InvitationEvent::Accept,
+                Some(&ctx)
+            ));
+            assert!(InvitationStateMachine::can_transition(
+                InvitationState::Pending,
+                &InvitationEvent::Decline,
+                None
+            ));
+            assert!(InvitationStateMachine::can_transition(
+                InvitationState::Pending,
+                &InvitationEvent::Revoke,
+                None
+            ));
+
+            // Invalid transitions (from terminal states)
+            assert!(!InvitationStateMachine::can_transition(
+                InvitationState::Accepted,
+                &InvitationEvent::Revoke,
+                None
+            ));
+            assert!(!InvitationStateMachine::can_transition(
+                InvitationState::Declined,
+                &InvitationEvent::Accept,
+                None
+            ));
+            assert!(!InvitationStateMachine::can_transition(
+                InvitationState::Expired,
+                &InvitationEvent::Accept,
+                None
+            ));
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -979,6 +1096,62 @@ mod tests {
             assert!(!WebhookDeliveryState::Retrying.is_terminal());
             assert!(WebhookDeliveryState::Delivered.is_terminal());
             assert!(WebhookDeliveryState::Failed.is_terminal());
+        }
+
+        #[test]
+        fn test_webhook_delivery_valid_transitions() {
+            // Kill mutant: WebhookDeliveryState::valid_transitions -> Vec::leak(Vec::new())
+            let pending = WebhookDeliveryState::Pending.valid_transitions();
+            assert!(!pending.is_empty());
+            assert_eq!(pending.len(), 1);
+            assert!(pending.contains(&WebhookDeliveryState::Attempting));
+
+            let attempting = WebhookDeliveryState::Attempting.valid_transitions();
+            assert!(!attempting.is_empty());
+            assert_eq!(attempting.len(), 3);
+
+            let retrying = WebhookDeliveryState::Retrying.valid_transitions();
+            assert!(!retrying.is_empty());
+            assert_eq!(retrying.len(), 2);
+
+            // Terminal states
+            assert!(WebhookDeliveryState::Delivered
+                .valid_transitions()
+                .is_empty());
+            assert!(WebhookDeliveryState::Failed.valid_transitions().is_empty());
+        }
+
+        #[test]
+        fn test_webhook_delivery_can_transition() {
+            // Kill mutant: WebhookDeliveryStateMachine::can_transition -> true / false
+            // Valid transitions
+            assert!(WebhookDeliveryStateMachine::can_transition(
+                WebhookDeliveryState::Pending,
+                &WebhookDeliveryEvent::Attempt,
+                None
+            ));
+            assert!(WebhookDeliveryStateMachine::can_transition(
+                WebhookDeliveryState::Attempting,
+                &WebhookDeliveryEvent::Success,
+                None
+            ));
+
+            // Invalid transitions
+            assert!(!WebhookDeliveryStateMachine::can_transition(
+                WebhookDeliveryState::Delivered,
+                &WebhookDeliveryEvent::Retry,
+                None
+            ));
+            assert!(!WebhookDeliveryStateMachine::can_transition(
+                WebhookDeliveryState::Failed,
+                &WebhookDeliveryEvent::Attempt,
+                None
+            ));
+            assert!(!WebhookDeliveryStateMachine::can_transition(
+                WebhookDeliveryState::Pending,
+                &WebhookDeliveryEvent::Success,
+                None
+            ));
         }
     }
 }
