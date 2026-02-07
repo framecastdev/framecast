@@ -1519,36 +1519,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "framecast-api"
+name = "framecast-app"
 version = "0.0.1-SNAPSHOT"
 dependencies = [
  "anyhow",
- "async-trait",
  "axum",
- "chrono",
  "framecast-common",
- "framecast-db",
- "framecast-domain",
  "framecast-email",
- "hyper 1.8.1",
- "jsonwebtoken",
+ "framecast-teams",
  "lambda_http",
- "lazy_static",
- "regex",
- "serde",
- "serde_json",
  "sqlx",
- "test-log",
- "thiserror 1.0.69",
  "tokio",
- "tokio-test",
  "tower 0.5.3",
  "tower-http",
  "tracing",
  "tracing-subscriber",
- "uuid",
- "validator",
- "wiremock",
 ]
 
 [[package]]
@@ -1560,7 +1545,6 @@ dependencies = [
  "aws-sdk-s3",
  "chrono",
  "framecast-common",
- "framecast-domain",
  "reqwest",
  "serde",
  "serde_json",
@@ -1589,50 +1573,6 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tokio-test",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "framecast-db"
-version = "0.0.1-SNAPSHOT"
-dependencies = [
- "anyhow",
- "chrono",
- "framecast-common",
- "framecast-domain",
- "serde",
- "serde_json",
- "sqlx",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tokio-test",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "framecast-domain"
-version = "0.0.1-SNAPSHOT"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "chrono",
- "framecast-common",
- "getrandom 0.2.17",
- "hex",
- "mutants",
- "rand 0.8.5",
- "regex",
- "rust_decimal",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
@@ -1671,7 +1611,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "framecast-common",
- "framecast-domain",
  "reqwest",
  "serde",
  "serde_json",
@@ -1692,11 +1631,9 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "dotenvy",
- "framecast-api",
  "framecast-common",
- "framecast-db",
- "framecast-domain",
  "framecast-email",
+ "framecast-teams",
  "hyper 1.8.1",
  "jsonwebtoken",
  "regex",
@@ -1710,6 +1647,92 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tower 0.5.3",
+ "uuid",
+]
+
+[[package]]
+name = "framecast-jobs"
+version = "0.0.1-SNAPSHOT"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "framecast-common",
+ "mutants",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "framecast-projects"
+version = "0.0.1-SNAPSHOT"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "framecast-common",
+ "mutants",
+ "regex",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "framecast-teams"
+version = "0.0.1-SNAPSHOT"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "framecast-common",
+ "framecast-email",
+ "getrandom 0.2.17",
+ "hex",
+ "jsonwebtoken",
+ "lazy_static",
+ "mutants",
+ "rand 0.8.5",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "framecast-webhooks"
+version = "0.0.1-SNAPSHOT"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "framecast-common",
+ "mutants",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
  "uuid",
 ]
 

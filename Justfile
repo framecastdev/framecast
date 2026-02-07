@@ -426,9 +426,9 @@ ci-test-e2e:
 mutants *args="":
     cargo mutants --jobs 4 {{args}}
 
-# Run mutation testing on domain crate only (most valuable)
+# Run mutation testing on domain crates only (most valuable)
 mutants-domain *args="":
-    cargo mutants --jobs 4 -p framecast-domain {{args}}
+    cargo mutants --jobs 4 -p framecast-teams -p framecast-projects -p framecast-jobs -p framecast-webhooks {{args}}
 
 # Quick check — only test missed mutants from last run
 mutants-check *args="":
@@ -439,11 +439,11 @@ mutants-check *args="":
 ci-mutants shard="":
     #!/usr/bin/env bash
     set -euo pipefail
+    PKGS="-p framecast-teams -p framecast-projects -p framecast-jobs -p framecast-webhooks -p framecast-common"
     if [ -n "{{shard}}" ]; then
-      cargo mutants --in-place --shard "{{shard}}" --baseline skip \
-        -p framecast-domain -p framecast-common
+      cargo mutants --in-place --shard "{{shard}}" --baseline skip $PKGS
     else
-      cargo mutants --in-place -p framecast-domain -p framecast-common
+      cargo mutants --in-place $PKGS
     fi
 
 # ============================================================================
@@ -732,7 +732,7 @@ status:
     @echo "Framecast API Project Status"
     @echo "=============================="
     @echo "Build System: Just $(just --version 2>/dev/null || echo 'Not found')"
-    @echo "Workspace: $(find crates -name Cargo.toml | wc -l | tr -d ' ') crates"
+    @echo "Workspace: $(find crates domains -name Cargo.toml | wc -l | tr -d ' ') crates"
     @echo "Migrations: $(find migrations -name '*.sql' 2>/dev/null | wc -l | tr -d ' ') files"
     @echo "Tests: $(find . -name '*.rs' -exec grep -l '#\[test\]' {} \; 2>/dev/null | wc -l | tr -d ' ') test files"
     @echo ""

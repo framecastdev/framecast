@@ -13,7 +13,7 @@ profile = "mutants"
 additional_cargo_test_args = ["--all-targets", "--", "--test-threads=2"]
 
 # Only mutate domain and common crates
-examine_globs = ["crates/domain/src/**/*.rs", "crates/common/src/**/*.rs"]
+examine_globs = ["domains/*/src/**/*.rs", "crates/common/src/**/*.rs"]
 
 # Exclude patterns that generate noise without value
 exclude_re = [

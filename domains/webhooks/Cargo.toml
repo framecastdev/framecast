@@ -1,5 +1,5 @@
 [package]
-name = "framecast-comfyui"
+name = "framecast-webhooks"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-description = "RunPod and ComfyUI video generation client for Framecast"
+description = "Webhooks domain: webhooks, webhook deliveries"
 
 [dependencies]
 # Shared crates
@@ -20,18 +20,16 @@ uuid.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
-tokio.workspace = true
 
-# HTTP client
-reqwest.workspace = true
+# Database mapping
+sqlx.workspace = true
 
-# AWS S3
-aws-config.workspace = true
-aws-sdk-s3.workspace = true
+# Mutation testing
+mutants.workspace = true
 
 # Logging
 tracing.workspace = true
 
 [dev-dependencies]
+tokio.workspace = true
 tokio-test.workspace = true
-wiremock.workspace = true

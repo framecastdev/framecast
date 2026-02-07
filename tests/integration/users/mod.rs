@@ -14,14 +14,13 @@ use tower::ServiceExt;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use framecast_api::routes;
-use framecast_domain::entities::UserTier;
+use framecast_teams::{routes, UserTier};
 
 use crate::common::{TestApp, UserFixture, assertions};
 
 /// Create test router with all routes
 async fn create_test_router(app: &TestApp) -> Router {
-    routes::create_routes().with_state(app.state.clone())
+    routes().with_state(app.state.clone())
 }
 
 mod test_get_profile {

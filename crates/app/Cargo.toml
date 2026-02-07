@@ -1,0 +1,53 @@
+[package]
+name = "framecast-app"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+description = "Framecast application composition root"
+
+[[bin]]
+name = "lambda"
+path = "src/bin/lambda.rs"
+
+[[bin]]
+name = "local"
+path = "src/bin/local.rs"
+
+[dependencies]
+# Domain crates
+framecast-teams.workspace = true
+framecast-email.workspace = true
+
+# Shared crates
+framecast-common.workspace = true
+
+# Core dependencies
+tokio.workspace = true
+anyhow.workspace = true
+
+# HTTP server
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+
+# AWS Lambda
+lambda_http.workspace = true
+
+# Database
+sqlx.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# cargo-lambda build configuration
+[package.metadata.lambda]
+binary = "lambda"
+arch = "x86_64"
+runtime = "provided.al2023"
+memory = 512
+timeout = 30

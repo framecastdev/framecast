@@ -12,7 +12,6 @@ description = "Inngest job orchestration client for Framecast"
 [dependencies]
 # Shared crates
 framecast-common.workspace = true
-framecast-domain.workspace = true
 
 # Core dependencies
 serde.workspace = true

@@ -3,8 +3,7 @@
 //! Tests JWT authentication, user tier permissions, and role-based access control
 //! according to the permission matrix in docs/spec/08_Permissions.md
 
-use framecast_api::middleware::{AuthUser, ApiKeyUser, AuthError};
-use framecast_domain::entities::{UserTier, MembershipRole};
+use framecast_teams::{AuthUser, ApiKeyUser, AuthError, UserTier, MembershipRole};
 use axum::{
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, HeaderValue, request::Parts, StatusCode},

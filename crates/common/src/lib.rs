@@ -7,9 +7,11 @@
 //! - Authentication utilities
 
 pub mod config;
+pub mod db;
 pub mod error;
 pub mod urn;
 
 pub use config::Config;
+pub use db::RepositoryError;
 pub use error::{Error, Result};
 pub use urn::{Urn, UrnComponents};
