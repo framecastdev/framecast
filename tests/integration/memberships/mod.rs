@@ -129,9 +129,8 @@ mod test_invite_member {
 
         let response = router.oneshot(request).await.unwrap();
 
-        // "owner" is not a valid InvitationRole variant, so Axum's JSON
-        // deserializer rejects it before the handler runs → 422
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        // "owner" is not a valid InvitationRole variant → 400
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
@@ -486,9 +485,8 @@ mod test_invite_member {
 
         let response2 = router.oneshot(request2).await.unwrap();
 
-        // "owner" is not a valid InvitationRole variant, so Axum's JSON
-        // deserializer rejects it before the handler runs → 422
-        assert_eq!(response2.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        // "owner" is not a valid InvitationRole variant → 400
+        assert_eq!(response2.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
@@ -1883,8 +1881,8 @@ mod test_membership_guards {
 
         let response = router.oneshot(request).await.unwrap();
 
-        // Should be 422 (Unprocessable Entity) since the role value is invalid
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        // Invalid role value → 400
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
