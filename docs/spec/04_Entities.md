@@ -52,7 +52,12 @@ Indexes:
 
 Triggers:
   - ON UPDATE: SET updated_at = now()
-  - ON INSERT: IF slug IS NULL THEN slug = slugify(name) + random_suffix()
+
+Slug Generation (application layer, not DB trigger):
+  - IF slug IS NULL THEN slug = slugify(name) + '-' + random_hex(8)
+  - slugify: lowercase, ASCII transliteration, replace non-alphanumeric with hyphen
+  - random_hex: 8 hex characters from UUID v4 (e.g., "my-team-a1b2c3d4")
+  - Validated: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$, no consecutive hyphens, max 50 chars
 ```
 
 ## 4.3 Membership
@@ -133,7 +138,7 @@ Attributes:
   owner         : URN (scope of the key)
   name          : String (max 100) DEFAULT 'Default'
   key_prefix    : String (8 chars, e.g., "sk_live_")
-  key_hash      : String! (unique, SHA-256 hash of full key)
+  key_hash      : String! (unique, format: "hex(32-byte salt):hex(SHA-256(key + salt))")
   scopes        : JSONB DEFAULT ["*"]
   last_used_at  : Timestamp?
   expires_at    : Timestamp?
