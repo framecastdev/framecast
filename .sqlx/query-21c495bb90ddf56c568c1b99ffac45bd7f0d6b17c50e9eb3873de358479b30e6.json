@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.team_id\n            FROM memberships m\n            WHERE m.user_id = $1 AND m.role = 'owner'\n              AND (\n                SELECT COUNT(*)\n                FROM memberships m2\n                WHERE m2.team_id = m.team_id AND m2.role = 'owner'\n              ) = 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "team_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "21c495bb90ddf56c568c1b99ffac45bd7f0d6b17c50e9eb3873de358479b30e6"
+}
