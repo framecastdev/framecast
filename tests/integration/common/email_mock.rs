@@ -151,44 +151,17 @@ impl MockEmailService {
         );
 
         let subject = format!("Invitation to join team: {}", team_name);
-
-        let body_text = format!(
-            "Hi there!\n\n\
-            {} has invited you to join the team '{}' as a {}.\n\n\
-            Click the link below to accept the invitation:\n\
-            {}\n\n\
-            This invitation will expire in 7 days.\n\n\
-            If you don't have a Framecast account, you'll be prompted to create one.\n\n\
-            Thanks,\n\
-            The Framecast Team",
-            inviter_name, team_name, role, invitation_url
+        let body_text = framecast_email::content::team_invitation_text(
+            inviter_name,
+            team_name,
+            role,
+            &invitation_url,
         );
-
-        let body_html = format!(
-            r#"
-            <html>
-            <body>
-                <h2>You're invited to join {team_name}!</h2>
-                <p>Hi there!</p>
-                <p><strong>{inviter_name}</strong> has invited you to join the team '<strong>{team_name}</strong>' as a <strong>{role}</strong>.</p>
-                <p>
-                    <a href="{invitation_url}" style="background-color: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                        Accept Invitation
-                    </a>
-                </p>
-                <p>Or copy and paste this link in your browser:</p>
-                <p><a href="{invitation_url}">{invitation_url}</a></p>
-                <p><small>This invitation will expire in 7 days.</small></p>
-                <hr>
-                <p><small>If you don't have a Framecast account, you'll be prompted to create one.</small></p>
-                <p><small>Thanks, The Framecast Team</small></p>
-            </body>
-            </html>
-            "#,
-            team_name = team_name,
-            inviter_name = inviter_name,
-            role = role,
-            invitation_url = invitation_url
+        let body_html = framecast_email::content::team_invitation_html(
+            inviter_name,
+            team_name,
+            role,
+            &invitation_url,
         );
 
         let mut email = MockEmail {

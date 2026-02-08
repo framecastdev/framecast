@@ -1326,7 +1326,6 @@ dependencies = [
 name = "framecast-teams"
 version = "0.0.1-SNAPSHOT"
 dependencies = [
- "anyhow",
  "axum",
  "base64",
  "chrono",

@@ -14,6 +14,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 pub mod aws_ses;
+pub mod content;
 pub mod mock;
 
 #[derive(Error, Debug)]

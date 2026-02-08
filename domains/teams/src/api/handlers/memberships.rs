@@ -11,7 +11,6 @@ use crate::{
     InvitationState, Membership, MembershipRole, MembershipWithUser, UserTier, MAX_OWNED_TEAMS,
     MAX_TEAM_MEMBERSHIPS,
 };
-use anyhow::Context;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -472,8 +471,7 @@ pub async fn accept_invitation(
         .repos
         .begin()
         .await
-        .context("Failed to acquire a Postgres connection from the pool")
-        .map_err(|e| Error::Internal(e.to_string()))?;
+        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
 
     // Check if user is already a member (inside TX to prevent races)
     let existing_membership =
@@ -503,14 +501,14 @@ pub async fn accept_invitation(
     if user.tier == UserTier::Starter {
         upgrade_user_tier_tx(&mut transaction, user.id, UserTier::Creator)
             .await
-            .context("Failed to upgrade user tier to Creator")
-            .map_err(|e| Error::Internal(e.to_string()))?;
+            .map_err(|e| {
+                Error::Internal(format!("Failed to upgrade user tier to Creator: {}", e))
+            })?;
     }
 
     let created_membership = create_membership_tx(&mut transaction, &membership)
         .await
-        .context("Failed to create team membership")
-        .map_err(|e| Error::Internal(e.to_string()))?;
+        .map_err(|e| Error::Internal(format!("Failed to create team membership: {}", e)))?;
 
     mark_invitation_accepted_tx(&mut transaction, invitation_id)
         .await
@@ -520,8 +518,7 @@ pub async fn accept_invitation(
     transaction
         .commit()
         .await
-        .context("Failed to commit invitation acceptance transaction")
-        .map_err(|e| Error::Internal(e.to_string()))?;
+        .map_err(|e| Error::Internal(format!("Failed to commit transaction: {}", e)))?;
 
     Ok(Json(MembershipResponse {
         id: created_membership.id,

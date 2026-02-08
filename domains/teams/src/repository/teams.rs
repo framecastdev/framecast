@@ -75,27 +75,26 @@ impl TeamRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        let teams = rows
-            .into_iter()
-            .map(|row| {
-                let team = Team {
-                    id: row.id,
-                    name: row.name,
-                    slug: row.slug,
-                    credits: row.credits,
-                    ephemeral_storage_bytes: row.ephemeral_storage_bytes,
-                    settings: sqlx::types::Json(
-                        serde_json::from_value(row.settings).unwrap_or_else(|e| {
-                            tracing::warn!(error = %e, "Failed to deserialize team settings, defaulting to empty");
-                            std::collections::HashMap::new()
-                        }),
-                    ),
-                    created_at: row.created_at,
-                    updated_at: row.updated_at,
-                };
-                (team, row.role)
-            })
-            .collect();
+        let mut teams = Vec::with_capacity(rows.len());
+        for row in rows {
+            let settings = serde_json::from_value(row.settings).map_err(|e| {
+                framecast_common::Error::Internal(format!(
+                    "Failed to deserialize team settings: {}",
+                    e
+                ))
+            })?;
+            let team = Team {
+                id: row.id,
+                name: row.name,
+                slug: row.slug,
+                credits: row.credits,
+                ephemeral_storage_bytes: row.ephemeral_storage_bytes,
+                settings: sqlx::types::Json(settings),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            };
+            teams.push((team, row.role));
+        }
 
         Ok(teams)
     }

@@ -361,9 +361,12 @@ mod tests {
     fn test_credit_assertions() {
         assertions::assert_credits_non_negative(0);
         assertions::assert_credits_non_negative(100);
+    }
 
-        // This should panic - credits cannot be negative
-        // assertions::assert_credits_non_negative(-1);
+    #[test]
+    #[should_panic(expected = "Credits cannot be negative")]
+    fn test_credit_assertions_rejects_negative() {
+        assertions::assert_credits_non_negative(-1);
     }
 }
 
