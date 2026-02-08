@@ -8,16 +8,8 @@ dependencies = [
     "pytest-asyncio>=0.23.0",
     "httpx>=0.26.0",
     "faker>=21.0.0",
-    "factory-boy>=3.3.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
-    "python-dotenv>=1.0.0",
-    "aiofiles>=23.2.0",
-    "pytest-xdist>=3.5.0",  # Parallel test execution
-    "pytest-mock>=3.12.0",   # Mocking utilities
-    "respx>=0.20.0",         # HTTP request mocking
-    "tenacity>=8.2.0",       # Retry utilities
-    "pillow>=10.0.0",        # Image processing for asset tests
     "PyJWT>=2.8.0",          # JWT token generation for E2E auth
     "asyncpg>=0.29.0",       # Direct database access for test seeding
 ]
@@ -43,13 +35,8 @@ addopts = [
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
     "auth: authentication related tests",
-    "jobs: job lifecycle tests",
-    "assets: asset management tests",
     "teams: team management tests",
-    "webhooks: webhook delivery tests",
-    "performance: performance and load tests",
     "security: security validation tests",
     "invitation: invitation workflow tests",
     "error_handling: error handling and edge case tests",
@@ -79,5 +66,5 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["factory", "faker", "respx"]
+module = ["faker"]
 ignore_missing_imports = true

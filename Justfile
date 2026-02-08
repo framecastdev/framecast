@@ -106,20 +106,6 @@ start-api:
     @echo "Starting Framecast API server..."
     cargo run --bin local
 
-# Start complete development environment (backing services + API)
-start-full: start-backing-services
-    @echo "Starting Framecast development environment..."
-    @echo "Access points:"
-    @echo "  API:          http://localhost:3000"
-    @echo "  Inngest UI:   http://localhost:8288"
-    @echo "  LocalStack:   http://localhost:4566"
-    @echo ""
-    @echo "Use 'just logs' to view service logs"
-    @echo "Use 'just stop' to stop all services"
-    @echo ""
-    @echo "Starting API server..."
-    just start-api
-
 # Start backing services (LocalStack, Inngest, PostgreSQL)
 start-backing-services:
     @echo "Starting backing services..."
@@ -187,13 +173,6 @@ migrate-reset:
     dropdb framecast_dev || true
     createdb framecast_dev
     just migrate
-    just seed
-
-# Seed database with test data
-seed:
-    @echo "Seeding database with test data..."
-    # TODO: Implement seeding script
-    @echo "Database seeded"
 
 # Generate sqlx offline query data for compile-time verification
 sqlx-prepare:
@@ -219,73 +198,6 @@ test-watch:
 test-e2e:
     @echo "Running E2E tests..."
     cd tests/e2e && uv run pytest tests/ --tb=short
-
-# Run E2E tests with email verification
-test-e2e-with-email:
-    @echo "Running E2E tests with LocalStack email verification..."
-    @echo "Starting LocalStack if needed..."
-    @docker-compose -f docker-compose.localstack.yml up -d localstack --remove-orphans
-    @echo "Waiting for LocalStack to be ready..."
-    @sleep 15
-    @echo "Setting up SES identities..."
-    @./scripts/localstack-init/01-setup-ses.sh
-    @echo "Running E2E tests with email verification..."
-    cd tests/e2e && uv run pytest tests/test_invitation_workflow_e2e.py -v --tb=short
-    @echo "E2E tests with email verification completed!"
-
-# Run complete invitation workflow tests (Python E2E)
-test-invitation-workflow:
-    @echo "Running invitation workflow E2E tests..."
-    @echo "Starting LocalStack if needed..."
-    @docker-compose -f docker-compose.localstack.yml up -d localstack --remove-orphans
-    @echo "Waiting for LocalStack to be ready..."
-    @sleep 15
-    @echo "Setting up SES identities..."
-    @./scripts/localstack-init/01-setup-ses.sh
-    @echo "Running Python E2E tests..."
-    cd tests/e2e && uv run pytest tests/test_invitation_workflow_e2e.py -v --tb=short
-    @echo "Invitation workflow E2E tests completed!"
-
-# Start LocalStack services for testing
-localstack-start:
-    @echo "Starting LocalStack services..."
-    docker-compose -f docker-compose.localstack.yml up -d --remove-orphans
-    @echo "Waiting for services to initialize..."
-    @sleep 15
-    @echo "LocalStack services are ready!"
-    @echo "Access points:"
-    @echo "  LocalStack: http://localhost:4566"
-    @echo "  MailHog UI: http://localhost:8025"
-    @echo "  Test DB:   localhost:5433"
-
-# Stop LocalStack services
-localstack-stop:
-    @echo "Stopping LocalStack services..."
-    docker-compose -f docker-compose.localstack.yml down
-    @echo "LocalStack services stopped!"
-
-# Restart LocalStack services
-localstack-restart: localstack-stop localstack-start
-
-# View LocalStack service logs
-localstack-logs:
-    @echo "Viewing LocalStack logs..."
-    docker-compose -f docker-compose.localstack.yml logs -f localstack
-
-# Check LocalStack health
-localstack-health:
-    @echo "Checking LocalStack health..."
-    @curl -s http://localhost:4566/_localstack/health | jq '.' || echo "LocalStack not responding"
-
-# Run specific E2E test suites
-test-e2e suite *args="":
-    @echo "Running E2E test suite: {{suite}}"
-    cd tests/e2e && uv run pytest tests/test_{{suite}}.py {{args}}
-
-# Run performance and load tests
-test-performance:
-    @echo "Running performance tests..."
-    cd tests/e2e && uv run pytest tests/test_performance.py -v
 
 # ============================================================================
 # CI PIPELINE (GitHub Actions)
@@ -532,14 +444,8 @@ lambda-watch:
     cargo lambda watch --bin lambda
 
 # Build all release artifacts
-build: lambda-build build-docker
+build: lambda-build
     @echo "All artifacts built successfully"
-
-# Build Docker images for RunPod workers
-build-docker:
-    @echo "Building Docker images..."
-    docker build -t framecast/comfyui-worker:latest -f infra/runpod/Dockerfile .
-    @echo "Docker images built"
 
 # ============================================================================
 # INFRASTRUCTURE (OpenTofu)
@@ -606,11 +512,6 @@ deploy-local-destroy:
         tofu destroy -var-file=environments/localstack.tfvars -auto-approve
     @echo "LocalStack resources destroyed"
 
-# Get LocalStack API endpoint
-deploy-local-endpoint:
-    @echo "Getting LocalStack API endpoint..."
-    @aws --endpoint-url=http://localhost:4566 apigatewayv2 get-apis --query 'Items[0].ApiEndpoint' --output text 2>/dev/null || echo "No API found"
-
 # ============================================================================
 # AWS DEPLOYMENT (OpenTofu)
 # ============================================================================
@@ -653,34 +554,6 @@ deploy-outputs env="dev":
 logs-lambda env="dev":
     @echo "Viewing Lambda logs for framecast-{{env}}-api..."
     aws logs tail /aws/lambda/framecast-{{env}}-api --follow
-
-# ============================================================================
-# ADMIN PROCESSES (Rule XII: Admin Processes)
-# ============================================================================
-
-# Generate a new API key for admin use
-generate-api-key name:
-    @echo "Generating API key for: {{name}}"
-    # TODO: Implement API key generation
-    @echo "API key generated"
-
-# Clean up old job records and files (maintenance)
-cleanup-jobs days="30":
-    @echo "Cleaning up jobs older than {{days}} days..."
-    # TODO: Implement cleanup script
-    @echo "Cleanup complete"
-
-# Archive completed jobs to cold storage
-archive-jobs:
-    @echo "Archiving completed jobs to cold storage..."
-    # TODO: Implement archival script
-    @echo "Jobs archived"
-
-# Export user data for GDPR compliance
-export-user-data user_id:
-    @echo "Exporting data for user: {{user_id}}"
-    # TODO: Implement user data export
-    @echo "User data exported"
 
 # ============================================================================
 # DEVELOPMENT HELPERS
