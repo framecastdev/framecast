@@ -1,7 +1,7 @@
 //! Membership repository
 
 use crate::domain::entities::{Membership, MembershipRole};
-use framecast_common::{RepositoryError, Result};
+use framecast_common::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -28,22 +28,6 @@ impl MembershipRepository {
         Self { pool }
     }
 
-    /// Count how many teams a user owns
-    pub async fn count_owned_teams(&self, user_id: Uuid) -> Result<i64> {
-        let count = sqlx::query!(
-            r#"
-            SELECT COUNT(*) as count
-            FROM memberships
-            WHERE user_id = $1 AND role = 'owner'
-            "#,
-            user_id
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(count.count.unwrap_or(0))
-    }
-
     /// Get membership by team and user
     pub async fn get_by_team_and_user(
         &self,
@@ -64,31 +48,6 @@ impl MembershipRepository {
         .await?;
 
         Ok(row)
-    }
-
-    /// Update a member's role
-    pub async fn update_role(
-        &self,
-        team_id: Uuid,
-        user_id: Uuid,
-        new_role: MembershipRole,
-    ) -> Result<Membership> {
-        let updated_membership = sqlx::query_as!(
-            Membership,
-            r#"
-            UPDATE memberships
-            SET role = $3
-            WHERE team_id = $1 AND user_id = $2
-            RETURNING id, team_id, user_id, role as "role: MembershipRole", created_at
-            "#,
-            team_id,
-            user_id,
-            new_role as MembershipRole
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(updated_membership)
     }
 
     /// Get all memberships for a team with user details
@@ -116,118 +75,5 @@ impl MembershipRepository {
         .await?;
 
         Ok(memberships)
-    }
-
-    /// Create new membership
-    pub async fn create(&self, membership: &Membership) -> Result<Membership> {
-        let created = sqlx::query_as!(
-            Membership,
-            r#"
-            INSERT INTO memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, team_id, user_id, role as "role: MembershipRole", created_at
-            "#,
-            membership.id,
-            membership.team_id,
-            membership.user_id,
-            membership.role.clone() as MembershipRole,
-            membership.created_at
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| match e {
-            sqlx::Error::Database(db_err) if db_err.constraint().is_some() => {
-                RepositoryError::AlreadyExists
-            }
-            _ => RepositoryError::from(e),
-        })?;
-
-        Ok(created)
-    }
-
-    /// Remove membership
-    pub async fn delete(&self, team_id: Uuid, user_id: Uuid) -> Result<()> {
-        let result = sqlx::query!(
-            "DELETE FROM memberships WHERE team_id = $1 AND user_id = $2",
-            team_id,
-            user_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        if result.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound.into());
-        }
-
-        Ok(())
-    }
-
-    /// Count all memberships for a user (INV-T8: max 50)
-    pub async fn count_for_user(&self, user_id: Uuid) -> Result<i64> {
-        let count = sqlx::query!(
-            r#"
-            SELECT COUNT(*) as count
-            FROM memberships
-            WHERE user_id = $1
-            "#,
-            user_id
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(count.count.unwrap_or(0))
-    }
-
-    /// Count all memberships for a team
-    pub async fn count_for_team(&self, team_id: Uuid) -> Result<i64> {
-        let count = sqlx::query!(
-            r#"
-            SELECT COUNT(*) as count
-            FROM memberships
-            WHERE team_id = $1
-            "#,
-            team_id
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(count.count.unwrap_or(0))
-    }
-
-    /// Find teams where user is the sole owner (INV-T2 pre-check for account deletion)
-    pub async fn find_teams_where_sole_owner(&self, user_id: Uuid) -> Result<Vec<Uuid>> {
-        let rows = sqlx::query!(
-            r#"
-            SELECT m.team_id
-            FROM memberships m
-            WHERE m.user_id = $1 AND m.role = 'owner'
-              AND (
-                SELECT COUNT(*)
-                FROM memberships m2
-                WHERE m2.team_id = m.team_id AND m2.role = 'owner'
-              ) = 1
-            "#,
-            user_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows.into_iter().map(|r| r.team_id).collect())
-    }
-
-    /// Count owners in team
-    pub async fn count_owners(&self, team_id: Uuid) -> Result<i64> {
-        let count = sqlx::query!(
-            r#"
-            SELECT COUNT(*) as count
-            FROM memberships
-            WHERE team_id = $1 AND role = 'owner'
-            "#,
-            team_id
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(count.count.unwrap_or(0))
     }
 }

@@ -87,45 +87,6 @@ impl InvitationRepository {
         Ok(created_invitation)
     }
 
-    /// Count pending invitations for a team
-    pub async fn count_pending_for_team(&self, team_id: Uuid) -> Result<i64> {
-        let count = sqlx::query!(
-            r#"
-            SELECT COUNT(*) as count
-            FROM invitations
-            WHERE team_id = $1
-              AND accepted_at IS NULL
-              AND declined_at IS NULL
-              AND revoked_at IS NULL
-              AND expires_at > NOW()
-            "#,
-            team_id
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(count.count.unwrap_or(0))
-    }
-
-    /// Mark invitation as accepted
-    pub async fn mark_accepted(&self, invitation_id: Uuid) -> Result<()> {
-        let result = sqlx::query!(
-            r#"
-            UPDATE invitations
-            SET accepted_at = NOW()
-            WHERE id = $1
-            "#,
-            invitation_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        if result.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound.into());
-        }
-        Ok(())
-    }
-
     /// Decline invitation (invitee-initiated)
     pub async fn decline(&self, invitation_id: Uuid) -> Result<()> {
         let result = sqlx::query!(

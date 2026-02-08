@@ -86,7 +86,10 @@ impl TeamResponse {
             slug: team.slug,
             credits: team.credits,
             ephemeral_storage_bytes: team.ephemeral_storage_bytes,
-            settings: serde_json::to_value(team.settings.0).unwrap_or_default(),
+            settings: serde_json::to_value(team.settings.0).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "Failed to serialize team settings, defaulting to null");
+                serde_json::Value::default()
+            }),
             created_at: team.created_at,
             updated_at: team.updated_at,
             user_role,

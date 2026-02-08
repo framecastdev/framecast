@@ -93,32 +93,6 @@ impl UserRepository {
         Ok(created)
     }
 
-    /// Update user credits atomically
-    pub async fn update_credits(&self, user_id: Uuid, credits_delta: i32) -> Result<User> {
-        let updated = sqlx::query_as!(
-            User,
-            r#"
-            UPDATE users SET
-                credits = credits + $2,
-                updated_at = NOW()
-            WHERE id = $1 AND credits + $2 >= 0
-            RETURNING id, email, name, avatar_url,
-                      tier as "tier: UserTier", credits,
-                      ephemeral_storage_bytes, upgraded_at,
-                      created_at, updated_at
-            "#,
-            user_id,
-            credits_delta
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        updated.ok_or(
-            RepositoryError::ConstraintViolation("Credits would become negative".to_string())
-                .into(),
-        )
-    }
-
     /// Update user profile (name, avatar_url)
     pub async fn update_profile(
         &self,
@@ -147,19 +121,6 @@ impl UserRepository {
         .await?;
 
         Ok(updated)
-    }
-
-    /// Delete user by ID
-    pub async fn delete(&self, id: Uuid) -> Result<()> {
-        let result = sqlx::query!("DELETE FROM users WHERE id = $1", id)
-            .execute(&self.pool)
-            .await?;
-
-        if result.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound.into());
-        }
-
-        Ok(())
     }
 
     /// Upgrade user tier
