@@ -198,7 +198,7 @@ impl TestApp {
         // Use TRUNCATE CASCADE to bypass foreign key constraints and triggers
         // This is test-only cleanup, so we can bypass the INV-T1 constraint
         // Using runtime query to avoid sqlx offline mode issues in tests
-        sqlx::query("TRUNCATE TABLE invitations, memberships, teams, users CASCADE")
+        sqlx::query("TRUNCATE TABLE api_keys, invitations, memberships, teams, users CASCADE")
             .execute(&self.pool)
             .await?;
         Ok(())

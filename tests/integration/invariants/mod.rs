@@ -3,8 +3,8 @@
 //! Tests all critical business rules from docs/spec/06_Invariants.md
 //! to ensure data integrity across the system
 
-use framecast_teams::*;
 use chrono::Utc;
+use framecast_teams::*;
 use uuid::Uuid;
 
 use crate::common::TestApp;
@@ -31,13 +31,12 @@ mod test_user_invariants {
         let starter_user = app.create_test_user(UserTier::Starter).await.unwrap();
 
         // Verify no memberships exist (using runtime query to avoid sqlx offline mode issues in tests)
-        let memberships: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM memberships WHERE user_id = $1",
-        )
-        .bind(starter_user.id)
-        .fetch_one(&app.pool)
-        .await
-        .unwrap();
+        let memberships: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM memberships WHERE user_id = $1")
+                .bind(starter_user.id)
+                .fetch_one(&app.pool)
+                .await
+                .unwrap();
 
         assert_eq!(memberships.0, 0);
 
@@ -48,7 +47,6 @@ mod test_user_invariants {
 
         app.cleanup().await.unwrap();
     }
-
 }
 
 mod test_team_invariants {
@@ -128,7 +126,10 @@ mod test_team_invariants {
         .bind(team2.updated_at)
         .execute(&app.pool).await;
 
-        assert!(insert_result.is_err(), "Duplicate slug should be rejected by database");
+        assert!(
+            insert_result.is_err(),
+            "Duplicate slug should be rejected by database"
+        );
 
         app.cleanup().await.unwrap();
     }
@@ -176,7 +177,9 @@ mod test_team_invariants {
             .bind(creator_user.id)
             .bind("owner")
             .bind(Utc::now())
-            .execute(&app.pool).await.unwrap();
+            .execute(&app.pool)
+            .await
+            .unwrap();
         }
 
         // Verify we have exactly 10 owned teams (using runtime query)
@@ -195,7 +198,6 @@ mod test_team_invariants {
 
         app.cleanup().await.unwrap();
     }
-
 }
 
 mod test_membership_invariants {
@@ -215,7 +217,7 @@ mod test_membership_invariants {
 
         // Attempting to create membership for starter user should be prevented
         // This is enforced at the application level, but we can test the database constraint
-        let membership_result = sqlx::query(
+        let _membership_result = sqlx::query(
             r#"
             INSERT INTO memberships (id, team_id, user_id, role, created_at)
             VALUES ($1, $2, $3, $4::membership_role, $5)
@@ -226,7 +228,8 @@ mod test_membership_invariants {
         .bind(starter_user.id)
         .bind("member")
         .bind(Utc::now())
-        .execute(&app.pool).await;
+        .execute(&app.pool)
+        .await;
 
         // If database has trigger to enforce this constraint, it should fail
         // Otherwise, this constraint is enforced in application logic
@@ -271,14 +274,17 @@ mod test_membership_invariants {
             .bind(member_user.id)
             .bind(role_to_str(&role))
             .bind(Utc::now())
-            .execute(&app.pool).await;
+            .execute(&app.pool)
+            .await;
 
             assert!(insert_result.is_ok(), "Role {:?} should be valid", role);
 
             // Clean up for next iteration
             sqlx::query("DELETE FROM memberships WHERE id = $1")
                 .bind(membership_id)
-                .execute(&app.pool).await.unwrap();
+                .execute(&app.pool)
+                .await
+                .unwrap();
         }
 
         app.cleanup().await.unwrap();
@@ -306,7 +312,8 @@ mod test_membership_invariants {
         .bind(member_user.id)
         .bind("member")
         .bind(Utc::now())
-        .execute(&app.pool).await;
+        .execute(&app.pool)
+        .await;
 
         assert!(membership1_result.is_ok());
 
@@ -322,7 +329,8 @@ mod test_membership_invariants {
         .bind(member_user.id)
         .bind("admin")
         .bind(Utc::now())
-        .execute(&app.pool).await;
+        .execute(&app.pool)
+        .await;
 
         // Should fail due to unique constraint on (team_id, user_id)
         assert!(membership2_result.is_err());
@@ -340,21 +348,19 @@ mod test_cross_entity_constraints {
         let app = TestApp::new().await.unwrap();
 
         let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
-        let (team, membership) = app.create_test_team(creator_user.id).await.unwrap();
+        let (_team, membership) = app.create_test_team(creator_user.id).await.unwrap();
 
         // Verify membership references exist (using runtime queries)
-        let user_check: Result<(Uuid,), _> = sqlx::query_as(
-            "SELECT id FROM users WHERE id = $1",
-        )
-        .bind(membership.user_id)
-        .fetch_one(&app.pool).await;
+        let user_check: Result<(Uuid,), _> = sqlx::query_as("SELECT id FROM users WHERE id = $1")
+            .bind(membership.user_id)
+            .fetch_one(&app.pool)
+            .await;
         assert!(user_check.is_ok());
 
-        let team_check: Result<(Uuid,), _> = sqlx::query_as(
-            "SELECT id FROM teams WHERE id = $1",
-        )
-        .bind(membership.team_id)
-        .fetch_one(&app.pool).await;
+        let team_check: Result<(Uuid,), _> = sqlx::query_as("SELECT id FROM teams WHERE id = $1")
+            .bind(membership.team_id)
+            .fetch_one(&app.pool)
+            .await;
         assert!(team_check.is_ok());
 
         app.cleanup().await.unwrap();
@@ -366,14 +372,15 @@ mod test_cross_entity_constraints {
         let app = TestApp::new().await.unwrap();
 
         let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
-        let (team, membership) = app.create_test_team(creator_user.id).await.unwrap();
+        let (team, _membership) = app.create_test_team(creator_user.id).await.unwrap();
 
         // Verify membership exists (using runtime queries)
-        let membership_check: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM memberships WHERE team_id = $1",
-        )
-        .bind(team.id)
-        .fetch_one(&app.pool).await.unwrap();
+        let membership_check: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM memberships WHERE team_id = $1")
+                .bind(team.id)
+                .fetch_one(&app.pool)
+                .await
+                .unwrap();
         assert_eq!(membership_check.0, 1);
 
         // Delete team (this should cascade to memberships)
@@ -384,11 +391,12 @@ mod test_cross_entity_constraints {
             .unwrap();
 
         // Verify membership was deleted
-        let membership_check_after: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM memberships WHERE team_id = $1",
-        )
-        .bind(team.id)
-        .fetch_one(&app.pool).await.unwrap();
+        let membership_check_after: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM memberships WHERE team_id = $1")
+                .bind(team.id)
+                .fetch_one(&app.pool)
+                .await
+                .unwrap();
         assert_eq!(membership_check_after.0, 0);
 
         app.cleanup().await.unwrap();
