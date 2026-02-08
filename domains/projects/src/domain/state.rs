@@ -68,7 +68,7 @@ impl std::fmt::Display for ProjectState {
 }
 
 /// Events that trigger project state transitions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ProjectEvent {
     /// Start rendering the project
     Render,
@@ -138,7 +138,7 @@ impl ProjectStateMachine {
 
     /// Check if a transition is valid without performing it
     pub fn can_transition(current: ProjectState, event: &ProjectEvent) -> bool {
-        Self::transition(current, event.clone()).is_ok()
+        Self::transition(current, *event).is_ok()
     }
 }
 

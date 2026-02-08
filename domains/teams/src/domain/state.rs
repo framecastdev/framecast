@@ -77,7 +77,7 @@ impl std::fmt::Display for InvitationState {
 }
 
 /// Events that trigger invitation state transitions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InvitationEvent {
     /// User accepts the invitation
     Accept,
@@ -158,7 +158,7 @@ impl InvitationStateMachine {
         event: &InvitationEvent,
         context: Option<&InvitationGuardContext>,
     ) -> bool {
-        Self::transition(current, event.clone(), context).is_ok()
+        Self::transition(current, *event, context).is_ok()
     }
 }
 

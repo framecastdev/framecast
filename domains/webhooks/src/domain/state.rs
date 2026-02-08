@@ -71,7 +71,7 @@ impl std::fmt::Display for WebhookDeliveryState {
 }
 
 /// Events that trigger webhook delivery state transitions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WebhookDeliveryEvent {
     /// Start an attempt to deliver
     Attempt,
@@ -182,7 +182,7 @@ impl WebhookDeliveryStateMachine {
         event: &WebhookDeliveryEvent,
         context: Option<&WebhookDeliveryGuardContext>,
     ) -> bool {
-        Self::transition(current, event.clone(), context).is_ok()
+        Self::transition(current, *event, context).is_ok()
     }
 }
 
