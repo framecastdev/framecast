@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::middleware::{AuthUser, TeamsState};
+use crate::api::middleware::{AuthUser, CreatorUser, TeamsState};
 
 /// Request for inviting a new team member
 #[derive(Debug, Deserialize, Validate)]
@@ -112,11 +112,11 @@ impl From<MembershipWithUser> for MembershipResponse {
 ///
 /// Returns all members of a team. Any team member can view the list.
 pub async fn list_members(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
 ) -> Result<Json<Vec<MembershipResponse>>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Check if user is a member of the team
     let membership = state
@@ -157,11 +157,11 @@ pub async fn list_members(
 /// row locking to prevent concurrent leave/remove operations from violating
 /// the "every team has ≥ 1 owner" invariant.
 pub async fn leave_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Begin transaction — all checks and mutations happen atomically
     let mut tx = state
@@ -267,7 +267,7 @@ pub async fn leave_team(
 /// - Cannot invite already existing members
 /// - Max 50 pending invitations per team (CARD-4)
 pub async fn invite_member(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
     Json(request): Json<InviteMemberRequest>,
@@ -277,7 +277,7 @@ pub async fn invite_member(
         .validate()
         .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // INV-I7: Cannot invite yourself
     if request.email.to_lowercase() == user.email.to_lowercase() {
@@ -585,12 +585,12 @@ pub async fn decline_invitation(
 ///
 /// Returns all invitations for a team. Only owners and admins can view.
 pub async fn list_invitations(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
     Query(query): Query<InvitationListQuery>,
 ) -> Result<Json<Vec<InvitationResponse>>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Check permission: owner or admin only
     let membership = state
@@ -630,11 +630,11 @@ pub async fn list_invitations(
 ///
 /// Revokes a pending invitation. Only owners and admins can revoke.
 pub async fn revoke_invitation(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path((team_id, invitation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Check permission: owner or admin only
     let membership = state
@@ -689,11 +689,11 @@ pub async fn revoke_invitation(
 ///
 /// Resends invitation email and extends expiration. Only owners and admins can resend.
 pub async fn resend_invitation(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path((team_id, invitation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<InvitationResponse>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Check permission: owner or admin only
     let membership = state
@@ -784,11 +784,11 @@ pub async fn resend_invitation(
 /// - Admins cannot remove owners
 /// - Cannot remove the last owner (INV-T2)
 pub async fn remove_member(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path((team_id, member_user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Cannot remove self — use POST /v1/teams/{id}/leave instead
     if member_user_id == user.id {
@@ -915,7 +915,7 @@ pub async fn remove_member(
 /// - Cannot demote the last owner (INV-T2)
 /// - Promoting to owner must not exceed MAX_OWNED_TEAMS (INV-T7)
 pub async fn update_member_role(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path((team_id, member_user_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<UpdateMemberRoleRequest>,
@@ -925,7 +925,7 @@ pub async fn update_member_role(
         .validate()
         .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Cannot change own role
     if member_user_id == user.id {

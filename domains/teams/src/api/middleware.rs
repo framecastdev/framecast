@@ -29,6 +29,8 @@ pub enum AuthError {
     MembershipsLoadError,
     AuthenticationFailed,
     InvalidUserId,
+    /// User tier insufficient for this operation (spec 9.1)
+    InsufficientTier,
 }
 
 impl IntoResponse for AuthError {
@@ -76,6 +78,11 @@ impl IntoResponse for AuthError {
                 StatusCode::UNAUTHORIZED,
                 "INVALID_TOKEN",
                 "Invalid user ID in token",
+            ),
+            AuthError::InsufficientTier => (
+                StatusCode::FORBIDDEN,
+                "INSUFFICIENT_TIER",
+                "Only creator tier users can access team operations",
             ),
         };
 
@@ -170,6 +177,31 @@ impl FromRequestParts<TeamsState> for AuthUser {
         let auth_context = AuthContext::new(user, memberships, None);
 
         Ok(AuthUser(auth_context))
+    }
+}
+
+/// Creator-tier authenticated user extractor.
+///
+/// Like `AuthUser` but rejects non-creator users with 403 FORBIDDEN.
+/// Use this for endpoints restricted to Creator tier per spec 9.1
+/// (all `/v1/teams/*` routes).
+#[derive(Debug)]
+pub struct CreatorUser(pub AuthContext);
+
+impl FromRequestParts<TeamsState> for CreatorUser {
+    type Rejection = AuthError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &TeamsState,
+    ) -> std::result::Result<Self, Self::Rejection> {
+        let AuthUser(auth_context) = AuthUser::from_request_parts(parts, state).await?;
+
+        if auth_context.user.tier != UserTier::Creator {
+            return Err(AuthError::InsufficientTier);
+        }
+
+        Ok(CreatorUser(auth_context))
     }
 }
 

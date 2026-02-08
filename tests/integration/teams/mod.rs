@@ -198,7 +198,7 @@ mod test_list_teams {
     }
 
     #[tokio::test]
-    async fn test_list_teams_starter_user_gets_empty() {
+    async fn test_list_teams_starter_user_forbidden() {
         let app = TestApp::new().await.unwrap();
         let starter = UserFixture::starter(&app).await.unwrap();
         let router = create_test_router(&app).await;
@@ -212,15 +212,8 @@ mod test_list_teams {
 
         let response = router.oneshot(request).await.unwrap();
 
-        // Starter users can list teams (they just have none)
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let teams: Vec<Value> = serde_json::from_slice(&body).unwrap();
-
-        assert!(teams.is_empty());
+        // Spec 9.1: Starter users cannot access team operations
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
         app.cleanup().await.unwrap();
     }

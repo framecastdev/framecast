@@ -24,4 +24,6 @@ pub use repository::{
 
 // Re-export API types
 pub use api::routes;
-pub use api::{ApiKeyUser, AuthConfig, AuthError, AuthUser, SupabaseClaims, TeamsState};
+pub use api::{
+    ApiKeyUser, AuthConfig, AuthError, AuthUser, CreatorUser, SupabaseClaims, TeamsState,
+};

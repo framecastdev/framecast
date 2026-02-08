@@ -3,7 +3,7 @@
 //! This module implements team CRUD operations with proper authorization
 //! and business rule enforcement as defined in the API specification.
 
-use crate::{MembershipRole, Team, UserTier, MAX_OWNED_TEAMS, MAX_TEAM_MEMBERSHIPS};
+use crate::{MembershipRole, Team, MAX_OWNED_TEAMS, MAX_TEAM_MEMBERSHIPS};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::middleware::{AuthUser, TeamsState};
+use crate::api::middleware::{CreatorUser, TeamsState};
 
 /// Request for creating a new team
 #[derive(Debug, Deserialize, Validate)]
@@ -104,10 +104,10 @@ impl TeamResponse {
 ///
 /// Returns all teams the authenticated user is a member of, with their role.
 pub async fn list_teams(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
 ) -> Result<Json<Vec<TeamResponse>>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     let teams_with_roles = state
         .repos
@@ -137,7 +137,7 @@ pub async fn list_teams(
 /// - Team slug must be unique (INV-T3)
 /// - Team gets at least one owner (INV-T2) - the creator
 pub async fn create_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Json(request): Json<CreateTeamRequest>,
 ) -> Result<(StatusCode, Json<TeamResponse>)> {
@@ -146,14 +146,7 @@ pub async fn create_team(
         .validate()
         .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
-    let user = &auth_context.0.user;
-
-    // Business Rule: Only creator tier users can create teams (INV-M4)
-    if user.tier != UserTier::Creator {
-        return Err(Error::Authorization(
-            "Only creator tier users can create teams".to_string(),
-        ));
-    }
+    let user = &auth_context.user;
 
     // Create team (handles slug generation from name if not provided)
     let mut team = Team::new(request.name, request.slug)?;
@@ -235,11 +228,11 @@ pub async fn create_team(
 /// Retrieves team details if the user has access.
 /// User must be a member of the team.
 pub async fn get_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
 ) -> Result<Json<TeamResponse>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Get team
     let team = state
@@ -279,7 +272,7 @@ pub async fn get_team(
 ///
 /// Updates team information. User must be owner or admin.
 pub async fn update_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
     Json(request): Json<UpdateTeamRequest>,
@@ -289,7 +282,7 @@ pub async fn update_team(
         .validate()
         .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Get team
     let mut team = state
@@ -361,11 +354,11 @@ pub async fn update_team(
 /// - Cannot delete if there are active jobs
 /// - Must handle membership cleanup (INV-T1, INV-T2 become irrelevant)
 pub async fn delete_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Get team (just verify it exists, don't need the data)
     let _team = state
