@@ -330,6 +330,11 @@ fn validate_owner_urn(auth_context: &AuthContext, urn: &Urn) -> Result<()> {
                 ));
             }
         }
+        UrnComponents::Artifact { .. } => {
+            return Err(Error::Validation(
+                "Artifact URNs cannot be used as API key owners".to_string(),
+            ));
+        }
         UrnComponents::System { .. } => {
             return Err(Error::Validation(
                 "System URNs cannot be used as API key owners".to_string(),
