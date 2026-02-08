@@ -51,13 +51,11 @@ hyper = { version = "1.0", features = ["full"] }
 lambda_http = { version = "0.13", default-features = false, features = ["apigw_http"] }
 
 # === Configuration & Environment ===
-config = "0.14"
 dotenvy = "0.15"
 
 # === Logging & Observability ===
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
-opentelemetry = "0.31"
 
 # === Authentication ===
 jsonwebtoken = "9.3"
@@ -70,17 +68,13 @@ aws-sdk-s3 = "1.122"
 
 # === Validation & Time ===
 validator = { version = "0.18", features = ["derive"] }
-time = { version = "0.3", features = ["serde", "macros"] }
 regex = "1.10"
-lazy_static = "1.5"
 
 # === Mutation Testing ===
 mutants = "0.0.3"
 
 # === Testing ===
 tokio-test = "0.4"
-mockall = "0.12"
-wiremock = "0.6"
 tempfile = "3.8"
 test-log = "0.2"
 serial_test = "3.1"

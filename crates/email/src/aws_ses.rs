@@ -3,8 +3,6 @@
 //! Provides production email delivery through AWS Simple Email Service (SES)
 //! with support for LocalStack testing environment.
 
-use std::collections::HashMap;
-
 use aws_config::{BehaviorVersion, Region};
 use aws_credential_types::Credentials;
 use aws_sdk_ses::config::SharedCredentialsProvider;
@@ -195,67 +193,10 @@ impl EmailService for SesEmailService {
         );
 
         let subject = format!("Invitation to join team: {}", team_name);
-
-        let body_text = format!(
-            "Hi there!\n\n\
-            {} has invited you to join the team '{}' as a {}.\n\n\
-            Click the link below to accept the invitation:\n\
-            {}\n\n\
-            This invitation will expire in 7 days.\n\n\
-            If you don't have a Framecast account, you'll be prompted to create one.\n\n\
-            Thanks,\n\
-            The Framecast Team",
-            inviter_name, team_name, role, invitation_url
-        );
-
-        let body_html = format!(
-            r#"
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <h2 style="color: #007cba;">You're invited to join {team_name}!</h2>
-
-                    <p>Hi there!</p>
-
-                    <p><strong>{inviter_name}</strong> has invited you to join the team '<strong>{team_name}</strong>' as a <strong>{role}</strong>.</p>
-
-                    <div style="text-align: center; margin: 30px 0;">
-                        <a href="{invitation_url}"
-                           style="background-color: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">
-                            Accept Invitation
-                        </a>
-                    </div>
-
-                    <p>Or copy and paste this link in your browser:</p>
-                    <p style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
-                        <a href="{invitation_url}">{invitation_url}</a>
-                    </p>
-
-                    <p style="color: #666; font-size: 14px;">
-                        <em>This invitation will expire in 7 days.</em>
-                    </p>
-
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-
-                    <p style="color: #666; font-size: 12px;">
-                        If you don't have a Framecast account, you'll be prompted to create one.<br>
-                        Thanks, The Framecast Team
-                    </p>
-                </div>
-            </body>
-            </html>
-            "#,
-            team_name = team_name,
-            inviter_name = inviter_name,
-            role = role,
-            invitation_url = invitation_url
-        );
-
-        let mut metadata = HashMap::new();
-        metadata.insert("email_type".to_string(), "team_invitation".to_string());
-        metadata.insert("team_id".to_string(), team_id.to_string());
-        metadata.insert("invitation_id".to_string(), invitation_id.to_string());
-        metadata.insert("role".to_string(), role.to_string());
+        let body_text =
+            crate::content::team_invitation_text(inviter_name, team_name, role, &invitation_url);
+        let body_html =
+            crate::content::team_invitation_html(inviter_name, team_name, role, &invitation_url);
 
         let message = EmailMessage::new(
             recipient_email.to_string(),
@@ -294,21 +235,5 @@ mod tests {
 
         // We expect this to succeed in creating the service, even if health check fails
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_message_building() {
-        let config = EmailConfig {
-            provider: "ses".to_string(),
-            aws_region: Some("us-east-1".to_string()),
-            aws_endpoint_url: None,
-            default_from: "test@framecast.app".to_string(),
-            enabled: true,
-        };
-
-        // We can't easily test the actual SES message building without creating a service
-        // This test just validates the config structure
-        assert_eq!(config.provider, "ses");
-        assert!(config.enabled);
     }
 }

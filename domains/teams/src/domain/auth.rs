@@ -91,7 +91,11 @@ mod tests {
             tier,
             credits: 100,
             ephemeral_storage_bytes: 0,
-            upgraded_at: None,
+            upgraded_at: if tier == UserTier::Creator {
+                Some(Utc::now())
+            } else {
+                None
+            },
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }

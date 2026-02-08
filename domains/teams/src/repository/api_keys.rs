@@ -1,9 +1,43 @@
 //! API Key repository
 
 use crate::domain::entities::ApiKey;
+use chrono::{DateTime, Utc};
 use framecast_common::{RepositoryError, Result};
 use sqlx::PgPool;
 use uuid::Uuid;
+
+/// Internal row type matching the api_keys query columns.
+struct ApiKeyRow {
+    id: Uuid,
+    user_id: Uuid,
+    owner: String,
+    name: String,
+    key_prefix: String,
+    key_hash: String,
+    scopes: serde_json::Value,
+    last_used_at: Option<DateTime<Utc>>,
+    expires_at: Option<DateTime<Utc>>,
+    revoked_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
+}
+
+fn api_key_from_row(row: ApiKeyRow) -> Result<ApiKey> {
+    let scopes: Vec<String> = serde_json::from_value(row.scopes)
+        .map_err(|e| RepositoryError::InvalidData(format!("Invalid scopes JSON: {}", e)))?;
+    Ok(ApiKey {
+        id: row.id,
+        user_id: row.user_id,
+        owner: row.owner,
+        name: row.name,
+        key_prefix: row.key_prefix,
+        key_hash: row.key_hash,
+        scopes: sqlx::types::Json(scopes),
+        last_used_at: row.last_used_at,
+        expires_at: row.expires_at,
+        revoked_at: row.revoked_at,
+        created_at: row.created_at,
+    })
+}
 
 #[derive(Clone)]
 pub struct ApiKeyRepository {
@@ -17,7 +51,8 @@ impl ApiKeyRepository {
 
     /// Find API key by ID
     pub async fn find(&self, id: Uuid) -> Result<Option<ApiKey>> {
-        let row = sqlx::query!(
+        let row = sqlx::query_as!(
+            ApiKeyRow,
             r#"
             SELECT id, user_id, owner, name, key_prefix, key_hash,
                    scopes, last_used_at, expires_at, revoked_at, created_at
@@ -29,27 +64,7 @@ impl ApiKeyRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        if let Some(row) = row {
-            let scopes: Vec<String> = serde_json::from_value(row.scopes)
-                .map_err(|e| RepositoryError::InvalidData(format!("Invalid scopes JSON: {}", e)))?;
-
-            let api_key = ApiKey {
-                id: row.id,
-                user_id: row.user_id,
-                owner: row.owner,
-                name: row.name,
-                key_prefix: row.key_prefix,
-                key_hash: row.key_hash,
-                scopes: sqlx::types::Json(scopes),
-                last_used_at: row.last_used_at,
-                expires_at: row.expires_at,
-                revoked_at: row.revoked_at,
-                created_at: row.created_at,
-            };
-            Ok(Some(api_key))
-        } else {
-            Ok(None)
-        }
+        row.map(api_key_from_row).transpose()
     }
 
     /// Authenticate by API key
@@ -59,7 +74,8 @@ impl ApiKeyRepository {
             return Ok(None);
         }
 
-        let rows = sqlx::query!(
+        let rows = sqlx::query_as!(
+            ApiKeyRow,
             r#"
             SELECT id, user_id, owner, name, key_prefix, key_hash,
                    scopes, last_used_at, expires_at, revoked_at, created_at
@@ -74,22 +90,7 @@ impl ApiKeyRepository {
 
         // Find the matching key using constant-time verification
         for row in rows {
-            let scopes: Vec<String> = serde_json::from_value(row.scopes)
-                .map_err(|e| RepositoryError::InvalidData(format!("Invalid scopes JSON: {}", e)))?;
-
-            let api_key = ApiKey {
-                id: row.id,
-                user_id: row.user_id,
-                owner: row.owner,
-                name: row.name,
-                key_prefix: row.key_prefix,
-                key_hash: row.key_hash,
-                scopes: sqlx::types::Json(scopes),
-                last_used_at: row.last_used_at,
-                expires_at: row.expires_at,
-                revoked_at: row.revoked_at,
-                created_at: row.created_at,
-            };
+            let api_key = api_key_from_row(row)?;
 
             if api_key.verify_key(candidate_key) {
                 // Update last_used_at
@@ -143,7 +144,8 @@ impl ApiKeyRepository {
 
     /// List all API keys for a user, ordered by created_at DESC
     pub async fn list_by_user(&self, user_id: Uuid) -> Result<Vec<ApiKey>> {
-        let rows = sqlx::query!(
+        let rows = sqlx::query_as!(
+            ApiKeyRow,
             r#"
             SELECT id, user_id, owner, name, key_prefix, key_hash,
                    scopes, last_used_at, expires_at, revoked_at, created_at
@@ -156,31 +158,13 @@ impl ApiKeyRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        rows.into_iter()
-            .map(|row| {
-                let scopes: Vec<String> = serde_json::from_value(row.scopes).map_err(|e| {
-                    RepositoryError::InvalidData(format!("Invalid scopes JSON: {}", e))
-                })?;
-                Ok(ApiKey {
-                    id: row.id,
-                    user_id: row.user_id,
-                    owner: row.owner,
-                    name: row.name,
-                    key_prefix: row.key_prefix,
-                    key_hash: row.key_hash,
-                    scopes: sqlx::types::Json(scopes),
-                    last_used_at: row.last_used_at,
-                    expires_at: row.expires_at,
-                    revoked_at: row.revoked_at,
-                    created_at: row.created_at,
-                })
-            })
-            .collect()
+        rows.into_iter().map(api_key_from_row).collect()
     }
 
     /// Update API key name (only if not revoked)
     pub async fn update_name(&self, id: Uuid, name: &str) -> Result<Option<ApiKey>> {
-        let row = sqlx::query!(
+        let row = sqlx::query_as!(
+            ApiKeyRow,
             r#"
             UPDATE api_keys SET name = $2
             WHERE id = $1 AND revoked_at IS NULL
@@ -193,27 +177,7 @@ impl ApiKeyRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        match row {
-            Some(row) => {
-                let scopes: Vec<String> = serde_json::from_value(row.scopes).map_err(|e| {
-                    RepositoryError::InvalidData(format!("Invalid scopes JSON: {}", e))
-                })?;
-                Ok(Some(ApiKey {
-                    id: row.id,
-                    user_id: row.user_id,
-                    owner: row.owner,
-                    name: row.name,
-                    key_prefix: row.key_prefix,
-                    key_hash: row.key_hash,
-                    scopes: sqlx::types::Json(scopes),
-                    last_used_at: row.last_used_at,
-                    expires_at: row.expires_at,
-                    revoked_at: row.revoked_at,
-                    created_at: row.created_at,
-                }))
-            }
-            None => Ok(None),
-        }
+        row.map(api_key_from_row).transpose()
     }
 
     /// Revoke API key

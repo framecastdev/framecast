@@ -11,36 +11,24 @@ use crate::{EmailError, EmailMessage, EmailReceipt, EmailService};
 
 /// Mock email service for testing
 #[derive(Debug, Clone)]
-pub struct MockEmailService {
-    enabled: bool,
-}
+pub struct MockEmailService;
 
 impl MockEmailService {
     /// Create a new mock email service
     pub fn new() -> Self {
-        Self { enabled: true }
+        Self
     }
 }
 
 impl Default for MockEmailService {
     fn default() -> Self {
-        Self::new()
+        Self
     }
 }
 
 #[async_trait::async_trait]
 impl EmailService for MockEmailService {
     async fn send_email(&self, message: EmailMessage) -> Result<EmailReceipt, EmailError> {
-        if !self.enabled {
-            tracing::warn!("Mock email service disabled, skipping send");
-            return Ok(EmailReceipt {
-                message_id: format!("disabled-{}", Uuid::new_v4()),
-                sent_at: Utc::now(),
-                provider: "mock-disabled".to_string(),
-                metadata: message.metadata.clone(),
-            });
-        }
-
         tracing::info!("Mock email service capturing email to: {}", message.to);
 
         let receipt = EmailReceipt {
@@ -80,45 +68,10 @@ impl EmailService for MockEmailService {
         );
 
         let subject = format!("Invitation to join team: {}", team_name);
-
-        let body_text = format!(
-            "Hi there!\n\n\
-            {} has invited you to join the team '{}' as a {}.\n\n\
-            Click the link below to accept the invitation:\n\
-            {}\n\n\
-            This invitation will expire in 7 days.\n\n\
-            If you don't have a Framecast account, you'll be prompted to create one.\n\n\
-            Thanks,\n\
-            The Framecast Team",
-            inviter_name, team_name, role, invitation_url
-        );
-
-        let body_html = format!(
-            r#"
-            <html>
-            <body>
-                <h2>You're invited to join {team_name}!</h2>
-                <p>Hi there!</p>
-                <p><strong>{inviter_name}</strong> has invited you to join the team '<strong>{team_name}</strong>' as a <strong>{role}</strong>.</p>
-                <p>
-                    <a href="{invitation_url}" style="background-color: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                        Accept Invitation
-                    </a>
-                </p>
-                <p>Or copy and paste this link in your browser:</p>
-                <p><a href="{invitation_url}">{invitation_url}</a></p>
-                <p><small>This invitation will expire in 7 days.</small></p>
-                <hr>
-                <p><small>If you don't have a Framecast account, you'll be prompted to create one.</small></p>
-                <p><small>Thanks, The Framecast Team</small></p>
-            </body>
-            </html>
-            "#,
-            team_name = team_name,
-            inviter_name = inviter_name,
-            role = role,
-            invitation_url = invitation_url
-        );
+        let body_text =
+            crate::content::team_invitation_text(inviter_name, team_name, role, &invitation_url);
+        let body_html =
+            crate::content::team_invitation_html(inviter_name, team_name, role, &invitation_url);
 
         let message = EmailMessage::new(
             recipient_email.to_string(),
