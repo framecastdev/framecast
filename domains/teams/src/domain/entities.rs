@@ -1103,7 +1103,7 @@ mod tests {
 
         // Additional tests with manually constructed keys
         let test_key = "sk_live_test123456789";
-        let salt: [u8; 32] = [42; 32]; // Fixed salt for testing
+        let salt: [u8; 32] = rand::thread_rng().gen();
         let test_hash = ApiKey::hash_key(test_key, &salt);
 
         // Create a test API key with known hash
