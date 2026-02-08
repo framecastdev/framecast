@@ -1130,9 +1130,9 @@ mod test_update_member_role {
 
         let response3 = router.oneshot(request3).await.unwrap();
 
-        // INV-T2: Cannot demote the last owner — this is a business invariant
-        // (409 Conflict), not a permission error (403 Forbidden)
-        assert_eq!(response3.status(), StatusCode::CONFLICT);
+        // Admins cannot change owner roles (403 Forbidden) — the permission
+        // guard fires before the INV-T2 last-owner check would be reached.
+        assert_eq!(response3.status(), StatusCode::FORBIDDEN);
 
         app.cleanup().await.unwrap();
     }

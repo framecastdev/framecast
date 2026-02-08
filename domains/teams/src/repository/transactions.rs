@@ -314,6 +314,70 @@ pub async fn count_active_jobs_for_team_tx(
     Ok(row.0)
 }
 
+/// Get a team by slug within an existing transaction.
+///
+/// Uses `FOR UPDATE` to lock the row (if it exists), preventing concurrent
+/// team creation with the same slug from racing past the uniqueness check.
+pub async fn get_team_by_slug_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    slug: &str,
+) -> std::result::Result<Option<Team>, sqlx::Error> {
+    let row: Option<Team> = sqlx::query_as(
+        r#"
+        SELECT id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at
+        FROM teams
+        WHERE slug = $1
+        FOR UPDATE
+        "#,
+    )
+    .bind(slug)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    Ok(row)
+}
+
+/// Find teams where user is the sole owner within an existing transaction.
+///
+/// Used for INV-T2 pre-checks (e.g. account deletion) inside a transaction
+/// to prevent races between the check and subsequent mutations.
+pub async fn find_teams_where_sole_owner_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+) -> std::result::Result<Vec<Uuid>, sqlx::Error> {
+    let rows: Vec<(Uuid,)> = sqlx::query_as(
+        r#"
+        SELECT m.team_id
+        FROM memberships m
+        WHERE m.user_id = $1 AND m.role = 'owner'
+          AND (
+            SELECT COUNT(*)
+            FROM memberships m2
+            WHERE m2.team_id = m.team_id AND m2.role = 'owner'
+          ) = 1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
+/// Delete a user within an existing transaction.
+pub async fn delete_user_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+) -> std::result::Result<(), RepositoryError> {
+    let result = sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(&mut **transaction)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(RepositoryError::NotFound);
+    }
+    Ok(())
+}
+
 /// Create a team within an existing transaction.
 ///
 /// Uses runtime `query_as` to avoid SQLX offline cache requirements.

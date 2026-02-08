@@ -3,7 +3,7 @@
 //! This module implements team CRUD operations with proper authorization
 //! and business rule enforcement as defined in the API specification.
 
-use crate::{MembershipRole, Team, UserTier, MAX_OWNED_TEAMS, MAX_TEAM_MEMBERSHIPS};
+use crate::{MembershipRole, Team, MAX_OWNED_TEAMS, MAX_TEAM_MEMBERSHIPS};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::middleware::{AuthUser, TeamsState};
+use crate::api::middleware::{CreatorUser, TeamsState};
 
 /// Request for creating a new team
 #[derive(Debug, Deserialize, Validate)]
@@ -86,7 +86,10 @@ impl TeamResponse {
             slug: team.slug,
             credits: team.credits,
             ephemeral_storage_bytes: team.ephemeral_storage_bytes,
-            settings: serde_json::to_value(team.settings.0).unwrap_or_default(),
+            settings: serde_json::to_value(team.settings.0).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "Failed to serialize team settings, defaulting to null");
+                serde_json::Value::default()
+            }),
             created_at: team.created_at,
             updated_at: team.updated_at,
             user_role,
@@ -101,10 +104,10 @@ impl TeamResponse {
 ///
 /// Returns all teams the authenticated user is a member of, with their role.
 pub async fn list_teams(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
 ) -> Result<Json<Vec<TeamResponse>>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     let teams_with_roles = state
         .repos
@@ -134,7 +137,7 @@ pub async fn list_teams(
 /// - Team slug must be unique (INV-T3)
 /// - Team gets at least one owner (INV-T2) - the creator
 pub async fn create_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Json(request): Json<CreateTeamRequest>,
 ) -> Result<(StatusCode, Json<TeamResponse>)> {
@@ -143,20 +146,26 @@ pub async fn create_team(
         .validate()
         .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
-    // Business Rule: Only creator tier users can create teams (INV-M4)
-    if user.tier != UserTier::Creator {
-        return Err(Error::Authorization(
-            "Only creator tier users can create teams".to_string(),
-        ));
+    // Create team (handles slug generation from name if not provided)
+    let mut team = Team::new(request.name, request.slug)?;
+
+    // Set initial credits if provided
+    if let Some(credits) = request.initial_credits {
+        team.credits = credits;
     }
 
-    // Business Rule: Check max owned teams limit (INV-T7)
-    let owned_teams_count = state
+    // All checks + mutations run inside a single transaction to prevent races
+    // between concurrent create_team calls (INV-T7, INV-T8, INV-T3).
+    let mut tx = state
         .repos
-        .memberships
-        .count_owned_teams(user.id)
+        .begin()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
+
+    // Business Rule: Check max owned teams limit (INV-T7)
+    let owned_teams_count = crate::count_owned_teams_tx(&mut tx, user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count owned teams: {}", e)))?;
 
@@ -168,10 +177,7 @@ pub async fn create_team(
     }
 
     // Business Rule: Check max memberships per user (INV-T8)
-    let membership_count = state
-        .repos
-        .memberships
-        .count_for_user(user.id)
+    let membership_count = crate::count_for_user_tx(&mut tx, user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
 
@@ -182,14 +188,8 @@ pub async fn create_team(
         )));
     }
 
-    // Create team (handles slug generation from name if not provided)
-    let mut team = Team::new(request.name, request.slug)?;
-
-    // Check slug uniqueness (INV-T3)
-    if state
-        .repos
-        .teams
-        .get_by_slug(&team.slug)
+    // Check slug uniqueness (INV-T3) — FOR UPDATE lock prevents concurrent creation
+    if crate::get_team_by_slug_tx(&mut tx, &team.slug)
         .await
         .map_err(|e| Error::Internal(format!("Failed to check slug uniqueness: {}", e)))?
         .is_some()
@@ -199,18 +199,6 @@ pub async fn create_team(
             team.slug
         )));
     }
-
-    // Set initial credits if provided
-    if let Some(credits) = request.initial_credits {
-        team.credits = credits;
-    }
-
-    // Atomically create team + owner membership in a transaction (INV-T1, INV-T2)
-    let mut tx = state
-        .repos
-        .begin()
-        .await
-        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
 
     let created_team = crate::create_team_tx(&mut tx, &team)
         .await
@@ -240,11 +228,11 @@ pub async fn create_team(
 /// Retrieves team details if the user has access.
 /// User must be a member of the team.
 pub async fn get_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
 ) -> Result<Json<TeamResponse>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Get team
     let team = state
@@ -284,7 +272,7 @@ pub async fn get_team(
 ///
 /// Updates team information. User must be owner or admin.
 pub async fn update_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
     Json(request): Json<UpdateTeamRequest>,
@@ -294,7 +282,7 @@ pub async fn update_team(
         .validate()
         .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Get team
     let mut team = state
@@ -366,11 +354,11 @@ pub async fn update_team(
 /// - Cannot delete if there are active jobs
 /// - Must handle membership cleanup (INV-T1, INV-T2 become irrelevant)
 pub async fn delete_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Get team (just verify it exists, don't need the data)
     let _team = state

@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::middleware::{AuthUser, TeamsState};
+use crate::api::middleware::{AuthUser, CreatorUser, TeamsState};
 
 /// Request for inviting a new team member
 #[derive(Debug, Deserialize, Validate)]
@@ -112,11 +112,11 @@ impl From<MembershipWithUser> for MembershipResponse {
 ///
 /// Returns all members of a team. Any team member can view the list.
 pub async fn list_members(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
 ) -> Result<Json<Vec<MembershipResponse>>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Check if user is a member of the team
     let membership = state
@@ -157,11 +157,11 @@ pub async fn list_members(
 /// row locking to prevent concurrent leave/remove operations from violating
 /// the "every team has ≥ 1 owner" invariant.
 pub async fn leave_team(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Begin transaction — all checks and mutations happen atomically
     let mut tx = state
@@ -267,7 +267,7 @@ pub async fn leave_team(
 /// - Cannot invite already existing members
 /// - Max 50 pending invitations per team (CARD-4)
 pub async fn invite_member(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
     Json(request): Json<InviteMemberRequest>,
@@ -277,7 +277,7 @@ pub async fn invite_member(
         .validate()
         .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // INV-I7: Cannot invite yourself
     if request.email.to_lowercase() == user.email.to_lowercase() {
@@ -463,13 +463,23 @@ pub async fn accept_invitation(
         }
     }
 
-    // Check if user is already a member
-    let existing_membership = state
+    // Create membership (convert InvitationRole to MembershipRole)
+    let membership = Membership::new(team_id, user.id, invitation.role.to_membership_role());
+
+    // Begin transaction — all checks and mutations happen atomically to prevent
+    // races between concurrent invitation acceptances (INV-T8, duplicate membership).
+    let mut transaction = state
         .repos
-        .memberships
-        .get_by_team_and_user(team_id, user.id)
+        .begin()
         .await
-        .map_err(|e| Error::Internal(format!("Failed to check membership: {}", e)))?;
+        .context("Failed to acquire a Postgres connection from the pool")
+        .map_err(|e| Error::Internal(e.to_string()))?;
+
+    // Check if user is already a member (inside TX to prevent races)
+    let existing_membership =
+        get_membership_by_team_and_user_tx(&mut transaction, team_id, user.id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to check membership: {}", e)))?;
 
     if existing_membership.is_some() {
         return Err(Error::Conflict(
@@ -477,11 +487,8 @@ pub async fn accept_invitation(
         ));
     }
 
-    // Business rule: Max 50 memberships per user (INV-T8)
-    let user_membership_count = state
-        .repos
-        .memberships
-        .count_for_user(user.id)
+    // Business rule: Max 50 memberships per user (INV-T8) — inside TX to prevent races
+    let user_membership_count = count_for_user_tx(&mut transaction, user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
 
@@ -491,17 +498,6 @@ pub async fn accept_invitation(
             MAX_TEAM_MEMBERSHIPS
         )));
     }
-
-    // Create membership (convert InvitationRole to MembershipRole)
-    let membership = Membership::new(team_id, user.id, invitation.role.to_membership_role());
-
-    // Begin transaction — all mutations happen atomically (Zero2Prod Ch.7 pattern)
-    let mut transaction = state
-        .repos
-        .begin()
-        .await
-        .context("Failed to acquire a Postgres connection from the pool")
-        .map_err(|e| Error::Internal(e.to_string()))?;
 
     // Auto-upgrade Starter → Creator if needed
     if user.tier == UserTier::Starter {
@@ -589,12 +585,12 @@ pub async fn decline_invitation(
 ///
 /// Returns all invitations for a team. Only owners and admins can view.
 pub async fn list_invitations(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
     Query(query): Query<InvitationListQuery>,
 ) -> Result<Json<Vec<InvitationResponse>>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Check permission: owner or admin only
     let membership = state
@@ -634,11 +630,11 @@ pub async fn list_invitations(
 ///
 /// Revokes a pending invitation. Only owners and admins can revoke.
 pub async fn revoke_invitation(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path((team_id, invitation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Check permission: owner or admin only
     let membership = state
@@ -693,11 +689,11 @@ pub async fn revoke_invitation(
 ///
 /// Resends invitation email and extends expiration. Only owners and admins can resend.
 pub async fn resend_invitation(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path((team_id, invitation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<InvitationResponse>> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Check permission: owner or admin only
     let membership = state
@@ -788,11 +784,11 @@ pub async fn resend_invitation(
 /// - Admins cannot remove owners
 /// - Cannot remove the last owner (INV-T2)
 pub async fn remove_member(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path((team_id, member_user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode> {
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Cannot remove self — use POST /v1/teams/{id}/leave instead
     if member_user_id == user.id {
@@ -919,7 +915,7 @@ pub async fn remove_member(
 /// - Cannot demote the last owner (INV-T2)
 /// - Promoting to owner must not exceed MAX_OWNED_TEAMS (INV-T7)
 pub async fn update_member_role(
-    auth_context: AuthUser,
+    CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path((team_id, member_user_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<UpdateMemberRoleRequest>,
@@ -929,7 +925,7 @@ pub async fn update_member_role(
         .validate()
         .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
-    let user = &auth_context.0.user;
+    let user = &auth_context.user;
 
     // Cannot change own role
     if member_user_id == user.id {
@@ -980,6 +976,15 @@ pub async fn update_member_role(
         .await
         .map_err(|e| Error::Internal(format!("Failed to get target membership: {}", e)))?
         .ok_or_else(|| Error::NotFound("Member not found in this team".to_string()))?;
+
+    // Business rule: Admins cannot change owner roles (mirror of remove_member guard)
+    if acting_membership.role == MembershipRole::Admin
+        && target_membership.role == MembershipRole::Owner
+    {
+        return Err(Error::Authorization(
+            "Admins cannot change owner roles".to_string(),
+        ));
+    }
 
     // Business rule: Promoting to owner must not exceed MAX_OWNED_TEAMS (INV-T7)
     if request.role == MembershipRole::Owner && target_membership.role != MembershipRole::Owner {

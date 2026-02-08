@@ -104,11 +104,16 @@ pub async fn delete_account(
 ) -> Result<StatusCode> {
     let user_id = auth_context.user.id;
 
-    // INV-T2: Check if user is the sole owner of any team
-    let sole_owner_teams = state
+    // Wrap sole-owner check + delete in a transaction to prevent races
+    // where another member leaves between our check and the delete.
+    let mut tx = state
         .repos
-        .memberships
-        .find_teams_where_sole_owner(user_id)
+        .begin()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
+
+    // INV-T2: Check if user is the sole owner of any team
+    let sole_owner_teams = crate::find_teams_where_sole_owner_tx(&mut tx, user_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to check team ownership: {}", e)))?;
 
@@ -119,12 +124,13 @@ pub async fn delete_account(
     }
 
     // DB cascades handle memberships + API keys
-    state
-        .repos
-        .users
-        .delete(user_id)
+    crate::delete_user_tx(&mut tx, user_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to delete account: {}", e)))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to commit transaction: {}", e)))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
