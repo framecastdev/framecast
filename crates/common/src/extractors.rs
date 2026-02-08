@@ -2,6 +2,7 @@
 
 use axum::{
     extract::{rejection::JsonRejection, FromRequest, Request},
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::de::DeserializeOwned;
@@ -13,26 +14,47 @@ use crate::Error;
 ///
 /// Replaces `Json<T>` + manual `.validate()` calls in handlers.
 /// Requires `T: DeserializeOwned + Validate`.
+///
+/// Deserialization failures preserve axum's native `JsonRejection` (422).
+/// Validation failures return `Error::Validation` (400).
 #[derive(Debug)]
 pub struct ValidatedJson<T>(pub T);
+
+/// Rejection type for `ValidatedJson` that preserves the original status codes:
+/// - JSON deserialization errors → 422 (from axum's `JsonRejection`)
+/// - Validation errors → 400 (from `Error::Validation`)
+#[derive(Debug)]
+pub enum ValidatedJsonRejection {
+    Json(JsonRejection),
+    Validation(Error),
+}
+
+impl IntoResponse for ValidatedJsonRejection {
+    fn into_response(self) -> Response {
+        match self {
+            ValidatedJsonRejection::Json(e) => e.into_response(),
+            ValidatedJsonRejection::Validation(e) => e.into_response(),
+        }
+    }
+}
 
 impl<T, S> FromRequest<S> for ValidatedJson<T>
 where
     T: DeserializeOwned + Validate,
     S: Send + Sync,
 {
-    type Rejection = Error;
+    type Rejection = ValidatedJsonRejection;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let Json(value) =
-            Json::<T>::from_request(req, state)
-                .await
-                .map_err(|e: JsonRejection| {
-                    Error::Validation(format!("Invalid request body: {}", e))
-                })?;
-        value
-            .validate()
-            .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
+        let Json(value) = Json::<T>::from_request(req, state)
+            .await
+            .map_err(ValidatedJsonRejection::Json)?;
+        value.validate().map_err(|e| {
+            ValidatedJsonRejection::Validation(Error::Validation(format!(
+                "Validation failed: {}",
+                e
+            )))
+        })?;
         Ok(ValidatedJson(value))
     }
 }
@@ -40,7 +62,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{self, Request as HttpRequest};
+    use axum::http::{self, Request as HttpRequest, StatusCode};
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize, Validate)]
@@ -70,12 +92,9 @@ mod tests {
         let req = json_request("not json");
         let result = ValidatedJson::<TestPayload>::from_request(req, &()).await;
         let err = result.unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("Invalid request body"),
-            "Expected 'Invalid request body' in: {}",
-            msg
-        );
+        // Deserialization failures preserve axum's 422 status
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
@@ -84,11 +103,8 @@ mod tests {
         let req = json_request(r#"{"name": ""}"#);
         let result = ValidatedJson::<TestPayload>::from_request(req, &()).await;
         let err = result.unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("Validation failed"),
-            "Expected 'Validation failed' in: {}",
-            msg
-        );
+        // Validation failures return 400
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }
