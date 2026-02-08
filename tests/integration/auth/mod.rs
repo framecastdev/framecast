@@ -106,9 +106,9 @@ mod test_jwt_validation {
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
 
         use jsonwebtoken::{Algorithm, EncodingKey, Header};
-        use serde::{Deserialize, Serialize};
+        use serde::Serialize;
 
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Serialize)]
         struct ExpiredClaims {
             sub: String,
             email: String,
@@ -197,9 +197,9 @@ mod test_user_tier_permissions {
         let fake_user_id = Uuid::new_v4();
         let fake_token = {
             use jsonwebtoken::{Algorithm, EncodingKey, Header};
-            use serde::{Deserialize, Serialize};
+            use serde::Serialize;
 
-            #[derive(Debug, Serialize, Deserialize)]
+            #[derive(Debug, Serialize)]
             struct FakeClaims {
                 sub: String,
                 email: String,
