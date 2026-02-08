@@ -7,19 +7,20 @@
 //! - PATCH /v1/auth/keys/{id}  — Update API key name
 //! - DELETE /v1/auth/keys/{id} — Revoke API key
 
-use crate::domain::entities::{ApiKey, AuthenticatedApiKey, UserTier};
+use crate::domain::entities::{ApiKey, AuthenticatedApiKey};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     Json,
 };
 use chrono::{DateTime, Utc};
+use framecast_auth::{AuthContext, AuthTier, AuthUser};
 use framecast_common::{Error, Result, Urn, UrnComponents, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::middleware::{AuthUser, TeamsState};
+use crate::api::middleware::TeamsState;
 
 // ============================================================
 // Scope constants
@@ -282,7 +283,7 @@ pub async fn revoke_api_key(
 // ============================================================
 
 /// Validate owner URN per invariants INV-A6, INV-A7, INV-X4
-fn validate_owner_urn(auth_context: &crate::AuthContext, urn: &Urn) -> Result<()> {
+fn validate_owner_urn(auth_context: &AuthContext, urn: &Urn) -> Result<()> {
     let user = &auth_context.user;
 
     match urn.parse()? {
@@ -296,7 +297,7 @@ fn validate_owner_urn(auth_context: &crate::AuthContext, urn: &Urn) -> Result<()
         }
         UrnComponents::Team { .. } => {
             // INV-A7: Team URN requires creator tier
-            if user.tier != UserTier::Creator {
+            if user.tier != AuthTier::Creator {
                 return Err(Error::Authorization(
                     "Team-scoped API keys require creator tier".to_string(),
                 ));
@@ -317,7 +318,7 @@ fn validate_owner_urn(auth_context: &crate::AuthContext, urn: &Urn) -> Result<()
                     "Cannot create API key for another user's membership".to_string(),
                 ));
             }
-            if user.tier != UserTier::Creator {
+            if user.tier != AuthTier::Creator {
                 return Err(Error::Authorization(
                     "Membership-scoped API keys require creator tier".to_string(),
                 ));
@@ -340,7 +341,7 @@ fn validate_owner_urn(auth_context: &crate::AuthContext, urn: &Urn) -> Result<()
 }
 
 /// Validate scopes against tier restrictions
-fn validate_scopes(scopes: &[String], tier: &UserTier) -> Result<()> {
+fn validate_scopes(scopes: &[String], tier: &AuthTier) -> Result<()> {
     if scopes.is_empty() {
         return Err(Error::Validation("Scopes cannot be empty".to_string()));
     }
@@ -351,7 +352,7 @@ fn validate_scopes(scopes: &[String], tier: &UserTier) -> Result<()> {
         }
 
         // Check tier restriction for starters
-        if *tier == UserTier::Starter && !STARTER_ALLOWED_SCOPES.contains(&scope.as_str()) {
+        if *tier == AuthTier::Starter && !STARTER_ALLOWED_SCOPES.contains(&scope.as_str()) {
             return Err(Error::Authorization(format!(
                 "Scope '{}' is not available for starter tier",
                 scope
@@ -469,34 +470,34 @@ mod tests {
 
     #[test]
     fn test_validate_scopes_rejects_unknown() {
-        let result = validate_scopes(&["unknown:scope".to_string()], &UserTier::Creator);
+        let result = validate_scopes(&["unknown:scope".to_string()], &AuthTier::Creator);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_validate_scopes_starter_restricted() {
         // team:read is not in STARTER_ALLOWED_SCOPES
-        let result = validate_scopes(&["team:read".to_string()], &UserTier::Starter);
+        let result = validate_scopes(&["team:read".to_string()], &AuthTier::Starter);
         assert!(result.is_err());
 
         // team:admin is not in STARTER_ALLOWED_SCOPES
-        let result = validate_scopes(&["team:admin".to_string()], &UserTier::Starter);
+        let result = validate_scopes(&["team:admin".to_string()], &AuthTier::Starter);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_validate_scopes_starter_allowed() {
-        let result = validate_scopes(&["generate".to_string()], &UserTier::Starter);
+        let result = validate_scopes(&["generate".to_string()], &AuthTier::Starter);
         assert!(result.is_ok());
 
-        let result = validate_scopes(&["jobs:read".to_string()], &UserTier::Starter);
+        let result = validate_scopes(&["jobs:read".to_string()], &AuthTier::Starter);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_scopes_creator_all_allowed() {
         for scope in ALLOWED_SCOPES {
-            let result = validate_scopes(&[scope.to_string()], &UserTier::Creator);
+            let result = validate_scopes(&[scope.to_string()], &AuthTier::Creator);
             assert!(
                 result.is_ok(),
                 "Creator should be allowed scope '{}'",
@@ -507,7 +508,7 @@ mod tests {
 
     #[test]
     fn test_validate_scopes_wildcard() {
-        let result = validate_scopes(&["*".to_string()], &UserTier::Creator);
+        let result = validate_scopes(&["*".to_string()], &AuthTier::Creator);
         assert!(result.is_ok());
     }
 }

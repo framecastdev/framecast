@@ -8,12 +8,13 @@
 use crate::{User, UserTier};
 use axum::{extract::State, http::StatusCode, Json};
 use chrono::{DateTime, Utc};
+use framecast_auth::{AuthTier, AuthUser};
 use framecast_common::{Error, Result, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::middleware::{AuthUser, TeamsState};
+use crate::api::middleware::TeamsState;
 
 /// Response for user profile operations
 #[derive(Debug, Serialize)]
@@ -64,9 +65,19 @@ pub struct UpgradeTierRequest {
 }
 
 /// GET /v1/account - Get current user profile
-pub async fn get_profile(AuthUser(auth_context): AuthUser) -> Result<Json<UserResponse>> {
-    let user_response = UserResponse::from(auth_context.user);
-    Ok(Json(user_response))
+pub async fn get_profile(
+    AuthUser(auth_context): AuthUser,
+    State(state): State<TeamsState>,
+) -> Result<Json<UserResponse>> {
+    let user = state
+        .repos
+        .users
+        .find(auth_context.user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to load user: {}", e)))?
+        .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
+
+    Ok(Json(UserResponse::from(user)))
 }
 
 /// PATCH /v1/account - Update user profile
@@ -133,16 +144,19 @@ pub async fn upgrade_tier(
     State(state): State<TeamsState>,
     ValidatedJson(request): ValidatedJson<UpgradeTierRequest>,
 ) -> Result<Json<UserResponse>> {
-    let current_user = &auth_context.user;
-    let user_id = current_user.id;
+    let user_id = auth_context.user.id;
+    let current_tier = auth_context.user.tier;
 
     // Business logic validation
-    match (&current_user.tier, &request.target_tier) {
-        (UserTier::Starter, UserTier::Creator) => {
+    match (current_tier, &request.target_tier) {
+        (AuthTier::Starter, UserTier::Creator) => {
             // Valid upgrade path
         }
-        (current, target) if current == target => {
-            return Err(Error::Conflict(format!("User is already {}", current)));
+        (AuthTier::Creator, UserTier::Creator) => {
+            return Err(Error::Conflict("User is already creator".to_string()));
+        }
+        (AuthTier::Starter, UserTier::Starter) => {
+            return Err(Error::Conflict("User is already starter".to_string()));
         }
         _ => {
             return Err(Error::Validation("Invalid tier upgrade path".to_string()));
@@ -160,7 +174,7 @@ pub async fn upgrade_tier(
 
     tracing::info!(
         user_id = %user_id,
-        from_tier = ?current_user.tier,
+        from_tier = %current_tier,
         to_tier = ?request.target_tier,
         "User tier upgraded successfully"
     );

@@ -1193,6 +1193,7 @@ dependencies = [
  "anyhow",
  "axum",
  "dotenvy",
+ "framecast-auth",
  "framecast-email",
  "framecast-teams",
  "lambda_http",
@@ -1202,6 +1203,25 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "framecast-auth"
+version = "0.0.1-SNAPSHOT"
+dependencies = [
+ "axum",
+ "chrono",
+ "framecast-common",
+ "hex",
+ "jsonwebtoken",
+ "mutants",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1250,6 +1270,7 @@ dependencies = [
  "base64",
  "chrono",
  "dotenvy",
+ "framecast-auth",
  "framecast-common",
  "framecast-email",
  "framecast-teams",
@@ -1305,11 +1326,11 @@ dependencies = [
  "axum",
  "base64",
  "chrono",
+ "framecast-auth",
  "framecast-common",
  "framecast-email",
  "getrandom 0.2.17",
  "hex",
- "jsonwebtoken",
  "mutants",
  "rand",
  "serde",

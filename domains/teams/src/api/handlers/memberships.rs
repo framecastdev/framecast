@@ -21,7 +21,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::middleware::{AuthUser, CreatorUser, TeamsState};
+use crate::api::middleware::TeamsState;
+use framecast_auth::{AuthTier, AuthUser, CreatorUser};
 
 /// Request for inviting a new team member
 #[derive(Debug, Deserialize, Validate)]
@@ -190,7 +191,7 @@ pub async fn leave_team(
         if owner_count <= 1 {
             if member_count <= 1 {
                 // Last member AND last owner — check INV-U2 before auto-deleting
-                if user.tier == UserTier::Creator {
+                if user.tier == AuthTier::Creator {
                     let user_membership_count =
                         count_for_user_tx(&mut tx, user.id).await.map_err(|e| {
                             Error::Internal(format!("Failed to count user memberships: {}", e))
@@ -219,7 +220,7 @@ pub async fn leave_team(
     }
 
     // INV-U2: Creator must belong to at least one team
-    if user.tier == UserTier::Creator {
+    if user.tier == AuthTier::Creator {
         let user_membership_count = count_for_user_tx(&mut tx, user.id)
             .await
             .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
@@ -494,7 +495,7 @@ pub async fn accept_invitation(
     }
 
     // Auto-upgrade Starter → Creator if needed
-    if user.tier == UserTier::Starter {
+    if user.tier == AuthTier::Starter {
         upgrade_user_tier_tx(&mut transaction, user.id, UserTier::Creator)
             .await
             .map_err(|e| {

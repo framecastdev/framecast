@@ -3,7 +3,8 @@
 //! Tests JWT authentication, user tier permissions, and role-based access control
 //! according to the permission matrix in docs/spec/08_Permissions.md
 
-use framecast_teams::{AuthError, AuthUser, MembershipRole, UserTier};
+use framecast_auth::{AuthError, AuthTier, AuthUser};
+use framecast_teams::UserTier;
 use serde_json::Value;
 
 use axum::{
@@ -42,7 +43,7 @@ mod test_jwt_validation {
 
         let AuthUser(auth_context) = auth_result.unwrap();
         assert_eq!(auth_context.user.id, user_fixture.user.id);
-        assert_eq!(auth_context.user.tier, UserTier::Starter);
+        assert_eq!(auth_context.user.tier, AuthTier::Starter);
 
         app.cleanup().await.unwrap();
     }
@@ -163,7 +164,7 @@ mod test_user_tier_permissions {
         assert!(auth_result.is_ok());
 
         let AuthUser(auth_context) = auth_result.unwrap();
-        assert_eq!(auth_context.user.tier, UserTier::Starter);
+        assert_eq!(auth_context.user.tier, AuthTier::Starter);
 
         // Starter users should have no team memberships (INV-U3)
         assert!(auth_context.memberships.is_empty());
@@ -183,7 +184,7 @@ mod test_user_tier_permissions {
         assert!(auth_result.is_ok());
 
         let AuthUser(auth_context) = auth_result.unwrap();
-        assert_eq!(auth_context.user.tier, UserTier::Creator);
+        assert_eq!(auth_context.user.tier, AuthTier::Creator);
 
         // Creator users can have team memberships
         assert!(!auth_context.memberships.is_empty());
@@ -267,13 +268,13 @@ mod test_permission_matrix {
             let AuthUser(auth_context) = auth_result.unwrap();
 
             match auth_context.user.tier {
-                UserTier::Starter => {
+                AuthTier::Starter => {
                     assert!(
                         auth_context.memberships.is_empty(),
                         "Starter users cannot have team memberships"
                     );
                 }
-                UserTier::Creator => {
+                AuthTier::Creator => {
                     // Creator users can have memberships
                 }
             }
@@ -293,15 +294,15 @@ mod test_permission_matrix {
         let starter_auth = AuthUser::from_request_parts(&mut starter_parts, &app.state)
             .await
             .unwrap();
-        assert_eq!(starter_auth.0.user.tier, UserTier::Starter);
-        assert!(!starter_auth.0.user.can_create_teams());
+        assert_eq!(starter_auth.0.user.tier, AuthTier::Starter);
+        assert!(!starter_auth.0.is_creator());
 
         let mut creator_parts = make_parts(Some(&format!("Bearer {}", creator_fixture.jwt_token)));
         let creator_auth = AuthUser::from_request_parts(&mut creator_parts, &app.state)
             .await
             .unwrap();
-        assert_eq!(creator_auth.0.user.tier, UserTier::Creator);
-        assert!(creator_auth.0.user.can_create_teams());
+        assert_eq!(creator_auth.0.user.tier, AuthTier::Creator);
+        assert!(creator_auth.0.is_creator());
 
         app.cleanup().await.unwrap();
     }
@@ -340,9 +341,9 @@ mod test_permission_matrix {
         assert!(!owner_memberships.is_empty());
         let owner_membership = owner_memberships
             .iter()
-            .find(|(t, _)| t.id == team.id)
+            .find(|m| m.team_id == team.id)
             .unwrap();
-        assert_eq!(owner_membership.1, MembershipRole::Owner);
+        assert_eq!(owner_membership.role, framecast_auth::AuthRole::Owner);
 
         // Test member permissions
         let mut member_parts = make_parts(Some(&format!("Bearer {}", member_jwt)));
@@ -354,9 +355,9 @@ mod test_permission_matrix {
         assert!(!member_memberships.is_empty());
         let member_membership = member_memberships
             .iter()
-            .find(|(t, _)| t.id == team.id)
+            .find(|m| m.team_id == team.id)
             .unwrap();
-        assert_eq!(member_membership.1, MembershipRole::Member);
+        assert_eq!(member_membership.role, framecast_auth::AuthRole::Member);
 
         app.cleanup().await.unwrap();
     }

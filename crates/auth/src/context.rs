@@ -1,25 +1,22 @@
-//! Authorization and permission checking for Framecast
-//!
-//! This module implements the authorization layer that enforces access control
-//! based on user tiers, team memberships, URN ownership, and API key scopes.
+//! Authorization context for authenticated users
 
-use crate::domain::entities::*;
+use crate::types::{AuthApiKey, AuthIdentity, AuthMembership, AuthRole, AuthTier};
 use framecast_common::{Urn, UrnComponents};
 
 /// Represents an authenticated user context
 #[derive(Debug, Clone)]
 pub struct AuthContext {
-    pub user: User,
-    pub memberships: Vec<(Team, MembershipRole)>,
-    pub api_key: Option<AuthenticatedApiKey>,
+    pub user: AuthIdentity,
+    pub memberships: Vec<AuthMembership>,
+    pub api_key: Option<AuthApiKey>,
 }
 
 impl AuthContext {
     /// Create new auth context for a user
     pub fn new(
-        user: User,
-        memberships: Vec<(Team, MembershipRole)>,
-        api_key: Option<AuthenticatedApiKey>,
+        user: AuthIdentity,
+        memberships: Vec<AuthMembership>,
+        api_key: Option<AuthApiKey>,
     ) -> Self {
         Self {
             user,
@@ -30,20 +27,20 @@ impl AuthContext {
 
     /// Check if user has creator tier
     pub fn is_creator(&self) -> bool {
-        self.user.tier == UserTier::Creator
+        self.user.tier == AuthTier::Creator
     }
 
     /// Check if user is starter tier
     pub fn is_starter(&self) -> bool {
-        self.user.tier == UserTier::Starter
+        self.user.tier == AuthTier::Starter
     }
 
     /// Get membership role for a specific team
-    pub fn get_team_role(&self, team_id: uuid::Uuid) -> Option<MembershipRole> {
+    pub fn get_team_role(&self, team_id: uuid::Uuid) -> Option<AuthRole> {
         self.memberships
             .iter()
-            .find(|(team, _)| team.id == team_id)
-            .map(|(_, role)| *role)
+            .find(|m| m.team_id == team_id)
+            .map(|m| m.role)
     }
 
     /// Check if user can access a URN
@@ -82,42 +79,31 @@ mod tests {
     use chrono::Utc;
     use uuid::Uuid;
 
-    fn create_test_user(tier: UserTier) -> User {
-        User {
+    fn create_test_identity(tier: AuthTier) -> AuthIdentity {
+        AuthIdentity {
             id: Uuid::new_v4(),
             email: "test@example.com".to_string(),
             name: Some("Test User".to_string()),
             avatar_url: None,
             tier,
-            credits: 100,
-            ephemeral_storage_bytes: 0,
-            upgraded_at: if tier == UserTier::Creator {
-                Some(Utc::now())
-            } else {
-                None
-            },
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
     }
 
-    fn create_test_team() -> Team {
-        Team {
-            id: Uuid::new_v4(),
-            name: "Test Team".to_string(),
-            slug: "test-team".to_string(),
-            credits: 500,
-            ephemeral_storage_bytes: 0,
-            settings: sqlx::types::Json(std::collections::HashMap::new()),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+    fn create_test_membership(team_id: Uuid, role: AuthRole) -> AuthMembership {
+        AuthMembership {
+            team_id,
+            team_name: "Test Team".to_string(),
+            team_slug: "test-team".to_string(),
+            role,
         }
     }
 
     #[test]
     fn test_auth_context_creator_check() {
-        let creator_user = create_test_user(UserTier::Creator);
-        let starter_user = create_test_user(UserTier::Starter);
+        let creator_user = create_test_identity(AuthTier::Creator);
+        let starter_user = create_test_identity(AuthTier::Starter);
 
         let creator_ctx = AuthContext::new(creator_user, vec![], None);
         let starter_ctx = AuthContext::new(starter_user, vec![], None);
@@ -131,12 +117,11 @@ mod tests {
 
     #[test]
     fn test_urn_access_control() {
-        let user = create_test_user(UserTier::Creator);
-        let team = create_test_team();
+        let user = create_test_identity(AuthTier::Creator);
         let user_id = user.id;
-        let team_id = team.id;
+        let team_id = Uuid::new_v4();
 
-        let memberships = vec![(team, MembershipRole::Owner)];
+        let memberships = vec![create_test_membership(team_id, AuthRole::Owner)];
         let ctx = AuthContext::new(user, memberships, None);
 
         // Can access own user URN
@@ -156,8 +141,8 @@ mod tests {
         assert!(!ctx.can_access_urn(&other_user_urn));
     }
 
-    fn create_test_api_key(user_id: Uuid, scopes: Vec<String>) -> AuthenticatedApiKey {
-        AuthenticatedApiKey {
+    fn create_test_api_key(user_id: Uuid, scopes: Vec<String>) -> AuthApiKey {
+        AuthApiKey {
             id: Uuid::new_v4(),
             user_id,
             owner: Urn::user(user_id).to_string(),
@@ -173,14 +158,17 @@ mod tests {
 
     #[test]
     fn test_team_user_urn_requires_both_user_and_team() {
-        let user = create_test_user(UserTier::Creator);
-        let team = create_test_team();
+        let user = create_test_identity(AuthTier::Creator);
         let user_id = user.id;
-        let team_id = team.id;
+        let team_id = Uuid::new_v4();
         let other_team_id = Uuid::new_v4();
         let other_user_id = Uuid::new_v4();
 
-        let ctx = AuthContext::new(user, vec![(team, MembershipRole::Owner)], None);
+        let ctx = AuthContext::new(
+            user,
+            vec![create_test_membership(team_id, AuthRole::Owner)],
+            None,
+        );
 
         // User matches, team matches -> allowed
         let urn_both = Urn::team_user(team_id, user_id);
@@ -195,11 +183,11 @@ mod tests {
         assert!(!ctx.can_access_urn(&urn_wrong_user));
     }
 
-    // Kills: domains/teams/src/domain/auth.rs replace AuthContext::has_scope -> bool with true
+    // Kills: replace AuthContext::has_scope -> bool with true
     // Tests that has_scope returns false when API key lacks the scope.
     #[test]
     fn test_has_scope_returns_false_when_scope_missing() {
-        let user = create_test_user(UserTier::Creator);
+        let user = create_test_identity(AuthTier::Creator);
         let user_id = user.id;
         let api_key = create_test_api_key(user_id, vec!["jobs:read".to_string()]);
 
@@ -215,7 +203,7 @@ mod tests {
 
     #[test]
     fn test_has_scope_wildcard_allows_all() {
-        let user = create_test_user(UserTier::Creator);
+        let user = create_test_identity(AuthTier::Creator);
         let user_id = user.id;
         let api_key = create_test_api_key(user_id, vec!["*".to_string()]);
 
@@ -229,7 +217,7 @@ mod tests {
     // Test no API key means full access (has_scope returns true)
     #[test]
     fn test_has_scope_no_api_key_allows_all() {
-        let user = create_test_user(UserTier::Creator);
+        let user = create_test_identity(AuthTier::Creator);
         let ctx = AuthContext::new(user, vec![], None);
 
         assert!(ctx.has_scope("jobs:write"));

@@ -5,7 +5,6 @@ pub mod domain;
 pub mod repository;
 
 // Re-export domain types at the crate root for convenience
-pub use domain::auth::AuthContext;
 pub use domain::entities::*;
 pub use domain::state::{
     InvitationEvent, InvitationGuardContext, InvitationState, InvitationStateMachine, StateError,
@@ -24,6 +23,10 @@ pub use repository::{
 
 // Re-export API types
 pub use api::routes;
-pub use api::{
-    AnyAuth, ApiKeyUser, AuthConfig, AuthError, AuthUser, CreatorUser, SupabaseClaims, TeamsState,
+pub use api::TeamsState;
+
+// Re-export auth types from framecast-auth for backward compatibility
+pub use framecast_auth::{
+    AnyAuth, ApiKeyUser, AuthBackend, AuthConfig, AuthContext, AuthError, AuthUser, CreatorUser,
+    SupabaseClaims,
 };

@@ -19,6 +19,7 @@ path = "src/bin/local.rs"
 
 [dependencies]
 # Domain crates
+framecast-auth.workspace = true
 framecast-teams.workspace = true
 framecast-email.workspace = true
 

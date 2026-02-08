@@ -1,5 +1,5 @@
 [package]
-name = "framecast-teams"
+name = "framecast-auth"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,11 +7,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-description = "Teams domain: users, teams, memberships, invitations, API keys"
+description = "Authentication middleware: JWT validation, API key verification, axum extractors"
 
 [dependencies]
 # Shared crates
-framecast-auth.workspace = true
 framecast-common.workspace = true
 
 # Core dependencies
@@ -19,25 +18,19 @@ serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
-thiserror.workspace = true
 
-# Database mapping
-sqlx.workspace = true
-
-# Additional dependencies for entities
-sha2 = "0.10"
-rand = "0.8"
-hex = "0.4"
-base64.workspace = true
-getrandom.workspace = true
-# HTTP server (for API layer)
+# HTTP server (for extractors + IntoResponse)
 axum.workspace = true
 
-# Validation (for request validation)
-validator.workspace = true
+# Database (runtime queries for CQRS read models)
+sqlx.workspace = true
 
-# Email service
-framecast-email.workspace = true
+# Authentication
+jsonwebtoken.workspace = true
+
+# API key verification (SHA-256 + constant-time comparison)
+sha2 = "0.10"
+hex = "0.4"
 
 # Mutation testing
 mutants.workspace = true
