@@ -107,16 +107,14 @@ impl TestApp {
         let name = Some(format!("Test User {}", &user_id.to_string()[0..8]));
 
         let mut user = User::new(user_id, email, name)?;
-        let user_tier = tier.clone(); // Clone before move
-        user.tier = user_tier;
+        user.tier = tier;
 
         // Set upgraded_at for creator users (INV-U1)
         if tier == UserTier::Creator {
             user.upgraded_at = Some(Utc::now());
         }
 
-        // Clone tier before move
-        let user_tier = user.tier.clone();
+        let user_tier = user.tier;
 
         // Insert into database (using runtime query to avoid sqlx offline mode issues in tests)
         sqlx::query(

@@ -15,30 +15,17 @@ use uuid::Uuid;
 
 pub mod aws_ses;
 pub mod mock;
-pub mod templates;
 
 #[derive(Error, Debug)]
 pub enum EmailError {
     #[error("Email configuration error: {0}")]
     Configuration(String),
 
-    #[error("Email template error: {0}")]
-    Template(String),
-
     #[error("Email validation error: {0}")]
     Validation(String),
 
     #[error("AWS SES error: {0}")]
     AwsSes(String),
-
-    #[error("Network error: {0}")]
-    Network(#[from] reqwest::Error),
-
-    #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
-
-    #[error("Internal error: {0}")]
-    Internal(#[from] anyhow::Error),
 }
 
 /// Email message to be sent
@@ -106,8 +93,6 @@ pub struct EmailConfig {
     pub aws_endpoint_url: Option<String>,
     /// Default from address
     pub default_from: String,
-    /// Default reply-to address
-    pub default_reply_to: Option<String>,
     /// Enable email sending (can disable for testing)
     pub enabled: bool,
 }
@@ -125,8 +110,6 @@ impl EmailConfig {
         let default_from =
             std::env::var("FROM_EMAIL").unwrap_or_else(|_| "invitations@framecast.app".to_string());
 
-        let default_reply_to = std::env::var("REPLY_TO_EMAIL").ok();
-
         let enabled = std::env::var("EMAIL_ENABLED")
             .unwrap_or_else(|_| "true".to_string())
             .parse()
@@ -137,7 +120,6 @@ impl EmailConfig {
             aws_region,
             aws_endpoint_url,
             default_from,
-            default_reply_to,
             enabled,
         })
     }
@@ -159,12 +141,6 @@ pub trait EmailService: Send + Sync {
         inviter_name: &str,
         role: &str,
     ) -> Result<EmailReceipt, EmailError>;
-
-    /// Get service name for logging/debugging
-    fn service_name(&self) -> &'static str;
-
-    /// Check if service is healthy
-    async fn health_check(&self) -> Result<(), EmailError>;
 }
 
 /// Email service factory

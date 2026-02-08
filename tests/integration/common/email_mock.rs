@@ -301,30 +301,46 @@ pub mod test_utils {
             &self,
             role: InvitationRole,
         ) -> Result<Uuid, Box<dyn std::error::Error>> {
-            // Create invitation in database (simulating API call)
+            // Create invitation entity for token generation etc.
             let invitation = framecast_teams::Invitation::new(
                 self.team.id,
                 self.inviter.user.id,
                 self.invitee_email.clone(),
-                role.clone(),
+                role,
             )?;
 
-            // Store invitation in database
-            let created_invitation = self.app.state.repos.invitations.create(&invitation).await?;
+            // Store invitation in database via raw SQL (production uses create_invitation_tx)
+            let invitation_id: Uuid = sqlx::query_scalar(
+                r#"
+                INSERT INTO invitations (id, team_id, invited_by, email, role, token, expires_at, created_at)
+                VALUES ($1, $2, $3, $4, $5::invitation_role, $6, $7, $8)
+                RETURNING id
+                "#,
+            )
+            .bind(invitation.id)
+            .bind(invitation.team_id)
+            .bind(invitation.invited_by)
+            .bind(&invitation.email)
+            .bind(invitation.role.to_string())
+            .bind(&invitation.token)
+            .bind(invitation.expires_at)
+            .bind(invitation.created_at)
+            .fetch_one(&self.app.pool)
+            .await?;
 
             // Send email through mock service
             self.email_service
                 .send_invitation_email(
                     &self.team.name,
                     self.team.id,
-                    created_invitation.id,
+                    invitation_id,
                     &self.invitee_email,
                     self.inviter.user.name.as_deref().unwrap_or("Unknown"),
                     &format!("{:?}", role).to_lowercase(),
                 )
                 .await?;
 
-            Ok(created_invitation.id)
+            Ok(invitation_id)
         }
 
         /// Create invitee user and get their auth fixture
@@ -340,7 +356,7 @@ pub mod test_utils {
             invitee_user.upgrade_to_creator()?;
 
             // Clone tier before move
-            let user_tier = invitee_user.tier.clone();
+            let user_tier = invitee_user.tier;
 
             // Insert into database (using runtime query to avoid sqlx offline mode issues in tests)
             sqlx::query(

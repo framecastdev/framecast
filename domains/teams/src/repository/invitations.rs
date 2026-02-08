@@ -59,41 +59,13 @@ impl InvitationRepository {
         Ok(row)
     }
 
-    /// Create a new invitation
-    pub async fn create(&self, invitation: &Invitation) -> Result<Invitation> {
-        let created_invitation = sqlx::query_as!(
-            Invitation,
-            r#"
-            INSERT INTO invitations (id, team_id, invited_by, email, role, token, expires_at, accepted_at, declined_at, revoked_at, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            RETURNING id, team_id, invited_by, email, role as "role: InvitationRole",
-                      token, expires_at, accepted_at, declined_at, revoked_at, created_at
-            "#,
-            invitation.id,
-            invitation.team_id,
-            invitation.invited_by,
-            invitation.email,
-            invitation.role.clone() as InvitationRole,
-            invitation.token,
-            invitation.expires_at,
-            invitation.accepted_at,
-            invitation.declined_at,
-            invitation.revoked_at,
-            invitation.created_at
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(created_invitation)
-    }
-
     /// Decline invitation (invitee-initiated)
     pub async fn decline(&self, invitation_id: Uuid) -> Result<()> {
         let result = sqlx::query!(
             r#"
             UPDATE invitations
             SET declined_at = NOW()
-            WHERE id = $1
+            WHERE id = $1 AND declined_at IS NULL
             "#,
             invitation_id
         )
@@ -112,7 +84,7 @@ impl InvitationRepository {
             r#"
             UPDATE invitations
             SET revoked_at = NOW()
-            WHERE id = $1
+            WHERE id = $1 AND revoked_at IS NULL
             "#,
             invitation_id
         )

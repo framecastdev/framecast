@@ -64,10 +64,7 @@ pub struct UpgradeTierRequest {
 }
 
 /// GET /v1/account - Get current user profile
-pub async fn get_profile(
-    AuthUser(auth_context): AuthUser,
-    State(_state): State<TeamsState>,
-) -> Result<Json<UserResponse>> {
+pub async fn get_profile(AuthUser(auth_context): AuthUser) -> Result<Json<UserResponse>> {
     let user_response = UserResponse::from(auth_context.user);
     Ok(Json(user_response))
 }
@@ -155,10 +152,7 @@ pub async fn upgrade_tier(
             // Valid upgrade path
         }
         (current, target) if current == target => {
-            return Err(Error::Conflict(format!(
-                "User is already {}",
-                current.to_string().to_lowercase()
-            )));
+            return Err(Error::Conflict(format!("User is already {}", current)));
         }
         _ => {
             return Err(Error::Validation("Invalid tier upgrade path".to_string()));
@@ -169,7 +163,7 @@ pub async fn upgrade_tier(
     let updated_user = state
         .repos
         .users
-        .upgrade_tier(user_id, request.target_tier.clone())
+        .upgrade_tier(user_id, request.target_tier)
         .await
         .map_err(|e| Error::Internal(format!("Failed to upgrade tier: {}", e)))?
         .ok_or_else(|| Error::NotFound("User not found".to_string()))?;

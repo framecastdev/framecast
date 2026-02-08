@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE invitations\n            SET declined_at = NOW()\n            WHERE id = $1 AND declined_at IS NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0387e265e95d05d17873a44be26f74a9e1816e6d738b4dbfbd19edafe354ca2e"
+}

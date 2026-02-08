@@ -27,7 +27,7 @@ pub const MAX_TEAM_MEMBERSHIPS: i64 = 50;
 pub const MAX_OWNED_TEAMS: i64 = 10;
 
 /// User tier levels
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, Default)]
 #[sqlx(type_name = "user_tier", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum UserTier {
@@ -303,7 +303,7 @@ impl Team {
 }
 
 /// Membership roles within a team
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, Default)]
 #[sqlx(type_name = "membership_role", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum MembershipRole {
@@ -312,6 +312,17 @@ pub enum MembershipRole {
     #[default]
     Member,
     Viewer,
+}
+
+impl std::fmt::Display for MembershipRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MembershipRole::Owner => write!(f, "owner"),
+            MembershipRole::Admin => write!(f, "admin"),
+            MembershipRole::Member => write!(f, "member"),
+            MembershipRole::Viewer => write!(f, "viewer"),
+        }
+    }
 }
 
 impl MembershipRole {
@@ -337,7 +348,7 @@ impl MembershipRole {
 }
 
 /// Role for invitation (excludes Owner since owners cannot be invited)
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "invitation_role", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum InvitationRole {
@@ -873,7 +884,7 @@ mod tests {
         let email = "invitee@example.com".to_string();
         let role = InvitationRole::Member;
 
-        let invitation = Invitation::new(team_id, invited_by, email.clone(), role.clone()).unwrap();
+        let invitation = Invitation::new(team_id, invited_by, email.clone(), role).unwrap();
 
         assert_eq!(invitation.team_id, team_id);
         assert_eq!(invitation.invited_by, invited_by);

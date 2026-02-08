@@ -43,7 +43,7 @@ impl AuthContext {
         self.memberships
             .iter()
             .find(|(team, _)| team.id == team_id)
-            .map(|(_, role)| role.clone())
+            .map(|(_, role)| *role)
     }
 
     /// Check if user can access a URN

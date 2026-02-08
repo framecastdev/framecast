@@ -1,7 +1,7 @@
 //! User repository
 
 use crate::domain::entities::{User, UserTier};
-use framecast_common::{RepositoryError, Result};
+use framecast_common::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -53,44 +53,6 @@ impl UserRepository {
         .await?;
 
         Ok(user)
-    }
-
-    /// Create new user
-    pub async fn create(&self, user: &User) -> Result<User> {
-        let created = sqlx::query_as!(
-            User,
-            r#"
-            INSERT INTO users (
-                id, email, name, avatar_url, tier, credits,
-                ephemeral_storage_bytes, upgraded_at, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING id, email, name, avatar_url,
-                      tier as "tier: UserTier", credits,
-                      ephemeral_storage_bytes, upgraded_at,
-                      created_at, updated_at
-            "#,
-            user.id,
-            user.email,
-            user.name,
-            user.avatar_url,
-            user.tier.clone() as UserTier,
-            user.credits,
-            user.ephemeral_storage_bytes,
-            user.upgraded_at,
-            user.created_at,
-            user.updated_at
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| match e {
-            sqlx::Error::Database(db_err) if db_err.constraint().is_some() => {
-                RepositoryError::AlreadyExists
-            }
-            _ => RepositoryError::from(e),
-        })?;
-
-        Ok(created)
     }
 
     /// Update user profile (name, avatar_url)

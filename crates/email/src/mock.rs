@@ -1,182 +1,24 @@
 //! Mock Email Service Implementation
 //!
-//! Provides in-memory email capture for testing without external dependencies.
-//! Compatible with the integration test infrastructure and can capture
-//! invitation emails for workflow validation.
+//! Minimal mock used by `EmailServiceFactory` when provider is `"mock"` or
+//! email is disabled. Integration tests define their own richer mock in
+//! `tests/integration/common/email_mock.rs`.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{EmailError, EmailMessage, EmailReceipt, EmailService};
 
-/// Email captured by the mock service
-#[derive(Debug, Clone)]
-pub struct CapturedEmail {
-    pub message: EmailMessage,
-    pub receipt: EmailReceipt,
-    pub captured_at: DateTime<Utc>,
-}
-
-impl CapturedEmail {
-    /// Extract invitation ID from email content using regex patterns
-    pub fn extract_invitation_id(&self) -> Option<Uuid> {
-        // First check metadata
-        if let Some(invitation_id_str) = self.message.metadata.get("invitation_id") {
-            if let Ok(uuid) = Uuid::parse_str(invitation_id_str) {
-                return Some(uuid);
-            }
-        }
-
-        // Try to extract from URL patterns in email body
-        let text = format!(
-            "{} {}",
-            self.message.body_text,
-            self.message.body_html.as_deref().unwrap_or("")
-        );
-
-        // Look for patterns like /invitations/{uuid}/accept or invitation_id={uuid}
-        let patterns = [
-            r"/invitations/([0-9a-f-]{36})/accept",
-            r"invitation_id=([0-9a-f-]{36})",
-            r"invite/([0-9a-f-]{36})",
-        ];
-
-        for pattern in &patterns {
-            if let Ok(re) = regex::Regex::new(pattern) {
-                if let Some(captures) = re.captures(&text) {
-                    if let Some(uuid_str) = captures.get(1) {
-                        if let Ok(uuid) = Uuid::parse_str(uuid_str.as_str()) {
-                            return Some(uuid);
-                        }
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Extract team ID from email content
-    pub fn extract_team_id(&self) -> Option<Uuid> {
-        // First check metadata
-        if let Some(team_id_str) = self.message.metadata.get("team_id") {
-            if let Ok(uuid) = Uuid::parse_str(team_id_str) {
-                return Some(uuid);
-            }
-        }
-
-        // Try to extract from URL patterns
-        let text = format!(
-            "{} {}",
-            self.message.body_text,
-            self.message.body_html.as_deref().unwrap_or("")
-        );
-
-        let pattern = r"/teams/([0-9a-f-]{36})/";
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if let Some(captures) = re.captures(&text) {
-                if let Some(uuid_str) = captures.get(1) {
-                    if let Ok(uuid) = Uuid::parse_str(uuid_str.as_str()) {
-                        return Some(uuid);
-                    }
-                }
-            }
-        }
-
-        None
-    }
-}
-
 /// Mock email service for testing
 #[derive(Debug, Clone)]
 pub struct MockEmailService {
-    emails: Arc<Mutex<Vec<CapturedEmail>>>,
-    email_by_recipient: Arc<Mutex<HashMap<String, Vec<CapturedEmail>>>>,
     enabled: bool,
 }
 
 impl MockEmailService {
     /// Create a new mock email service
     pub fn new() -> Self {
-        Self {
-            emails: Arc::new(Mutex::new(Vec::new())),
-            email_by_recipient: Arc::new(Mutex::new(HashMap::new())),
-            enabled: true,
-        }
-    }
-
-    /// Create a disabled mock email service (for testing)
-    pub fn new_disabled() -> Self {
-        Self {
-            emails: Arc::new(Mutex::new(Vec::new())),
-            email_by_recipient: Arc::new(Mutex::new(HashMap::new())),
-            enabled: false,
-        }
-    }
-
-    /// Get all captured emails
-    pub fn get_all_emails(&self) -> Vec<CapturedEmail> {
-        self.emails.lock().unwrap().clone()
-    }
-
-    /// Get emails sent to a specific recipient
-    pub fn get_emails_for_recipient(&self, email: &str) -> Vec<CapturedEmail> {
-        self.email_by_recipient
-            .lock()
-            .unwrap()
-            .get(email)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Get the most recent invitation email for a recipient
-    pub fn get_latest_invitation_email(&self, email: &str) -> Option<CapturedEmail> {
-        self.get_emails_for_recipient(email)
-            .into_iter()
-            .filter(|e| {
-                e.message
-                    .metadata
-                    .get("email_type")
-                    .map(|t| t == "team_invitation")
-                    .unwrap_or(false)
-                    || e.message.subject.to_lowercase().contains("invitation")
-            })
-            .max_by_key(|e| e.captured_at)
-    }
-
-    /// Get invitation ID from the most recent invitation email
-    pub fn get_invitation_id_for_email(&self, email: &str) -> Option<Uuid> {
-        self.get_latest_invitation_email(email)
-            .and_then(|email| email.extract_invitation_id())
-    }
-
-    /// Check if an invitation email was sent to a specific email address
-    pub fn was_invitation_sent_to(&self, email: &str) -> bool {
-        self.get_invitation_id_for_email(email).is_some()
-    }
-
-    /// Get count of emails sent
-    pub fn email_count(&self) -> usize {
-        self.emails.lock().unwrap().len()
-    }
-
-    /// Clear all captured emails
-    pub fn clear(&self) {
-        self.emails.lock().unwrap().clear();
-        self.email_by_recipient.lock().unwrap().clear();
-    }
-
-    /// Set enabled state
-    pub fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
-    }
-
-    /// Check if email sending is enabled
-    pub fn is_enabled(&self) -> bool {
-        self.enabled
+        Self { enabled: true }
     }
 }
 
@@ -207,23 +49,6 @@ impl EmailService for MockEmailService {
             provider: "mock".to_string(),
             metadata: message.metadata.clone(),
         };
-
-        let captured = CapturedEmail {
-            message: message.clone(),
-            receipt: receipt.clone(),
-            captured_at: Utc::now(),
-        };
-
-        // Store email in global list
-        self.emails.lock().unwrap().push(captured.clone());
-
-        // Store email by recipient for easy lookup
-        self.email_by_recipient
-            .lock()
-            .unwrap()
-            .entry(message.to)
-            .or_default()
-            .push(captured);
 
         tracing::info!(
             "Email captured successfully, message ID: {}",
@@ -309,15 +134,6 @@ impl EmailService for MockEmailService {
 
         self.send_email(message).await
     }
-
-    fn service_name(&self) -> &'static str {
-        "mock"
-    }
-
-    async fn health_check(&self) -> Result<(), EmailError> {
-        // Mock service is always healthy
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -339,11 +155,6 @@ mod tests {
 
         assert!(receipt.message_id.starts_with("mock-"));
         assert_eq!(receipt.provider, "mock");
-        assert_eq!(service.email_count(), 1);
-
-        let emails = service.get_emails_for_recipient("test@example.com");
-        assert_eq!(emails.len(), 1);
-        assert_eq!(emails[0].message.subject, "Test Subject");
     }
 
     #[tokio::test]
@@ -365,65 +176,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(receipt.provider, "mock");
-
-        let captured = service
-            .get_latest_invitation_email("invitee@example.com")
-            .unwrap();
-        assert_eq!(captured.extract_invitation_id(), Some(invitation_id));
-        assert_eq!(captured.extract_team_id(), Some(team_id));
-
-        assert!(service.was_invitation_sent_to("invitee@example.com"));
         assert_eq!(
-            service.get_invitation_id_for_email("invitee@example.com"),
-            Some(invitation_id)
+            receipt.metadata.get("email_type"),
+            Some(&"team_invitation".to_string())
         );
-    }
-
-    #[test]
-    fn test_invitation_id_extraction() {
-        let _service = MockEmailService::new();
-
-        let message = EmailMessage::new(
-            "test@example.com".to_string(),
-            "sender@framecast.app".to_string(),
-            "Team Invitation".to_string(),
-            "Click here: https://framecast.app/teams/550e8400-e29b-41d4-a716-446655440001/invitations/550e8400-e29b-41d4-a716-446655440000/accept".to_string(), // pragma: allowlist secret
-        );
-
-        let captured = CapturedEmail {
-            message,
-            receipt: EmailReceipt {
-                message_id: "test".to_string(),
-                sent_at: Utc::now(),
-                provider: "test".to_string(),
-                metadata: HashMap::new(),
-            },
-            captured_at: Utc::now(),
-        };
-
-        let extracted_id = captured.extract_invitation_id();
-        assert!(extracted_id.is_some());
         assert_eq!(
-            extracted_id.unwrap().to_string(),
-            "550e8400-e29b-41d4-a716-446655440000" // pragma: allowlist secret
+            receipt.metadata.get("invitation_id"),
+            Some(&invitation_id.to_string())
         );
-    }
-
-    #[tokio::test]
-    async fn test_disabled_mock_service() {
-        let service = MockEmailService::new_disabled();
-
-        let message = EmailMessage::new(
-            "test@example.com".to_string(),
-            "sender@framecast.app".to_string(),
-            "Test Subject".to_string(),
-            "Test body".to_string(),
-        );
-
-        let receipt = service.send_email(message).await.unwrap();
-
-        assert!(receipt.message_id.starts_with("disabled-"));
-        assert_eq!(receipt.provider, "mock-disabled");
-        assert_eq!(service.email_count(), 0); // Email not captured when disabled
     }
 }
