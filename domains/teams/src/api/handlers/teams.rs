@@ -15,7 +15,8 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::middleware::{CreatorUser, TeamsState};
+use crate::api::middleware::TeamsState;
+use framecast_auth::CreatorUser;
 
 /// Request for creating a new team
 #[derive(Debug, Deserialize, Validate)]

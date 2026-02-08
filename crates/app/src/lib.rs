@@ -3,15 +3,16 @@
 //! Composes all domain routers into a single application.
 
 use axum::Router;
+use framecast_auth::{AuthBackend, AuthConfig};
 use framecast_email::{EmailConfig, EmailServiceFactory};
-use framecast_teams::{AuthConfig, TeamsRepositories, TeamsState};
+use framecast_teams::{TeamsRepositories, TeamsState};
 use sqlx::PgPool;
 use std::sync::Arc;
 
 /// Create the main application router with all routes and middleware
 pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
     // Create repositories
-    let teams_repos = TeamsRepositories::new(pool);
+    let teams_repos = TeamsRepositories::new(pool.clone());
 
     // Create auth config from environment
     let auth_config = AuthConfig {
@@ -21,6 +22,9 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
         audience: std::env::var("JWT_AUDIENCE").ok(),
     };
 
+    // Create auth backend
+    let auth_backend = AuthBackend::new(pool, auth_config);
+
     // Create email service from environment
     let email_config = EmailConfig::from_env()?;
     let email_service = EmailServiceFactory::create(email_config).await?;
@@ -28,7 +32,7 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
     // Create Teams domain state
     let teams_state = TeamsState {
         repos: teams_repos,
-        auth_config,
+        auth: auth_backend,
         email: Arc::from(email_service),
     };
 

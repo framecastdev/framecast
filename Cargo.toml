@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/app",
+    "crates/auth",
     "crates/email",
     "crates/common",
     "domains/teams",
@@ -80,6 +81,7 @@ test-log = "0.2"
 async-trait = "0.1"
 
 # === Shared Crates ===
+framecast-auth = { path = "crates/auth" }
 framecast-common = { path = "crates/common" }
 framecast-email = { path = "crates/email" }
 framecast-app = { path = "crates/app" }

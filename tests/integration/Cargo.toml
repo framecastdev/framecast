@@ -27,6 +27,7 @@ sqlx = { workspace = true }
 test-log = { workspace = true }
 
 # === Internal Crates ===
+framecast-auth = { workspace = true }
 framecast-teams = { workspace = true }
 framecast-email = { workspace = true }
 framecast-common = { workspace = true }

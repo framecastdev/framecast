@@ -4,10 +4,11 @@
 //! - GET /v1/auth/whoami — Return authentication context for the current caller
 
 use crate::api::handlers::users::UserResponse;
-use crate::api::middleware::AnyAuth;
-use axum::Json;
+use crate::api::middleware::TeamsState;
+use axum::{extract::State, Json};
 use chrono::{DateTime, Utc};
-use framecast_common::Result;
+use framecast_auth::AnyAuth;
+use framecast_common::{Error, Result};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -35,7 +36,10 @@ pub struct WhoamiResponse {
 }
 
 /// GET /v1/auth/whoami — Return authentication context for the current caller
-pub async fn whoami(AnyAuth(auth_context): AnyAuth) -> Result<Json<WhoamiResponse>> {
+pub async fn whoami(
+    AnyAuth(auth_context): AnyAuth,
+    State(state): State<TeamsState>,
+) -> Result<Json<WhoamiResponse>> {
     let api_key_info = auth_context.api_key.as_ref().map(|key| WhoamiApiKeyInfo {
         id: key.id,
         owner: key.owner.clone(),
@@ -51,9 +55,18 @@ pub async fn whoami(AnyAuth(auth_context): AnyAuth) -> Result<Json<WhoamiRespons
         "jwt"
     };
 
+    // Load full user for UserResponse (needs credits, storage, upgraded_at)
+    let user = state
+        .repos
+        .users
+        .find(auth_context.user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to load user: {}", e)))?
+        .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
+
     let response = WhoamiResponse {
         auth_method,
-        user: UserResponse::from(auth_context.user),
+        user: UserResponse::from(user),
         api_key: api_key_info,
     };
 

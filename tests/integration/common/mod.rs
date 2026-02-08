@@ -15,6 +15,7 @@ use anyhow::Result;
 use axum::http::{header::AUTHORIZATION, HeaderMap, HeaderValue};
 use axum::Router;
 use chrono::Utc;
+use framecast_auth::{AuthBackend, AuthConfig};
 use framecast_email::{EmailConfig, EmailServiceFactory};
 use framecast_teams::*;
 use sqlx::{PgPool, Postgres, Transaction};
@@ -78,12 +79,14 @@ impl TestApp {
             audience: Some("authenticated".to_string()),
         };
 
+        let auth_backend = AuthBackend::new(pool.clone(), auth_config);
+
         let email_config = EmailConfig::from_env()?;
         let email_service = EmailServiceFactory::create(email_config).await?;
 
         let state = TeamsState {
             repos,
-            auth_config,
+            auth: auth_backend,
             email: Arc::from(email_service),
         };
 
