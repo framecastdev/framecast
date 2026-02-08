@@ -71,8 +71,7 @@ impl AuthBackend {
         let user: Option<AuthIdentity> = sqlx::query_as(
             r#"
             SELECT id, email, name, avatar_url,
-                   tier as "tier: AuthTier",
-                   created_at, updated_at
+                   tier, created_at, updated_at
             FROM users
             WHERE id = $1
             "#,
@@ -96,7 +95,7 @@ impl AuthBackend {
         let rows: Vec<MembershipRow> = sqlx::query_as(
             r#"
             SELECT t.id as team_id, t.name as team_name, t.slug as team_slug,
-                   m.role as "role: AuthRole"
+                   m.role
             FROM teams t
             INNER JOIN memberships m ON t.id = m.team_id
             WHERE m.user_id = $1
