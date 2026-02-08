@@ -101,7 +101,14 @@ impl MembershipRepository {
             FROM memberships m
             INNER JOIN users u ON m.user_id = u.id
             WHERE m.team_id = $1
-            ORDER BY m.created_at ASC
+            ORDER BY
+                CASE m.role
+                    WHEN 'owner' THEN 0
+                    WHEN 'admin' THEN 1
+                    WHEN 'member' THEN 2
+                    WHEN 'viewer' THEN 3
+                END ASC,
+                u.name ASC NULLS LAST
             "#,
             team_id
         )

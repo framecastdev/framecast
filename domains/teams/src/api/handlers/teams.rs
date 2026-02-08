@@ -3,7 +3,7 @@
 //! This module implements team CRUD operations with proper authorization
 //! and business rule enforcement as defined in the API specification.
 
-use crate::{MembershipRole, Team, UserTier, MAX_OWNED_TEAMS};
+use crate::{MembershipRole, Team, UserTier, MAX_OWNED_TEAMS, MAX_TEAM_MEMBERSHIPS};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -20,8 +20,8 @@ use crate::api::middleware::{AuthUser, TeamsState};
 /// Request for creating a new team
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateTeamRequest {
-    /// Team display name (3-100 chars)
-    #[validate(length(min = 3, max = 100))]
+    /// Team display name (1-100 chars)
+    #[validate(length(min = 1, max = 100))]
     pub name: String,
 
     /// Optional team slug (if not provided, generated from name)
@@ -45,7 +45,7 @@ fn validate_slug_format(slug: &str) -> std::result::Result<(), validator::Valida
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateTeamRequest {
     /// Updated team display name
-    #[validate(length(min = 3, max = 100))]
+    #[validate(length(min = 1, max = 100))]
     pub name: Option<String>,
 
     /// Team settings (JSON object)
@@ -164,6 +164,21 @@ pub async fn create_team(
         return Err(Error::Conflict(format!(
             "Cannot own more than {} teams",
             MAX_OWNED_TEAMS
+        )));
+    }
+
+    // Business Rule: Check max memberships per user (INV-T8)
+    let membership_count = state
+        .repos
+        .memberships
+        .count_for_user(user.id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
+
+    if membership_count >= MAX_TEAM_MEMBERSHIPS {
+        return Err(Error::Conflict(format!(
+            "Cannot belong to more than {} teams",
+            MAX_TEAM_MEMBERSHIPS
         )));
     }
 
@@ -343,6 +358,9 @@ pub async fn update_team(
 ///
 /// Deletes a team. Only the owner can delete, and only if there are no active jobs.
 ///
+/// All checks and mutations run inside a single transaction to prevent races
+/// between delete and concurrent member changes.
+///
 /// **Business Rules:**
 /// - Only team owner can delete (not admin)
 /// - Cannot delete if there are active jobs
@@ -381,11 +399,15 @@ pub async fn delete_team(
         ));
     }
 
-    // Business rule: Team must have no other members before deletion
-    let member_count = state
+    // Begin transaction — checks and delete happen atomically
+    let mut tx = state
         .repos
-        .memberships
-        .count_for_team(team_id)
+        .begin()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
+
+    // Lock membership rows and count members
+    let member_count = crate::count_members_for_team_tx(&mut tx, team_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
 
@@ -396,10 +418,7 @@ pub async fn delete_team(
     }
 
     // Business rule: Cannot delete if there are active jobs
-    let active_jobs_count = state
-        .repos
-        .teams
-        .count_active_jobs_for_team(team_id)
+    let active_jobs_count = crate::count_active_jobs_for_team_tx(&mut tx, team_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count active jobs: {}", e)))?;
 
@@ -410,12 +429,13 @@ pub async fn delete_team(
     }
 
     // Delete team (cascades to memberships via database constraints)
-    state
-        .repos
-        .teams
-        .delete(team_id)
+    crate::delete_team_tx(&mut tx, team_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to delete team: {}", e)))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to commit transaction: {}", e)))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -434,13 +454,21 @@ mod tests {
         };
         assert!(valid_request.validate().is_ok());
 
-        // Invalid name (too short)
-        let invalid_name = CreateTeamRequest {
+        // Two-char name is valid (spec min=1)
+        let short_name = CreateTeamRequest {
             name: "AB".to_string(),
             slug: None,
             initial_credits: None,
         };
-        assert!(invalid_name.validate().is_err());
+        assert!(short_name.validate().is_ok());
+
+        // Empty name is invalid
+        let empty_name = CreateTeamRequest {
+            name: "".to_string(),
+            slug: None,
+            initial_credits: None,
+        };
+        assert!(empty_name.validate().is_err());
 
         // Invalid slug format
         let invalid_slug = CreateTeamRequest {
@@ -468,12 +496,19 @@ mod tests {
         };
         assert!(valid_request.validate().is_ok());
 
-        // Invalid name (too short)
-        let invalid_name = UpdateTeamRequest {
+        // Two-char name is valid (spec min=1)
+        let short_name = UpdateTeamRequest {
             name: Some("AB".to_string()),
             settings: None,
         };
-        assert!(invalid_name.validate().is_err());
+        assert!(short_name.validate().is_ok());
+
+        // Empty name is invalid
+        let empty_name = UpdateTeamRequest {
+            name: Some("".to_string()),
+            settings: None,
+        };
+        assert!(empty_name.validate().is_err());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT m.id, m.team_id, m.user_id, m.role as \"role: MembershipRole\", m.created_at,\n                   u.email as user_email, u.name as user_name, u.avatar_url as user_avatar_url\n            FROM memberships m\n            INNER JOIN users u ON m.user_id = u.id\n            WHERE m.team_id = $1\n            ORDER BY m.created_at ASC\n            ",
+  "query": "\n            SELECT m.id, m.team_id, m.user_id, m.role as \"role: MembershipRole\", m.created_at,\n                   u.email as user_email, u.name as user_name, u.avatar_url as user_avatar_url\n            FROM memberships m\n            INNER JOIN users u ON m.user_id = u.id\n            WHERE m.team_id = $1\n            ORDER BY\n                CASE m.role\n                    WHEN 'owner' THEN 0\n                    WHEN 'admin' THEN 1\n                    WHEN 'member' THEN 2\n                    WHEN 'viewer' THEN 3\n                END ASC,\n                u.name ASC NULLS LAST\n            ",
   "describe": {
     "columns": [
       {
@@ -72,5 +72,5 @@
       true
     ]
   },
-  "hash": "e9cd177927d754b5ea8c19443cf6cd6dccfe773f4983ff317a4f230d4f4cff37"
+  "hash": "d350f4346a2a67078c365559f134b462b8e3f2f3081c46bfc6a10d972015e999"
 }

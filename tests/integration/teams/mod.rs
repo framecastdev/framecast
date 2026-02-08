@@ -376,11 +376,12 @@ mod test_create_team {
     }
 
     #[tokio::test]
-    async fn test_create_team_invalid_name_too_short() {
+    async fn test_create_team_short_name_accepted() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
         let router = create_test_router(&app).await;
 
+        // Spec min=1: two-char name is valid
         let request = Request::builder()
             .method(Method::POST)
             .uri("/v1/teams")
@@ -389,8 +390,20 @@ mod test_create_team {
             .body(Body::from(json!({"name": "AB"}).to_string()))
             .unwrap();
 
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        // Single-char name is also valid
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/teams")
+            .header("authorization", format!("Bearer {}", creator.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(json!({"name": "X"}).to_string()))
+            .unwrap();
+
         let response = router.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         app.cleanup().await.unwrap();
     }
@@ -604,6 +617,57 @@ mod test_create_team {
         let team: Value = serde_json::from_slice(&body).unwrap();
         // HTML stored as-is in JSON API (no server-side sanitization needed for JSON API)
         assert_eq!(team["name"], "<b>Bold Team</b>");
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_create_team_max_memberships_limit() {
+        let app = TestApp::new().await.unwrap();
+        let creator = app.create_test_user(UserTier::Creator).await.unwrap();
+        let jwt = crate::common::create_test_jwt(&creator, &app.config.jwt_secret).unwrap();
+
+        // Insert 50 existing memberships to hit INV-T8 limit
+        for i in 0..50 {
+            let team_id = Uuid::new_v4();
+            let slug = format!(
+                "inv-t8-team-{}-{}",
+                i,
+                Uuid::new_v4().to_string().get(..8).unwrap()
+            );
+            sqlx::query(
+                "INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at) VALUES ($1, $2, $3, 0, 0, '{}'::jsonb, NOW(), NOW())",
+            )
+            .bind(team_id)
+            .bind(format!("INV-T8 Team {}", i))
+            .bind(&slug)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+
+            sqlx::query(
+                "INSERT INTO memberships (id, team_id, user_id, role, created_at) VALUES ($1, $2, $3, 'member'::membership_role, NOW())",
+            )
+            .bind(Uuid::new_v4())
+            .bind(team_id)
+            .bind(creator.id)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+        }
+
+        let router = create_test_router(&app).await;
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/teams")
+            .header("authorization", format!("Bearer {}", jwt))
+            .header("content-type", "application/json")
+            .body(Body::from(json!({"name": "One Too Many"}).to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
 
         app.cleanup().await.unwrap();
     }
@@ -982,11 +1046,12 @@ mod test_update_team {
     }
 
     #[tokio::test]
-    async fn test_update_team_name_too_short() {
+    async fn test_update_team_short_name_accepted() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let router = create_test_router(&app).await;
 
+        // Spec min=1: two-char name is valid
         let request = Request::builder()
             .method(Method::PATCH)
             .uri(format!("/v1/teams/{}", team.id))
@@ -999,7 +1064,13 @@ mod test_update_team {
             .unwrap();
 
         let response = router.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let result: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(result["name"], "AB");
 
         app.cleanup().await.unwrap();
     }
