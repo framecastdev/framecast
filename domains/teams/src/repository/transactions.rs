@@ -44,7 +44,7 @@ pub async fn create_membership_tx(
         membership.id,
         membership.team_id,
         membership.user_id,
-        membership.role.clone() as MembershipRole,
+        membership.role as MembershipRole,
         membership.created_at
     )
     .fetch_one(&mut **transaction)
@@ -199,7 +199,7 @@ pub async fn create_invitation_tx(
     .bind(invitation.team_id)
     .bind(invitation.invited_by)
     .bind(&invitation.email)
-    .bind(invitation.role.clone() as crate::InvitationRole)
+    .bind(invitation.role as crate::InvitationRole)
     .bind(&invitation.token)
     .bind(invitation.expires_at)
     .bind(invitation.accepted_at)

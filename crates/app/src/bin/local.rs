@@ -6,11 +6,12 @@ use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{error, info};
 
-use framecast_common::config::Config;
 use sqlx::PgPool;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .pretty()
@@ -18,26 +19,24 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting Framecast API local development server");
 
-    let config = Config::from_env().map_err(|e| {
-        error!("Failed to load configuration: {}", e);
-        e
-    })?;
+    let database_url = std::env::var("DATABASE_URL")
+        .map_err(|_| anyhow::anyhow!("DATABASE_URL environment variable is required"))?;
+    let port: u16 = std::env::var("PORT")
+        .unwrap_or_else(|_| "3000".to_string())
+        .parse()
+        .unwrap_or(3000);
 
-    info!("Configuration loaded successfully");
-
-    let pool = PgPool::connect(&config.database_url).await.map_err(|e| {
+    let pool = PgPool::connect(&database_url).await.map_err(|e| {
         error!("Failed to connect to database: {}", e);
         anyhow::anyhow!("Database connection failed: {}", e)
     })?;
 
     info!("Database connection established");
 
-    let app = framecast_app::create_app(config.clone(), pool)
-        .await
-        .map_err(|e| {
-            error!("Failed to create application: {}", e);
-            e
-        })?;
+    let app = framecast_app::create_app(pool).await.map_err(|e| {
+        error!("Failed to create application: {}", e);
+        e
+    })?;
 
     let app = app.layer(
         ServiceBuilder::new()
@@ -46,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
             .into_inner(),
     );
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
     info!("Server starting on http://{}", addr);
     info!("Health check available at http://{}/health", addr);

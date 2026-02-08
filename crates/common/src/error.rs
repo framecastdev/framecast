@@ -13,14 +13,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Common error type for the Framecast application
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Configuration error: {0}")]
-    Config(#[from] anyhow::Error),
+    #[error("Unexpected error: {0}")]
+    Unexpected(#[from] anyhow::Error),
 
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
-
-    #[error("HTTP request error: {0}")]
-    Http(#[from] reqwest::Error),
 
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
@@ -40,12 +37,6 @@ pub enum Error {
     #[error("Conflict: {0}")]
     Conflict(String),
 
-    #[error("Rate limit exceeded")]
-    RateLimit,
-
-    #[error("Service unavailable: {0}")]
-    ServiceUnavailable(String),
-
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -59,11 +50,8 @@ impl Error {
             Error::Validation(_) => StatusCode::BAD_REQUEST,
             Error::NotFound(_) => StatusCode::NOT_FOUND,
             Error::Conflict(_) => StatusCode::CONFLICT,
-            Error::RateLimit => StatusCode::TOO_MANY_REQUESTS,
-            Error::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Error::Config(_)
+            Error::Unexpected(_)
             | Error::Database(_)
-            | Error::Http(_)
             | Error::Serialization(_)
             | Error::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -72,17 +60,14 @@ impl Error {
     /// Get the error code for API responses
     pub fn error_code(&self) -> &'static str {
         match self {
-            Error::Config(_) => "CONFIG_ERROR",
+            Error::Unexpected(_) => "UNEXPECTED_ERROR",
             Error::Database(_) => "DATABASE_ERROR",
-            Error::Http(_) => "HTTP_ERROR",
             Error::Serialization(_) => "SERIALIZATION_ERROR",
             Error::Authentication(_) => "AUTHENTICATION_ERROR",
             Error::Authorization(_) => "AUTHORIZATION_ERROR",
             Error::Validation(_) => "VALIDATION_ERROR",
             Error::NotFound(_) => "NOT_FOUND",
             Error::Conflict(_) => "CONFLICT",
-            Error::RateLimit => "RATE_LIMIT_EXCEEDED",
-            Error::ServiceUnavailable(_) => "SERVICE_UNAVAILABLE",
             Error::Internal(_) => "INTERNAL_ERROR",
         }
     }
@@ -131,10 +116,6 @@ mod tests {
             Error::NotFound("test".to_string()).status_code(),
             StatusCode::NOT_FOUND
         );
-        assert_eq!(
-            Error::RateLimit.status_code(),
-            StatusCode::TOO_MANY_REQUESTS
-        );
     }
 
     #[test]
@@ -147,6 +128,5 @@ mod tests {
             Error::Validation("test".to_string()).error_code(),
             "VALIDATION_ERROR"
         );
-        assert_eq!(Error::RateLimit.error_code(), "RATE_LIMIT_EXCEEDED");
     }
 }

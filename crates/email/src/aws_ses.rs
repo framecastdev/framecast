@@ -271,27 +271,6 @@ impl EmailService for SesEmailService {
 
         self.send_email(message).await
     }
-
-    fn service_name(&self) -> &'static str {
-        "aws-ses"
-    }
-
-    async fn health_check(&self) -> Result<(), EmailError> {
-        tracing::debug!("Performing SES health check");
-
-        // Try to get send quota as a simple health check
-        match self.client.get_send_quota().send().await {
-            Ok(_) => {
-                tracing::debug!("SES health check passed");
-                Ok(())
-            }
-            Err(e) => {
-                let error_msg = format!("SES health check failed: {}", e);
-                tracing::warn!("{}", error_msg);
-                Err(EmailError::AwsSes(error_msg))
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -306,7 +285,6 @@ mod tests {
             aws_region: Some("us-east-1".to_string()),
             aws_endpoint_url: Some("http://localhost:4566".to_string()),
             default_from: "test@framecast.app".to_string(),
-            default_reply_to: None,
             enabled: true,
         };
 
@@ -316,9 +294,6 @@ mod tests {
 
         // We expect this to succeed in creating the service, even if health check fails
         assert!(result.is_ok());
-
-        let service = result.unwrap();
-        assert_eq!(service.service_name(), "aws-ses");
     }
 
     #[test]
@@ -328,7 +303,6 @@ mod tests {
             aws_region: Some("us-east-1".to_string()),
             aws_endpoint_url: None,
             default_from: "test@framecast.app".to_string(),
-            default_reply_to: None,
             enabled: true,
         };
 

@@ -22,9 +22,6 @@ path = "src/bin/local.rs"
 framecast-teams.workspace = true
 framecast-email.workspace = true
 
-# Shared crates
-framecast-common.workspace = true
-
 # Core dependencies
 tokio.workspace = true
 anyhow.workspace = true
@@ -36,6 +33,9 @@ tower-http.workspace = true
 
 # AWS Lambda
 lambda_http.workspace = true
+
+# Environment
+dotenvy.workspace = true
 
 # Database
 sqlx.workspace = true

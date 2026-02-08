@@ -7,23 +7,14 @@ edition = "2021"
 # === Core Dependencies ===
 tokio = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-anyhow = { workspace = true }
 thiserror = { workspace = true }
 
 # === AWS SDK ===
 aws-config = "1.1"
 aws-sdk-ses = "1.1"
 aws-credential-types = "1.1"
-
-# === HTTP Client ===
-reqwest = { workspace = true }
-
-# === Validation ===
-validator = "0.18"
-regex = { workspace = true }
 
 # === Environment ===
 dotenvy = { workspace = true }

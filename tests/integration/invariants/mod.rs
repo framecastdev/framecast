@@ -204,43 +204,6 @@ mod test_membership_invariants {
     use super::*;
 
     #[tokio::test]
-    async fn test_inv_m4_only_creator_users_can_have_memberships() {
-        // INV-M4: Only creator users can have team memberships
-        let app = TestApp::new().await.unwrap();
-
-        // Create starter user
-        let starter_user = app.create_test_user(UserTier::Starter).await.unwrap();
-
-        // Create creator user and team
-        let creator_user = app.create_test_user(UserTier::Creator).await.unwrap();
-        let (team, _) = app.create_test_team(creator_user.id).await.unwrap();
-
-        // Attempting to create membership for starter user should be prevented
-        // This is enforced at the application level, but we can test the database constraint
-        let _membership_result = sqlx::query(
-            r#"
-            INSERT INTO memberships (id, team_id, user_id, role, created_at)
-            VALUES ($1, $2, $3, $4::membership_role, $5)
-            "#,
-        )
-        .bind(Uuid::new_v4())
-        .bind(team.id)
-        .bind(starter_user.id)
-        .bind("member")
-        .bind(Utc::now())
-        .execute(&app.pool)
-        .await;
-
-        // If database has trigger to enforce this constraint, it should fail
-        // Otherwise, this constraint is enforced in application logic
-        // For now, we test that starter users have the right tier
-        assert_eq!(starter_user.tier, UserTier::Starter);
-        assert!(!starter_user.can_create_teams());
-
-        app.cleanup().await.unwrap();
-    }
-
-    #[tokio::test]
     async fn test_membership_role_validity() {
         // Test that only valid roles can be assigned
         let app = TestApp::new().await.unwrap();

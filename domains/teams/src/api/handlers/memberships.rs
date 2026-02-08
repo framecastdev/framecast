@@ -68,7 +68,7 @@ impl From<Invitation> for InvitationResponse {
             id: invitation.id,
             team_id: invitation.team_id,
             email: invitation.email.clone(),
-            role: invitation.role.clone(),
+            role: invitation.role,
             state: invitation.state(),
             invited_by: invitation.invited_by,
             expires_at: invitation.expires_at,
@@ -439,8 +439,8 @@ pub async fn accept_invitation(
     // Get team_id from the invitation
     let team_id = invitation.team_id;
 
-    // Validate invitation is for this user
-    if invitation.email != user.email {
+    // Validate invitation is for this user (case-insensitive, matching invite_member)
+    if invitation.email.to_lowercase() != user.email.to_lowercase() {
         return Err(Error::Authorization(
             "Access denied: Invitation is for a different email".to_string(),
         ));
@@ -556,8 +556,8 @@ pub async fn decline_invitation(
         .map_err(|e| Error::Internal(format!("Failed to get invitation: {}", e)))?
         .ok_or_else(|| Error::NotFound("Invitation not found".to_string()))?;
 
-    // Validate invitation is for this user
-    if invitation.email != user.email {
+    // Validate invitation is for this user (case-insensitive, matching invite_member)
+    if invitation.email.to_lowercase() != user.email.to_lowercase() {
         return Err(Error::Authorization(
             "Access denied: Invitation is for a different email".to_string(),
         ));

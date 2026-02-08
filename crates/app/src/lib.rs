@@ -3,20 +3,20 @@
 //! Composes all domain routers into a single application.
 
 use axum::Router;
-use framecast_common::config::Config;
 use framecast_email::{EmailConfig, EmailServiceFactory};
 use framecast_teams::{AuthConfig, TeamsRepositories, TeamsState};
 use sqlx::PgPool;
 use std::sync::Arc;
 
 /// Create the main application router with all routes and middleware
-pub async fn create_app(_config: Config, pool: PgPool) -> Result<Router, anyhow::Error> {
+pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
     // Create repositories
     let teams_repos = TeamsRepositories::new(pool);
 
     // Create auth config from environment
     let auth_config = AuthConfig {
-        jwt_secret: std::env::var("JWT_SECRET").unwrap_or_else(|_| "dev-secret".to_string()),
+        jwt_secret: std::env::var("JWT_SECRET")
+            .expect("JWT_SECRET environment variable is required"),
         issuer: std::env::var("JWT_ISSUER").ok(),
         audience: std::env::var("JWT_AUDIENCE").ok(),
     };

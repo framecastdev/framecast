@@ -349,6 +349,9 @@ fn validate_owner_urn(auth_context: &crate::AuthContext, urn: &Urn) -> Result<()
 
 /// Validate scopes against tier restrictions
 fn validate_scopes(scopes: &[String], tier: &UserTier) -> Result<()> {
+    if scopes.is_empty() {
+        return Err(Error::Validation("Scopes cannot be empty".to_string()));
+    }
     for scope in scopes {
         // Check against full allowed list
         if !ALLOWED_SCOPES.contains(&scope.as_str()) {

@@ -6,7 +6,6 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
 
 use framecast_app::create_app;
-use framecast_common::config::Config;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -18,15 +17,16 @@ async fn main() -> Result<(), Error> {
 
     info!("Initializing Framecast API Lambda");
 
-    let config = Config::from_env().map_err(|e| Error::from(format!("Config error: {}", e)))?;
+    let database_url = std::env::var("DATABASE_URL")
+        .map_err(|_| Error::from("DATABASE_URL environment variable is required"))?;
 
-    let pool = PgPool::connect(&config.database_url)
+    let pool = PgPool::connect(&database_url)
         .await
         .map_err(|e| Error::from(format!("Database error: {}", e)))?;
 
     info!("Database connection established");
 
-    let app = create_app(config, pool)
+    let app = create_app(pool)
         .await
         .map_err(|e| Error::from(format!("App initialization error: {}", e)))?;
 

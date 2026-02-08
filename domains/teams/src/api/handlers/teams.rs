@@ -317,12 +317,10 @@ pub async fn update_team(
     }
 
     if let Some(settings) = request.settings {
-        // Convert JSON value to HashMap
-        if let Ok(settings_map) =
+        let settings_map =
             serde_json::from_value::<HashMap<String, serde_json::Value>>(settings)
-        {
-            team.settings = sqlx::types::Json(settings_map);
-        }
+                .map_err(|_| Error::Validation("Settings must be a JSON object".to_string()))?;
+        team.settings = sqlx::types::Json(settings_map);
     }
 
     // Update in database
