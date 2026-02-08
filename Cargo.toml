@@ -17,7 +17,7 @@ authors = ["Framecast Team"]
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/framecast/framecast"
-rust-version = "1.75"
+rust-version = "1.92"
 
 [workspace.dependencies]
 # === Core Runtime Dependencies ===
