@@ -92,7 +92,17 @@ mod tests {
         let req = json_request("not json");
         let result = ValidatedJson::<TestPayload>::from_request(req, &()).await;
         let err = result.unwrap_err();
-        // Deserialization failures preserve axum's 422 status
+        // Malformed JSON triggers axum's JsonSyntaxError → 400
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_validated_json_wrong_type() {
+        // Valid JSON but wrong structure triggers axum's JsonDataError → 422
+        let req = json_request(r#"{"name": 123}"#);
+        let result = ValidatedJson::<TestPayload>::from_request(req, &()).await;
+        let err = result.unwrap_err();
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
