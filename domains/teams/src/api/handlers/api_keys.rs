@@ -185,17 +185,17 @@ pub async fn create_api_key(
         None => Urn::user(user.id),
     };
 
-    // Validate scopes
-    if let Some(ref scopes) = request.scopes {
-        validate_scopes(scopes, &user.tier)?;
-    }
+    // Resolve default scopes before validation so omitting scopes
+    // doesn't bypass tier checks (Starter users cannot get "*" scope).
+    let scopes = request.scopes.unwrap_or_else(|| vec!["*".to_string()]);
+    validate_scopes(&scopes, &user.tier)?;
 
     // Create key entity
     let (api_key, raw_key) = ApiKey::new(
         user.id,
         owner_urn,
         request.name,
-        request.scopes,
+        Some(scopes),
         request.expires_at,
     )?;
 

@@ -463,13 +463,23 @@ pub async fn accept_invitation(
         }
     }
 
-    // Check if user is already a member
-    let existing_membership = state
+    // Create membership (convert InvitationRole to MembershipRole)
+    let membership = Membership::new(team_id, user.id, invitation.role.to_membership_role());
+
+    // Begin transaction — all checks and mutations happen atomically to prevent
+    // races between concurrent invitation acceptances (INV-T8, duplicate membership).
+    let mut transaction = state
         .repos
-        .memberships
-        .get_by_team_and_user(team_id, user.id)
+        .begin()
         .await
-        .map_err(|e| Error::Internal(format!("Failed to check membership: {}", e)))?;
+        .context("Failed to acquire a Postgres connection from the pool")
+        .map_err(|e| Error::Internal(e.to_string()))?;
+
+    // Check if user is already a member (inside TX to prevent races)
+    let existing_membership =
+        get_membership_by_team_and_user_tx(&mut transaction, team_id, user.id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to check membership: {}", e)))?;
 
     if existing_membership.is_some() {
         return Err(Error::Conflict(
@@ -477,11 +487,8 @@ pub async fn accept_invitation(
         ));
     }
 
-    // Business rule: Max 50 memberships per user (INV-T8)
-    let user_membership_count = state
-        .repos
-        .memberships
-        .count_for_user(user.id)
+    // Business rule: Max 50 memberships per user (INV-T8) — inside TX to prevent races
+    let user_membership_count = count_for_user_tx(&mut transaction, user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
 
@@ -491,17 +498,6 @@ pub async fn accept_invitation(
             MAX_TEAM_MEMBERSHIPS
         )));
     }
-
-    // Create membership (convert InvitationRole to MembershipRole)
-    let membership = Membership::new(team_id, user.id, invitation.role.to_membership_role());
-
-    // Begin transaction — all mutations happen atomically (Zero2Prod Ch.7 pattern)
-    let mut transaction = state
-        .repos
-        .begin()
-        .await
-        .context("Failed to acquire a Postgres connection from the pool")
-        .map_err(|e| Error::Internal(e.to_string()))?;
 
     // Auto-upgrade Starter → Creator if needed
     if user.tier == UserTier::Starter {
@@ -980,6 +976,15 @@ pub async fn update_member_role(
         .await
         .map_err(|e| Error::Internal(format!("Failed to get target membership: {}", e)))?
         .ok_or_else(|| Error::NotFound("Member not found in this team".to_string()))?;
+
+    // Business rule: Admins cannot change owner roles (mirror of remove_member guard)
+    if acting_membership.role == MembershipRole::Admin
+        && target_membership.role == MembershipRole::Owner
+    {
+        return Err(Error::Authorization(
+            "Admins cannot change owner roles".to_string(),
+        ));
+    }
 
     // Business rule: Promoting to owner must not exceed MAX_OWNED_TEAMS (INV-T7)
     if request.role == MembershipRole::Owner && target_membership.role != MembershipRole::Owner {

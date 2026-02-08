@@ -152,11 +152,24 @@ pub async fn create_team(
         ));
     }
 
-    // Business Rule: Check max owned teams limit (INV-T7)
-    let owned_teams_count = state
+    // Create team (handles slug generation from name if not provided)
+    let mut team = Team::new(request.name, request.slug)?;
+
+    // Set initial credits if provided
+    if let Some(credits) = request.initial_credits {
+        team.credits = credits;
+    }
+
+    // All checks + mutations run inside a single transaction to prevent races
+    // between concurrent create_team calls (INV-T7, INV-T8, INV-T3).
+    let mut tx = state
         .repos
-        .memberships
-        .count_owned_teams(user.id)
+        .begin()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
+
+    // Business Rule: Check max owned teams limit (INV-T7)
+    let owned_teams_count = crate::count_owned_teams_tx(&mut tx, user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count owned teams: {}", e)))?;
 
@@ -168,10 +181,7 @@ pub async fn create_team(
     }
 
     // Business Rule: Check max memberships per user (INV-T8)
-    let membership_count = state
-        .repos
-        .memberships
-        .count_for_user(user.id)
+    let membership_count = crate::count_for_user_tx(&mut tx, user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
 
@@ -182,14 +192,8 @@ pub async fn create_team(
         )));
     }
 
-    // Create team (handles slug generation from name if not provided)
-    let mut team = Team::new(request.name, request.slug)?;
-
-    // Check slug uniqueness (INV-T3)
-    if state
-        .repos
-        .teams
-        .get_by_slug(&team.slug)
+    // Check slug uniqueness (INV-T3) — FOR UPDATE lock prevents concurrent creation
+    if crate::get_team_by_slug_tx(&mut tx, &team.slug)
         .await
         .map_err(|e| Error::Internal(format!("Failed to check slug uniqueness: {}", e)))?
         .is_some()
@@ -199,18 +203,6 @@ pub async fn create_team(
             team.slug
         )));
     }
-
-    // Set initial credits if provided
-    if let Some(credits) = request.initial_credits {
-        team.credits = credits;
-    }
-
-    // Atomically create team + owner membership in a transaction (INV-T1, INV-T2)
-    let mut tx = state
-        .repos
-        .begin()
-        .await
-        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
 
     let created_team = crate::create_team_tx(&mut tx, &team)
         .await
