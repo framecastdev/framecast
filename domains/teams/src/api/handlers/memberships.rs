@@ -165,6 +165,21 @@ pub async fn leave_team(
         .map_err(|e| Error::Internal(format!("Failed to get membership: {}", e)))?
         .ok_or_else(|| Error::NotFound("Not a member of this team".to_string()))?;
 
+    // INV-U2: Creator must belong to at least one team
+    if user.tier == UserTier::Creator {
+        let user_membership_count = state
+            .repos
+            .memberships
+            .count_for_user(user.id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
+        if user_membership_count <= 1 {
+            return Err(Error::Conflict(
+                "Cannot leave: creators must belong to at least one team (INV-U2)".to_string(),
+            ));
+        }
+    }
+
     // Check member and owner counts for business rules
     let member_count = state
         .repos
@@ -794,6 +809,29 @@ pub async fn remove_member(
         if owner_count <= 1 {
             return Err(Error::Conflict(
                 "Cannot remove the last owner from the team".to_string(),
+            ));
+        }
+    }
+
+    // INV-U2: Cannot remove a Creator from their last team
+    let target_user = state
+        .repos
+        .users
+        .find(member_user_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get user: {}", e)))?
+        .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
+
+    if target_user.tier == UserTier::Creator {
+        let target_membership_count = state
+            .repos
+            .memberships
+            .count_for_user(member_user_id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
+        if target_membership_count <= 1 {
+            return Err(Error::Conflict(
+                "Cannot remove: creators must belong to at least one team (INV-U2)".to_string(),
             ));
         }
     }
