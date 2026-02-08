@@ -1,0 +1,77 @@
+name: Regenerate .sqlx offline cache
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to regenerate .sqlx/ on"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  sqlx-prepare:
+    name: Regenerate .sqlx
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
+          POSTGRES_DB: framecast_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+
+      - name: Install Rust tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-binstall
+
+      - name: Install sqlx-cli
+        run: cargo binstall --no-confirm sqlx-cli@0.8.3
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci"
+
+      - name: Run migrations
+        run: just ci-migrate
+
+      - name: Regenerate .sqlx offline cache
+        run: just ci-sqlx-prepare
+
+      - name: Commit and push if changed
+        env:
+          TARGET_BRANCH: ${{ inputs.branch }}
+        run: |
+          git diff --quiet .sqlx/ && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .sqlx/
+          git commit -m "chore: regenerate .sqlx offline cache"
+          git push origin "HEAD:$TARGET_BRANCH"
