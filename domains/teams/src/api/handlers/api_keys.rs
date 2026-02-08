@@ -7,7 +7,7 @@
 //! - PATCH /v1/auth/keys/{id}  — Update API key name
 //! - DELETE /v1/auth/keys/{id} — Revoke API key
 
-use crate::domain::entities::{ApiKey, UserTier};
+use crate::domain::entities::{ApiKey, AuthenticatedApiKey, UserTier};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -69,15 +69,15 @@ pub struct ApiKeyResponse {
     pub created_at: DateTime<Utc>,
 }
 
-impl From<ApiKey> for ApiKeyResponse {
-    fn from(key: ApiKey) -> Self {
+impl From<AuthenticatedApiKey> for ApiKeyResponse {
+    fn from(key: AuthenticatedApiKey) -> Self {
         Self {
             id: key.id,
             user_id: key.user_id,
             owner: key.owner,
             name: key.name,
             key_prefix: key.key_prefix,
-            scopes: key.scopes.0,
+            scopes: key.scopes,
             last_used_at: key.last_used_at,
             expires_at: key.expires_at,
             revoked_at: key.revoked_at,
@@ -196,7 +196,7 @@ pub async fn create_api_key(
     )?;
 
     // Persist
-    state
+    let created = state
         .repos
         .api_keys
         .create(&api_key)
@@ -206,7 +206,7 @@ pub async fn create_api_key(
     Ok((
         StatusCode::CREATED,
         Json(CreateApiKeyResponse {
-            api_key: ApiKeyResponse::from(api_key),
+            api_key: ApiKeyResponse::from(created),
             raw_key,
         }),
     ))
@@ -367,14 +367,13 @@ mod tests {
 
     #[test]
     fn test_api_key_response_no_key_hash() {
-        let key = ApiKey {
+        let key = AuthenticatedApiKey {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
             owner: "framecast:user:00000000-0000-0000-0000-000000000001".to_string(),
             name: "Test Key".to_string(),
             key_prefix: "sk_live_".to_string(),
-            key_hash: "secret_hash_value:should_not_appear".to_string(),
-            scopes: sqlx::types::Json(vec!["*".to_string()]),
+            scopes: vec!["*".to_string()],
             last_used_at: None,
             expires_at: None,
             revoked_at: None,
@@ -385,7 +384,6 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
 
         assert!(!json.contains("key_hash"));
-        assert!(!json.contains("secret_hash_value"));
         assert!(json.contains("Test Key"));
         assert!(json.contains("sk_live_"));
     }

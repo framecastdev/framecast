@@ -580,7 +580,7 @@ impl Invitation {
 }
 
 /// API Key entity
-#[derive(Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Clone, PartialEq, Deserialize, sqlx::FromRow)]
 pub struct ApiKey {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -752,6 +752,42 @@ impl ApiKey {
             result |= a ^ b;
         }
         result == 0
+    }
+}
+
+/// Authenticated API key — all fields except `key_hash`.
+///
+/// The repository layer converts `ApiKey → AuthenticatedApiKey` at the boundary
+/// so that handlers and middleware never see the sensitive `key_hash` field.
+/// This breaks CodeQL's name-based taint chain for `rust/cleartext-logging`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AuthenticatedApiKey {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub owner: String,
+    pub name: String,
+    pub key_prefix: String,
+    pub scopes: Vec<String>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<ApiKey> for AuthenticatedApiKey {
+    fn from(key: ApiKey) -> Self {
+        Self {
+            id: key.id,
+            user_id: key.user_id,
+            owner: key.owner,
+            name: key.name,
+            key_prefix: key.key_prefix,
+            scopes: key.scopes.0,
+            last_used_at: key.last_used_at,
+            expires_at: key.expires_at,
+            revoked_at: key.revoked_at,
+            created_at: key.created_at,
+        }
     }
 }
 
