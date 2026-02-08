@@ -1,7 +1,13 @@
 [package]
 name = "framecast-email"
-version = "0.0.1-SNAPSHOT"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+description = "Email service: AWS SES integration, invitation templates"
 
 [dependencies]
 # === Core Dependencies ===
@@ -12,9 +18,9 @@ chrono = { workspace = true }
 thiserror = { workspace = true }
 
 # === AWS SDK ===
-aws-config = "1.1"
-aws-sdk-ses = "1.1"
-aws-credential-types = "1.1"
+aws-config = { workspace = true }
+aws-sdk-ses = { workspace = true }
+aws-credential-types = { workspace = true }
 
 # === Environment ===
 dotenvy = { workspace = true }

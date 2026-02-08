@@ -41,11 +41,9 @@ sqlx = { version = "0.8", features = [
 ] }
 
 # === HTTP Client & Server ===
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
 axum = { version = "0.8", features = ["macros", "multipart"] }
 tower = { version = "0.5", features = ["timeout", "limit", "buffer"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-br", "compression-gzip"] }
-hyper = { version = "1.0", features = ["full"] }
 
 # === AWS Lambda Runtime ===
 lambda_http = { version = "0.13", default-features = false, features = ["apigw_http"] }
@@ -62,9 +60,10 @@ jsonwebtoken = "9.3"
 base64 = "0.22"
 getrandom = "0.2"
 
-# === S3 & Object Storage ===
+# === AWS SDK ===
 aws-config = "1.8"
-aws-sdk-s3 = "1.122"
+aws-sdk-ses = "1.96"
+aws-credential-types = "1.2"
 
 # === Validation & Time ===
 validator = { version = "0.18", features = ["derive"] }
@@ -75,9 +74,7 @@ mutants = "0.0.3"
 
 # === Testing ===
 tokio-test = "0.4"
-tempfile = "3.8"
 test-log = "0.2"
-serial_test = "3.1"
 
 # === Async Traits ===
 async-trait = "0.1"

@@ -49,7 +49,6 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Server starting on http://{}", addr);
     info!("Health check available at http://{}/health", addr);
-    info!("API documentation available at http://{}/docs", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
 

@@ -9,7 +9,6 @@ use aws_sdk_ses::config::SharedCredentialsProvider;
 use aws_sdk_ses::types::{Body, Content, Destination, Message};
 use aws_sdk_ses::Client as SesClient;
 use chrono::Utc;
-use uuid::Uuid;
 
 use crate::{EmailConfig, EmailError, EmailMessage, EmailReceipt, EmailService};
 
@@ -119,16 +118,6 @@ impl EmailService for SesEmailService {
     async fn send_email(&self, message: EmailMessage) -> Result<EmailReceipt, EmailError> {
         tracing::info!("Sending email via AWS SES to: {}", message.to);
 
-        if !self.config.enabled {
-            tracing::warn!("Email sending disabled, skipping SES send");
-            return Ok(EmailReceipt {
-                message_id: format!("disabled-{}", Uuid::new_v4()),
-                sent_at: Utc::now(),
-                provider: "aws-ses-disabled".to_string(),
-                metadata: message.metadata.clone(),
-            });
-        }
-
         // Validate email address
         if !message.to.contains('@') || !message.from.contains('@') {
             return Err(EmailError::Validation(
@@ -171,46 +160,8 @@ impl EmailService for SesEmailService {
         })
     }
 
-    async fn send_team_invitation(
-        &self,
-        team_name: &str,
-        team_id: Uuid,
-        invitation_id: Uuid,
-        recipient_email: &str,
-        inviter_name: &str,
-        role: &str,
-    ) -> Result<EmailReceipt, EmailError> {
-        tracing::info!(
-            "Sending team invitation email to {} for team {} ({})",
-            recipient_email,
-            team_name,
-            team_id
-        );
-
-        let invitation_url = format!(
-            "https://framecast.app/teams/{}/invitations/{}/accept",
-            team_id, invitation_id
-        );
-
-        let subject = format!("Invitation to join team: {}", team_name);
-        let body_text =
-            crate::content::team_invitation_text(inviter_name, team_name, role, &invitation_url);
-        let body_html =
-            crate::content::team_invitation_html(inviter_name, team_name, role, &invitation_url);
-
-        let message = EmailMessage::new(
-            recipient_email.to_string(),
-            self.config.default_from.clone(),
-            subject,
-            body_text,
-        )
-        .with_html(body_html)
-        .with_metadata("email_type".to_string(), "team_invitation".to_string())
-        .with_metadata("team_id".to_string(), team_id.to_string())
-        .with_metadata("invitation_id".to_string(), invitation_id.to_string())
-        .with_metadata("role".to_string(), role.to_string());
-
-        self.send_email(message).await
+    fn default_from(&self) -> String {
+        self.config.default_from.clone()
     }
 }
 

@@ -63,12 +63,13 @@ pub struct InvitationResponse {
 
 impl From<Invitation> for InvitationResponse {
     fn from(invitation: Invitation) -> Self {
+        let state = invitation.state();
         Self {
             id: invitation.id,
             team_id: invitation.team_id,
-            email: invitation.email.clone(),
+            email: invitation.email,
             role: invitation.role,
-            state: invitation.state(),
+            state,
             invited_by: invitation.invited_by,
             expires_at: invitation.expires_at,
             created_at: invitation.created_at,

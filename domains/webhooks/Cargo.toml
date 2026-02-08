@@ -19,16 +19,9 @@ serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
-anyhow.workspace = true
 
 # Database mapping
 sqlx.workspace = true
-
-# Mutation testing
-mutants.workspace = true
-
-# Logging
-tracing.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

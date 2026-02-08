@@ -46,46 +46,8 @@ impl EmailService for MockEmailService {
         Ok(receipt)
     }
 
-    async fn send_team_invitation(
-        &self,
-        team_name: &str,
-        team_id: Uuid,
-        invitation_id: Uuid,
-        recipient_email: &str,
-        inviter_name: &str,
-        role: &str,
-    ) -> Result<EmailReceipt, EmailError> {
-        tracing::info!(
-            "Mock service sending team invitation to {} for team {} ({})",
-            recipient_email,
-            team_name,
-            team_id
-        );
-
-        let invitation_url = format!(
-            "https://framecast.app/teams/{}/invitations/{}/accept",
-            team_id, invitation_id
-        );
-
-        let subject = format!("Invitation to join team: {}", team_name);
-        let body_text =
-            crate::content::team_invitation_text(inviter_name, team_name, role, &invitation_url);
-        let body_html =
-            crate::content::team_invitation_html(inviter_name, team_name, role, &invitation_url);
-
-        let message = EmailMessage::new(
-            recipient_email.to_string(),
-            "invitations@framecast.app".to_string(),
-            subject,
-            body_text,
-        )
-        .with_html(body_html)
-        .with_metadata("email_type".to_string(), "team_invitation".to_string())
-        .with_metadata("team_id".to_string(), team_id.to_string())
-        .with_metadata("invitation_id".to_string(), invitation_id.to_string())
-        .with_metadata("role".to_string(), role.to_string());
-
-        self.send_email(message).await
+    fn default_from(&self) -> String {
+        "invitations@framecast.app".to_string()
     }
 }
 
