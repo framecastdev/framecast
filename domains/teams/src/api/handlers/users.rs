@@ -8,7 +8,7 @@
 use crate::{User, UserTier};
 use axum::{extract::State, http::StatusCode, Json};
 use chrono::{DateTime, Utc};
-use framecast_common::{Error, Result};
+use framecast_common::{Error, Result, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -73,13 +73,8 @@ pub async fn get_profile(AuthUser(auth_context): AuthUser) -> Result<Json<UserRe
 pub async fn update_profile(
     AuthUser(auth_context): AuthUser,
     State(state): State<TeamsState>,
-    Json(request): Json<UpdateProfileRequest>,
+    ValidatedJson(request): ValidatedJson<UpdateProfileRequest>,
 ) -> Result<Json<UserResponse>> {
-    // Validate request
-    request
-        .validate()
-        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
-
     let user_id = auth_context.user.id;
 
     // Update user in database
@@ -136,13 +131,8 @@ pub async fn delete_account(
 pub async fn upgrade_tier(
     AuthUser(auth_context): AuthUser,
     State(state): State<TeamsState>,
-    Json(request): Json<UpgradeTierRequest>,
+    ValidatedJson(request): ValidatedJson<UpgradeTierRequest>,
 ) -> Result<Json<UserResponse>> {
-    // Validate request
-    request
-        .validate()
-        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
-
     let current_user = &auth_context.user;
     let user_id = current_user.id;
 

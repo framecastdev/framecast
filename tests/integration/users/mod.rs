@@ -475,8 +475,8 @@ mod test_upgrade_tier {
 
         let response = router.oneshot(request).await.unwrap();
 
-        // Axum returns 422 for JSON deserialization failures (invalid enum variant)
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        // Invalid enum variant → 400
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
@@ -500,8 +500,8 @@ mod test_upgrade_tier {
 
         let response = router.oneshot(request).await.unwrap();
 
-        // Axum returns 422 for JSON deserialization failures (missing required field)
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        // Missing required field → 400
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }

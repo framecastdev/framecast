@@ -41,7 +41,7 @@ pub async fn whoami(AnyAuth(auth_context): AnyAuth) -> Result<Json<WhoamiRespons
         owner: key.owner.clone(),
         name: key.name.clone(),
         key_prefix: key.key_prefix.clone(),
-        scopes: key.scopes.0.clone(),
+        scopes: key.scopes.clone(),
         expires_at: key.expires_at,
     });
 

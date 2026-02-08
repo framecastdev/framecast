@@ -11,7 +11,7 @@ use framecast_common::{Urn, UrnComponents};
 pub struct AuthContext {
     pub user: User,
     pub memberships: Vec<(Team, MembershipRole)>,
-    pub api_key: Option<ApiKey>,
+    pub api_key: Option<AuthenticatedApiKey>,
 }
 
 impl AuthContext {
@@ -19,7 +19,7 @@ impl AuthContext {
     pub fn new(
         user: User,
         memberships: Vec<(Team, MembershipRole)>,
-        api_key: Option<ApiKey>,
+        api_key: Option<AuthenticatedApiKey>,
     ) -> Self {
         Self {
             user,
@@ -63,12 +63,12 @@ impl AuthContext {
     pub fn has_scope(&self, required_scope: &str) -> bool {
         if let Some(api_key) = &self.api_key {
             // Wildcard scope allows everything
-            if api_key.scopes.0.contains(&"*".to_string()) {
+            if api_key.scopes.contains(&"*".to_string()) {
                 return true;
             }
 
             // Check for exact scope match
-            api_key.scopes.0.contains(&required_scope.to_string())
+            api_key.scopes.contains(&required_scope.to_string())
         } else {
             // If no API key, assume full access for authenticated user
             true
@@ -156,15 +156,14 @@ mod tests {
         assert!(!ctx.can_access_urn(&other_user_urn));
     }
 
-    fn create_test_api_key(user_id: Uuid, scopes: Vec<String>) -> ApiKey {
-        ApiKey {
+    fn create_test_api_key(user_id: Uuid, scopes: Vec<String>) -> AuthenticatedApiKey {
+        AuthenticatedApiKey {
             id: Uuid::new_v4(),
             user_id,
             owner: Urn::user(user_id).to_string(),
             name: "test-key".to_string(),
             key_prefix: "fc_test".to_string(),
-            key_hash: "hash".to_string(),
-            scopes: sqlx::types::Json(scopes),
+            scopes,
             last_used_at: None,
             expires_at: None,
             revoked_at: None,

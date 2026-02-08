@@ -9,7 +9,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use framecast_common::{Error, Result, Urn};
+use framecast_common::{Error, Result, Urn, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -139,13 +139,8 @@ pub async fn list_teams(
 pub async fn create_team(
     CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
-    Json(request): Json<CreateTeamRequest>,
+    ValidatedJson(request): ValidatedJson<CreateTeamRequest>,
 ) -> Result<(StatusCode, Json<TeamResponse>)> {
-    // Validate request
-    request
-        .validate()
-        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
-
     let user = &auth_context.user;
 
     // Create team (handles slug generation from name if not provided)
@@ -275,13 +270,8 @@ pub async fn update_team(
     CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
-    Json(request): Json<UpdateTeamRequest>,
+    ValidatedJson(request): ValidatedJson<UpdateTeamRequest>,
 ) -> Result<Json<TeamResponse>> {
-    // Validate request
-    request
-        .validate()
-        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
-
     let user = &auth_context.user;
 
     // Get team

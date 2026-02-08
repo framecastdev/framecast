@@ -1,6 +1,6 @@
 //! API Key repository
 
-use crate::domain::entities::ApiKey;
+use crate::domain::entities::{ApiKey, AuthenticatedApiKey};
 use chrono::{DateTime, Utc};
 use framecast_common::{RepositoryError, Result};
 use sqlx::PgPool;
@@ -50,7 +50,7 @@ impl ApiKeyRepository {
     }
 
     /// Find API key by ID
-    pub async fn find(&self, id: Uuid) -> Result<Option<ApiKey>> {
+    pub async fn find(&self, id: Uuid) -> Result<Option<AuthenticatedApiKey>> {
         let row = sqlx::query_as!(
             ApiKeyRow,
             r#"
@@ -64,11 +64,12 @@ impl ApiKeyRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        row.map(api_key_from_row).transpose()
+        row.map(|r| api_key_from_row(r).map(AuthenticatedApiKey::from))
+            .transpose()
     }
 
     /// Authenticate by API key
-    pub async fn authenticate(&self, candidate_key: &str) -> Result<Option<ApiKey>> {
+    pub async fn authenticate(&self, candidate_key: &str) -> Result<Option<AuthenticatedApiKey>> {
         // Extract key prefix
         if !candidate_key.starts_with("sk_live_") {
             return Ok(None);
@@ -101,7 +102,7 @@ impl ApiKeyRepository {
                 .execute(&self.pool)
                 .await?;
 
-                return Ok(Some(api_key));
+                return Ok(Some(AuthenticatedApiKey::from(api_key)));
             }
         }
 
@@ -109,7 +110,7 @@ impl ApiKeyRepository {
     }
 
     /// Create new API key
-    pub async fn create(&self, api_key: &ApiKey) -> Result<ApiKey> {
+    pub async fn create(&self, api_key: &ApiKey) -> Result<AuthenticatedApiKey> {
         sqlx::query!(
             r#"
             INSERT INTO api_keys (
@@ -139,11 +140,11 @@ impl ApiKeyRepository {
             _ => RepositoryError::from(e),
         })?;
 
-        Ok(api_key.clone())
+        Ok(AuthenticatedApiKey::from(api_key.clone()))
     }
 
     /// List all API keys for a user, ordered by created_at DESC
-    pub async fn list_by_user(&self, user_id: Uuid) -> Result<Vec<ApiKey>> {
+    pub async fn list_by_user(&self, user_id: Uuid) -> Result<Vec<AuthenticatedApiKey>> {
         let rows = sqlx::query_as!(
             ApiKeyRow,
             r#"
@@ -158,11 +159,13 @@ impl ApiKeyRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        rows.into_iter().map(api_key_from_row).collect()
+        rows.into_iter()
+            .map(|r| api_key_from_row(r).map(AuthenticatedApiKey::from))
+            .collect()
     }
 
     /// Update API key name (only if not revoked)
-    pub async fn update_name(&self, id: Uuid, name: &str) -> Result<Option<ApiKey>> {
+    pub async fn update_name(&self, id: Uuid, name: &str) -> Result<Option<AuthenticatedApiKey>> {
         let row = sqlx::query_as!(
             ApiKeyRow,
             r#"
@@ -177,7 +180,8 @@ impl ApiKeyRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        row.map(api_key_from_row).transpose()
+        row.map(|r| api_key_from_row(r).map(AuthenticatedApiKey::from))
+            .transpose()
     }
 
     /// Revoke API key
