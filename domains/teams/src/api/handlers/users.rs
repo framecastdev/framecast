@@ -116,14 +116,6 @@ pub async fn upgrade_tier(
         (UserTier::Starter, UserTier::Creator) => {
             // Valid upgrade path
         }
-        (UserTier::Creator, UserTier::Starter) => {
-            // Downgrade: Check if user has team memberships (INV-U3)
-            if !auth_context.memberships.is_empty() {
-                return Err(Error::Authorization(
-                    "Cannot downgrade to starter while having team memberships. Leave all teams first.".to_string(),
-                ));
-            }
-        }
         (current, target) if current == target => {
             return Err(Error::Conflict(format!(
                 "User is already {}",
