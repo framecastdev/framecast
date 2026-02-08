@@ -10,20 +10,14 @@
 use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use framecast_teams::{routes, UserTier};
+use framecast_teams::UserTier;
 
 use crate::common::{TestApp, UserFixture};
-
-/// Create test router with all routes
-async fn create_test_router(app: &TestApp) -> Router {
-    routes().with_state(app.state.clone())
-}
 
 mod test_list_teams {
     use super::*;
@@ -32,7 +26,7 @@ mod test_list_teams {
     async fn test_list_teams_returns_user_teams() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -73,7 +67,7 @@ mod test_list_teams {
         let (team1, _) = app.create_test_team(creator.id).await.unwrap();
         let (team2, _) = app.create_test_team(creator.id).await.unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -104,7 +98,7 @@ mod test_list_teams {
     async fn test_list_teams_empty_for_user_without_teams() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -151,7 +145,7 @@ mod test_list_teams {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -182,7 +176,7 @@ mod test_list_teams {
     #[tokio::test]
     async fn test_list_teams_without_auth() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -201,7 +195,7 @@ mod test_list_teams {
     async fn test_list_teams_starter_user_forbidden() {
         let app = TestApp::new().await.unwrap();
         let starter = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -226,7 +220,7 @@ mod test_create_team {
     async fn test_create_team_success() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -257,7 +251,7 @@ mod test_create_team {
     async fn test_create_team_with_custom_slug() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -286,7 +280,7 @@ mod test_create_team {
     async fn test_create_team_auto_generated_slug() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -315,7 +309,7 @@ mod test_create_team {
     async fn test_create_team_starter_forbidden() {
         let app = TestApp::new().await.unwrap();
         let starter = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -335,7 +329,7 @@ mod test_create_team {
     async fn test_create_team_duplicate_slug_conflict() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create first team with explicit slug
         let request1 = Request::builder()
@@ -372,7 +366,7 @@ mod test_create_team {
     async fn test_create_team_short_name_accepted() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Spec min=1: two-char name is valid
         let request = Request::builder()
@@ -405,7 +399,7 @@ mod test_create_team {
     async fn test_create_team_invalid_slug_format() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -426,7 +420,7 @@ mod test_create_team {
     #[tokio::test]
     async fn test_create_team_without_auth() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -445,7 +439,7 @@ mod test_create_team {
     async fn test_create_team_unicode_name() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Unicode name with explicit ASCII slug succeeds
         let request = Request::builder()
@@ -476,7 +470,7 @@ mod test_create_team {
     async fn test_create_team_unicode_name_without_slug_rejected() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Unicode name without slug fails — auto-generated slug can't be ASCII-only
         let request = Request::builder()
@@ -497,7 +491,7 @@ mod test_create_team {
     async fn test_create_team_empty_name() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -517,7 +511,7 @@ mod test_create_team {
     async fn test_create_team_creates_owner_membership() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -555,7 +549,7 @@ mod test_create_team {
     async fn test_create_team_sql_injection_in_name() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -591,7 +585,7 @@ mod test_create_team {
     async fn test_create_team_html_in_name() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -649,7 +643,7 @@ mod test_create_team {
             .unwrap();
         }
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -673,7 +667,7 @@ mod test_get_team {
     async fn test_get_team_as_owner() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -718,7 +712,7 @@ mod test_get_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -760,7 +754,7 @@ mod test_get_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -789,7 +783,7 @@ mod test_get_team {
         let app = TestApp::new().await.unwrap();
         let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let non_member = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -808,7 +802,7 @@ mod test_get_team {
     async fn test_get_team_nonexistent_404() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -826,7 +820,7 @@ mod test_get_team {
     #[tokio::test]
     async fn test_get_team_without_auth() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -848,7 +842,7 @@ mod test_update_team {
     async fn test_update_team_as_owner() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::PATCH)
@@ -893,7 +887,7 @@ mod test_update_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::PATCH)
@@ -930,7 +924,7 @@ mod test_update_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::PATCH)
@@ -967,7 +961,7 @@ mod test_update_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::PATCH)
@@ -991,7 +985,7 @@ mod test_update_team {
         let app = TestApp::new().await.unwrap();
         let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let non_member = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::PATCH)
@@ -1012,7 +1006,7 @@ mod test_update_team {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let original_slug = team.slug.clone();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::PATCH)
@@ -1042,7 +1036,7 @@ mod test_update_team {
     async fn test_update_team_short_name_accepted() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Spec min=1: two-char name is valid
         let request = Request::builder()
@@ -1072,7 +1066,7 @@ mod test_update_team {
     async fn test_update_team_without_auth() {
         let app = TestApp::new().await.unwrap();
         let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::PATCH)
@@ -1095,7 +1089,7 @@ mod test_delete_team {
     async fn test_delete_team_owner_sole_member() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -1139,7 +1133,7 @@ mod test_delete_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -1176,7 +1170,7 @@ mod test_delete_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -1198,7 +1192,7 @@ mod test_delete_team {
     async fn test_delete_team_nonexistent_404() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -1216,7 +1210,7 @@ mod test_delete_team {
     #[tokio::test]
     async fn test_delete_team_without_auth() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
