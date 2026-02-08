@@ -80,17 +80,6 @@ jobs:
           set -o pipefail
           just ci-test-integration 2>&1 | tee integration-test-output.txt
 
-      - name: Build API binary for E2E tests
-        id: build-binary
-        run: cargo build --bin local
-
-      - name: Upload API binary for E2E tests
-        uses: actions/upload-artifact@v6
-        with:
-          name: api-binary
-          path: target/debug/local
-          retention-days: 1
-
       - name: Job summary
         if: always()
         shell: bash
@@ -105,7 +94,6 @@ jobs:
             echo "| Migrations | ${{ steps.migrate.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
             echo "| Unit Tests | ${{ steps.test.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
             echo "| Integration Tests | ${{ steps.integration-test.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
-            echo "| API Binary Build | ${{ steps.build-binary.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
             echo ""
 
             if [ -f test-output.txt ]; then
@@ -444,12 +432,6 @@ jobs:
         with:
           shared-key: "ci"
 
-      - name: Download API binary
-        uses: actions/download-artifact@v7
-        with:
-          name: api-binary
-          path: ./api-binary
-
       - name: Setup LocalStack SES identities
         run: just ci-setup-ses
 
@@ -458,7 +440,7 @@ jobs:
 
       - name: Start API server
         shell: bash
-        run: just ci-start-api ./api-binary/local
+        run: just ci-start-api
 
       - name: Install Python E2E dependencies
         run: just install-python-deps
