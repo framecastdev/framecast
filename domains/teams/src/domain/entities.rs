@@ -63,11 +63,9 @@ pub struct User {
 impl User {
     /// Create a new user with validation
     pub fn new(id: Uuid, email: String, name: Option<String>) -> Result<Self> {
-        // Validate email format
-        if !email.validate_email() || email.len() > 255 {
-            return Err(Error::Validation(
-                "Invalid email format or length".to_string(),
-            ));
+        // Validate email format (validator crate enforces RFC 5321 including length)
+        if !email.validate_email() {
+            return Err(Error::Validation("Invalid email format".to_string()));
         }
 
         // Validate name length if provided
@@ -125,11 +123,9 @@ impl User {
             return Err(Error::Validation("Storage cannot be negative".to_string()));
         }
 
-        // Email validation
-        if !self.email.validate_email() || self.email.len() > 255 {
-            return Err(Error::Validation(
-                "Invalid email format or length".to_string(),
-            ));
+        // Email validation (validator crate enforces RFC 5321 including length)
+        if !self.email.validate_email() {
+            return Err(Error::Validation("Invalid email format".to_string()));
         }
 
         // Name validation
@@ -1315,13 +1311,12 @@ mod tests {
     }
 
     #[test]
-    fn test_user_validate_email_or_conditions() {
-        // Kill: replace || with && in email check
-        // Test email without '@' but within length limit -> should fail
+    fn test_user_validate_email_format() {
+        // Kill: replace validate_email with true/false, delete negation
         let now = Utc::now();
         let mut user = User {
             id: Uuid::new_v4(),
-            email: "noemailatall".to_string(),
+            email: "valid@example.com".to_string(),
             name: None,
             avatar_url: None,
             tier: UserTier::Starter,
@@ -1331,46 +1326,23 @@ mod tests {
             created_at: now,
             updated_at: now,
         };
-        assert!(user.validate().is_err());
-
-        // Test email with '@' but too long -> should fail
-        user.email = format!("{}@example.com", "a".repeat(250));
-        assert!(user.email.len() > 255);
-        assert!(user.validate().is_err());
-
-        // Test email with '@' and within length limit -> should pass
-        user.email = "ok@example.com".to_string();
-        assert!(user.validate().is_ok());
-    }
-
-    #[test]
-    fn test_user_validate_email_len_boundary() {
-        // Kill: replace > with == and >= (email.len() > 255)
-        let now = Utc::now();
-        let mut user = User {
-            id: Uuid::new_v4(),
-            email: "ok@example.com".to_string(),
-            name: None,
-            avatar_url: None,
-            tier: UserTier::Starter,
-            credits: 0,
-            ephemeral_storage_bytes: 0,
-            upgraded_at: None,
-            created_at: now,
-            updated_at: now,
-        };
-
-        // RFC-valid email within 255-char limit should pass
-        user.email = "valid@example.com".to_string();
+        // Valid email passes
         assert!(user.validate().is_ok());
 
-        // Email exceeding RFC local-part limit (64 chars) should fail format validation
-        let local_part = "a".repeat(65);
-        user.email = format!("{}@example.com", local_part);
+        // No domain -> invalid
+        user.email = "noemailatall".to_string();
         assert!(user.validate().is_err());
 
-        // Clearly invalid format should fail
-        user.email = "not-an-email".to_string();
+        // Missing local part -> invalid
+        user.email = "@example.com".to_string();
+        assert!(user.validate().is_err());
+
+        // RFC local-part exceeds 64 chars -> invalid
+        user.email = format!("{}@example.com", "a".repeat(65));
+        assert!(user.validate().is_err());
+
+        // Bare '@' -> invalid
+        user.email = "foo@".to_string();
         assert!(user.validate().is_err());
     }
 

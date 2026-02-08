@@ -290,8 +290,9 @@ impl InvitationRepository {
             "#,
             invitation_id
         )
-        .fetch_one(&self.pool)
-        .await?;
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(RepositoryError::NotFound)?;
 
         Ok(updated)
     }

@@ -167,27 +167,23 @@ pub async fn create_team(
         )));
     }
 
-    // Use Team constructor to handle slug generation
-    let temp_team = Team::new(request.name.clone(), request.slug)?;
-    let slug = temp_team.slug;
+    // Create team (handles slug generation from name if not provided)
+    let mut team = Team::new(request.name, request.slug)?;
 
     // Check slug uniqueness (INV-T3)
     if state
         .repos
         .teams
-        .get_by_slug(&slug)
+        .get_by_slug(&team.slug)
         .await
         .map_err(|e| Error::Internal(format!("Failed to check slug uniqueness: {}", e)))?
         .is_some()
     {
         return Err(Error::Conflict(format!(
             "Team slug '{}' already exists",
-            slug
+            team.slug
         )));
     }
-
-    // Create team
-    let mut team = Team::new(request.name, Some(slug))?;
 
     // Set initial credits if provided
     if let Some(credits) = request.initial_credits {

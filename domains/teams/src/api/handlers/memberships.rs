@@ -241,7 +241,7 @@ pub async fn invite_member(
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
     Json(request): Json<InviteMemberRequest>,
-) -> Result<Json<InvitationResponse>> {
+) -> Result<(StatusCode, Json<InvitationResponse>)> {
     // Validate request
     request
         .validate()
@@ -362,7 +362,10 @@ pub async fn invite_member(
         .await
         .map_err(|e| Error::Internal(format!("Failed to send invitation email: {}", e)))?;
 
-    Ok(Json(InvitationResponse::from(created_invitation)))
+    Ok((
+        StatusCode::CREATED,
+        Json(InvitationResponse::from(created_invitation)),
+    ))
 }
 
 /// Accept a team invitation
@@ -375,7 +378,7 @@ pub async fn accept_invitation(
     auth_context: AuthUser,
     State(state): State<TeamsState>,
     Path(invitation_id): Path<Uuid>,
-) -> Result<Json<MembershipResponse>> {
+) -> Result<(StatusCode, Json<MembershipResponse>)> {
     let user = &auth_context.0.user;
 
     // Get invitation
@@ -478,16 +481,19 @@ pub async fn accept_invitation(
         .context("Failed to commit invitation acceptance transaction")
         .map_err(|e| Error::Internal(e.to_string()))?;
 
-    Ok(Json(MembershipResponse {
-        id: created_membership.id,
-        team_id: created_membership.team_id,
-        user_id: created_membership.user_id,
-        role: created_membership.role,
-        created_at: created_membership.created_at,
-        user_email: user.email.clone(),
-        user_name: user.name.clone(),
-        user_avatar_url: user.avatar_url.clone(),
-    }))
+    Ok((
+        StatusCode::CREATED,
+        Json(MembershipResponse {
+            id: created_membership.id,
+            team_id: created_membership.team_id,
+            user_id: created_membership.user_id,
+            role: created_membership.role,
+            created_at: created_membership.created_at,
+            user_email: user.email.clone(),
+            user_name: user.name.clone(),
+            user_avatar_url: user.avatar_url.clone(),
+        }),
+    ))
 }
 
 /// Decline a team invitation
