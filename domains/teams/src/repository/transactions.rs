@@ -77,6 +77,94 @@ pub async fn mark_invitation_accepted_tx(
     Ok(())
 }
 
+/// Count all members for a team within an existing transaction.
+///
+/// Uses `FOR UPDATE` to lock all membership rows, preventing concurrent
+/// modifications until the transaction completes. Call this early in the
+/// transaction to serialise with other leave/remove operations (INV-T2).
+///
+/// PostgreSQL forbids `FOR UPDATE` with aggregate functions, so we fetch
+/// the locked rows and count them in Rust.
+pub async fn count_members_for_team_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+) -> std::result::Result<i64, sqlx::Error> {
+    let rows: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM memberships WHERE team_id = $1 FOR UPDATE")
+            .bind(team_id)
+            .fetch_all(&mut **transaction)
+            .await?;
+    Ok(rows.len() as i64)
+}
+
+/// Count owners in a team within an existing transaction.
+///
+/// Assumes membership rows are already locked by a prior `FOR UPDATE` query
+/// in the same transaction.
+pub async fn count_owners_for_team_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+) -> std::result::Result<i64, sqlx::Error> {
+    let row: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM memberships WHERE team_id = $1 AND role = 'owner'")
+            .bind(team_id)
+            .fetch_one(&mut **transaction)
+            .await?;
+    Ok(row.0)
+}
+
+/// Get a membership by team and user within an existing transaction.
+///
+/// Uses runtime `query_as` to avoid SQLX offline cache requirements.
+pub async fn get_membership_by_team_and_user_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+    user_id: Uuid,
+) -> std::result::Result<Option<Membership>, sqlx::Error> {
+    let row: Option<Membership> = sqlx::query_as(
+        r#"
+        SELECT id, team_id, user_id, role, created_at
+        FROM memberships
+        WHERE team_id = $1 AND user_id = $2
+        "#,
+    )
+    .bind(team_id)
+    .bind(user_id)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    Ok(row)
+}
+
+/// Delete a membership within an existing transaction.
+pub async fn delete_membership_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+    user_id: Uuid,
+) -> std::result::Result<(), RepositoryError> {
+    let result = sqlx::query("DELETE FROM memberships WHERE team_id = $1 AND user_id = $2")
+        .bind(team_id)
+        .bind(user_id)
+        .execute(&mut **transaction)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(RepositoryError::NotFound);
+    }
+    Ok(())
+}
+
+/// Delete a team within an existing transaction.
+pub async fn delete_team_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+) -> std::result::Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM teams WHERE id = $1")
+        .bind(team_id)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}
+
 /// Create a team within an existing transaction.
 ///
 /// Uses runtime `query_as` to avoid SQLX offline cache requirements.
