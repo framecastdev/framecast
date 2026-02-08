@@ -545,3 +545,16 @@ jobs:
               echo ":x: **No E2E results found** — \`e2e-results.xml\` missing"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  ci-passed:
+    name: CI Passed
+    if: always()
+    needs: [infra-validate, build-lambda, mutation-summary, e2e-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "One or more required jobs failed or were cancelled"
+            exit 1
+          fi
