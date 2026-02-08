@@ -25,7 +25,11 @@ BEGIN
     END IF;
 
     -- INV-K2: Team/team-user URNs require creator tier
-    IF (NEW.owner LIKE 'framecast:team:%' OR NEW.owner ~ 'framecast:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+')
+    -- Exclude framecast:user:* URNs — the generic regex framecast:X:Y
+    -- would otherwise match personal user URNs too.
+    IF (NEW.owner LIKE 'framecast:team:%'
+        OR (NEW.owner ~ 'framecast:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+'
+            AND NEW.owner NOT LIKE 'framecast:user:%'))
        AND user_tier != 'creator' THEN
         RAISE EXCEPTION 'Team API keys require creator tier';
     END IF;
