@@ -1,0 +1,35 @@
+[package]
+name = "framecast-llm"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+description = "LLM service: Anthropic Claude API integration"
+
+[dependencies]
+# Shared crates
+framecast-common.workspace = true
+
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+# HTTP client
+reqwest = { workspace = true }
+
+# Environment
+dotenvy.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Async traits
+async-trait.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+tokio-test.workspace = true
