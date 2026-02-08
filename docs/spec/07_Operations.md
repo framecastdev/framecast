@@ -1173,6 +1173,31 @@ Operation: estimate_spec(spec: JSONB, user_id: UUID, owner?: URN) → EstimateRe
 | create_api_key | POST | /v1/auth/keys |
 | update_api_key | PATCH | /v1/auth/keys/:id |
 | revoke_api_key | DELETE | /v1/auth/keys/:id |
+| **Auth** | | |
+| whoami | GET | /v1/auth/whoami |
+
+---
+
+## 8.14 Auth Operations
+
+```
+Operation: whoami() → WhoamiResponse
+  Pre:  Valid JWT token or valid API key in Authorization header
+  Post: Returns authentication context including user profile and auth method
+        If authenticated via API key, includes key metadata (scopes, owner)
+
+  WhoamiResponse:
+    auth_method: "jwt" | "api_key"
+    user: User (same fields as get_profile)
+    api_key?: {id, owner, name, key_prefix, scopes, expires_at}
+              (only present when auth_method = "api_key")
+
+  Notes:
+    - Supports both JWT (Supabase Auth) and API key authentication
+    - Available to both Starter and Creator tiers
+    - Primary use case: auth verification and debugging
+    - API key metadata is a subset (excludes user_id, revoked_at, last_used_at, created_at)
+```
 
 ---
 

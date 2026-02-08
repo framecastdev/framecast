@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 
-use super::handlers::{api_keys, memberships, teams, users};
+use super::handlers::{api_keys, auth, memberships, teams, users};
 use super::middleware::TeamsState;
 
 /// Create user management routes
@@ -79,6 +79,11 @@ fn api_key_routes() -> Router<TeamsState> {
         )
 }
 
+/// Create auth introspection routes
+fn auth_routes() -> Router<TeamsState> {
+    Router::new().route("/v1/auth/whoami", get(auth::whoami))
+}
+
 /// Create all Teams domain API routes
 pub fn routes() -> Router<TeamsState> {
     Router::new()
@@ -86,4 +91,5 @@ pub fn routes() -> Router<TeamsState> {
         .merge(team_routes())
         .merge(membership_routes())
         .merge(api_key_routes())
+        .merge(auth_routes())
 }

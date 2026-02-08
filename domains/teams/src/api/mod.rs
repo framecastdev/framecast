@@ -7,6 +7,6 @@ pub mod middleware;
 pub mod routes;
 
 pub use middleware::{
-    ApiKeyUser, AuthConfig, AuthError, AuthUser, CreatorUser, SupabaseClaims, TeamsState,
+    AnyAuth, ApiKeyUser, AuthConfig, AuthError, AuthUser, CreatorUser, SupabaseClaims, TeamsState,
 };
 pub use routes::routes;

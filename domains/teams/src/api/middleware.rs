@@ -147,34 +147,7 @@ impl FromRequestParts<TeamsState> for AuthUser {
             .ok_or(AuthError::MissingAuthorization)?;
 
         let token = extract_bearer_token(auth_header)?;
-
-        let claims = validate_jwt_token(&token, &state.auth_config)?;
-
-        let user_id = Uuid::parse_str(&claims.sub).map_err(|_| AuthError::InvalidUserId)?;
-
-        // Load user from database
-        let user = state
-            .repos
-            .users
-            .find(user_id)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, user_id = %user_id, "Failed to load user");
-                AuthError::UserLoadError
-            })?
-            .ok_or(AuthError::UserNotFound)?;
-
-        // Load user's team memberships (only for creators)
-        let memberships = if user.tier == UserTier::Creator {
-            state.repos.teams.find_by_user(user_id).await.map_err(|e| {
-                tracing::error!(error = %e, user_id = %user_id, "Failed to load memberships");
-                AuthError::MembershipsLoadError
-            })?
-        } else {
-            vec![]
-        };
-
-        let auth_context = AuthContext::new(user, memberships, None);
+        let auth_context = authenticate_jwt(&token, state).await?;
 
         Ok(AuthUser(auth_context))
     }
@@ -221,51 +194,128 @@ impl FromRequestParts<TeamsState> for ApiKeyUser {
             .get(AUTHORIZATION)
             .ok_or(AuthError::MissingAuthorization)?;
 
-        let api_key = extract_api_key(auth_header)?;
-
-        // Authenticate using API key
-        let authenticated_key = state
-            .repos
-            .api_keys
-            .authenticate(&api_key)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "Failed to authenticate API key");
-                AuthError::AuthenticationFailed
-            })?
-            .ok_or(AuthError::InvalidApiKey)?;
-
-        // Load user from database
-        let user = state
-            .repos
-            .users
-            .find(authenticated_key.user_id)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, user_id = %authenticated_key.user_id, "Failed to load user");
-                AuthError::UserLoadError
-            })?
-            .ok_or(AuthError::UserNotFound)?;
-
-        // Load user's team memberships (only for creators)
-        let memberships = if user.tier == UserTier::Creator {
-            state
-                .repos
-                .teams
-                .find_by_user(authenticated_key.user_id)
-                .await
-                .map_err(|e| {
-                    tracing::error!(error = %e, user_id = %authenticated_key.user_id, "Failed to load memberships");
-                    AuthError::MembershipsLoadError
-                })?
-        } else {
-            vec![]
-        };
-
-        let auth_context = AuthContext::new(user, memberships, Some(authenticated_key));
+        let api_key_str = extract_api_key(auth_header)?;
+        let auth_context = authenticate_api_key(&api_key_str, state).await?;
 
         Ok(ApiKeyUser(auth_context))
     }
+}
+
+/// Dual-auth extractor: tries API key first (if `sk_live_` prefix), falls back to JWT.
+///
+/// Use this for endpoints that accept **both** JWT and API key authentication.
+/// The discriminator is the token format:
+/// - `Bearer sk_live_...` or `sk_live_...` → API key path
+/// - `Bearer <other>` → JWT path
+#[derive(Debug)]
+pub struct AnyAuth(pub AuthContext);
+
+impl FromRequestParts<TeamsState> for AnyAuth {
+    type Rejection = AuthError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &TeamsState,
+    ) -> std::result::Result<Self, Self::Rejection> {
+        let auth_header = parts
+            .headers
+            .get(AUTHORIZATION)
+            .ok_or(AuthError::MissingAuthorization)?;
+
+        let header_str = auth_header
+            .to_str()
+            .map_err(|_| AuthError::InvalidAuthorizationFormat)?;
+
+        // Determine auth method by token format
+        let is_api_key = if let Some(token) = header_str.strip_prefix("Bearer ") {
+            token.starts_with("sk_live_")
+        } else {
+            header_str.starts_with("sk_live_")
+        };
+
+        if is_api_key {
+            let api_key_str = extract_api_key(auth_header)?;
+            let auth_context = authenticate_api_key(&api_key_str, state).await?;
+            Ok(AnyAuth(auth_context))
+        } else {
+            let token = extract_bearer_token(auth_header)?;
+            let auth_context = authenticate_jwt(&token, state).await?;
+            Ok(AnyAuth(auth_context))
+        }
+    }
+}
+
+/// Shared JWT authentication logic used by both `AuthUser` and `AnyAuth`.
+async fn authenticate_jwt(token: &str, state: &TeamsState) -> Result<AuthContext, AuthError> {
+    let claims = validate_jwt_token(token, &state.auth_config)?;
+
+    let user_id = Uuid::parse_str(&claims.sub).map_err(|_| AuthError::InvalidUserId)?;
+
+    let user = state
+        .repos
+        .users
+        .find(user_id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, user_id = %user_id, "Failed to load user");
+            AuthError::UserLoadError
+        })?
+        .ok_or(AuthError::UserNotFound)?;
+
+    let memberships = if user.tier == UserTier::Creator {
+        state.repos.teams.find_by_user(user_id).await.map_err(|e| {
+            tracing::error!(error = %e, user_id = %user_id, "Failed to load memberships");
+            AuthError::MembershipsLoadError
+        })?
+    } else {
+        vec![]
+    };
+
+    Ok(AuthContext::new(user, memberships, None))
+}
+
+/// Shared API key authentication logic used by both `ApiKeyUser` and `AnyAuth`.
+async fn authenticate_api_key(
+    api_key_str: &str,
+    state: &TeamsState,
+) -> Result<AuthContext, AuthError> {
+    let authenticated_key = state
+        .repos
+        .api_keys
+        .authenticate(api_key_str)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to authenticate API key");
+            AuthError::AuthenticationFailed
+        })?
+        .ok_or(AuthError::InvalidApiKey)?;
+
+    let user = state
+        .repos
+        .users
+        .find(authenticated_key.user_id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, user_id = %authenticated_key.user_id, "Failed to load user");
+            AuthError::UserLoadError
+        })?
+        .ok_or(AuthError::UserNotFound)?;
+
+    let memberships = if user.tier == UserTier::Creator {
+        state
+            .repos
+            .teams
+            .find_by_user(authenticated_key.user_id)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, user_id = %authenticated_key.user_id, "Failed to load memberships");
+                AuthError::MembershipsLoadError
+            })?
+    } else {
+        vec![]
+    };
+
+    Ok(AuthContext::new(user, memberships, Some(authenticated_key)))
 }
 
 /// Extract bearer token from Authorization header
