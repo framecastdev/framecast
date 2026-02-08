@@ -6,12 +6,9 @@
 //! - POST /v1/account/upgrade - Upgrade user tier
 
 use crate::{User, UserTier};
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::{IntoResponse, Json},
-};
+use axum::{extract::State, Json};
 use chrono::{DateTime, Utc};
+use framecast_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -66,67 +63,11 @@ pub struct UpgradeTierRequest {
     pub target_tier: UserTier,
 }
 
-/// Error response for API operations
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    pub error: ErrorDetail,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ErrorDetail {
-    pub code: String,
-    pub message: String,
-}
-
-/// Standard API error type
-#[derive(Debug)]
-pub enum ApiError {
-    Validation(String),
-    NotFound(String),
-    Forbidden(String),
-    Conflict(String),
-    Internal(anyhow::Error),
-}
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> axum::response::Response {
-        let (status, code, message) = match &self {
-            ApiError::Validation(msg) => (StatusCode::BAD_REQUEST, "VALIDATION_ERROR", msg.clone()),
-            ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, "NOT_FOUND", msg.clone()),
-            ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, "FORBIDDEN", msg.clone()),
-            ApiError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg.clone()),
-            ApiError::Internal(e) => {
-                tracing::error!(error = %e, "Internal server error");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "INTERNAL_SERVER_ERROR",
-                    "Internal server error".to_string(),
-                )
-            }
-        };
-
-        let error_response = ErrorResponse {
-            error: ErrorDetail {
-                code: code.to_string(),
-                message,
-            },
-        };
-
-        (status, Json(error_response)).into_response()
-    }
-}
-
-impl From<anyhow::Error> for ApiError {
-    fn from(error: anyhow::Error) -> Self {
-        ApiError::Internal(error)
-    }
-}
-
 /// GET /v1/account - Get current user profile
 pub async fn get_profile(
     AuthUser(auth_context): AuthUser,
     State(_state): State<TeamsState>,
-) -> Result<Json<UserResponse>, ApiError> {
+) -> Result<Json<UserResponse>> {
     let user_response = UserResponse::from(auth_context.user);
     Ok(Json(user_response))
 }
@@ -136,11 +77,11 @@ pub async fn update_profile(
     AuthUser(auth_context): AuthUser,
     State(state): State<TeamsState>,
     Json(request): Json<UpdateProfileRequest>,
-) -> Result<Json<UserResponse>, ApiError> {
+) -> Result<Json<UserResponse>> {
     // Validate request
     request
         .validate()
-        .map_err(|e| ApiError::Validation(format!("Validation failed: {}", e)))?;
+        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
     let user_id = auth_context.user.id;
 
@@ -150,11 +91,8 @@ pub async fn update_profile(
         .users
         .update_profile(user_id, request.name, request.avatar_url)
         .await
-        .map_err(|e| {
-            tracing::error!(error = %e, user_id = %user_id, "Failed to update user profile");
-            ApiError::Internal(anyhow::anyhow!("Failed to update profile: {}", e))
-        })?
-        .ok_or_else(|| ApiError::NotFound("User not found".to_string()))?;
+        .map_err(|e| Error::Internal(format!("Failed to update profile: {}", e)))?
+        .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
 
     Ok(Json(UserResponse::from(updated_user)))
 }
@@ -164,11 +102,11 @@ pub async fn upgrade_tier(
     AuthUser(auth_context): AuthUser,
     State(state): State<TeamsState>,
     Json(request): Json<UpgradeTierRequest>,
-) -> Result<Json<UserResponse>, ApiError> {
+) -> Result<Json<UserResponse>> {
     // Validate request
     request
         .validate()
-        .map_err(|e| ApiError::Validation(format!("Validation failed: {}", e)))?;
+        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
 
     let current_user = &auth_context.user;
     let user_id = current_user.id;
@@ -181,21 +119,19 @@ pub async fn upgrade_tier(
         (UserTier::Creator, UserTier::Starter) => {
             // Downgrade: Check if user has team memberships (INV-U3)
             if !auth_context.memberships.is_empty() {
-                return Err(ApiError::Forbidden(
+                return Err(Error::Authorization(
                     "Cannot downgrade to starter while having team memberships. Leave all teams first.".to_string(),
                 ));
             }
         }
         (current, target) if current == target => {
-            return Err(ApiError::Conflict(format!(
+            return Err(Error::Conflict(format!(
                 "User is already {}",
                 current.to_string().to_lowercase()
             )));
         }
         _ => {
-            return Err(ApiError::Validation(
-                "Invalid tier upgrade path".to_string(),
-            ));
+            return Err(Error::Validation("Invalid tier upgrade path".to_string()));
         }
     }
 
@@ -205,11 +141,8 @@ pub async fn upgrade_tier(
         .users
         .upgrade_tier(user_id, request.target_tier.clone())
         .await
-        .map_err(|e| {
-            tracing::error!(error = %e, user_id = %user_id, target_tier = ?request.target_tier, "Failed to upgrade user tier");
-            ApiError::Internal(anyhow::anyhow!("Failed to upgrade tier: {}", e))
-        })?
-        .ok_or_else(|| ApiError::NotFound("User not found".to_string()))?;
+        .map_err(|e| Error::Internal(format!("Failed to upgrade tier: {}", e)))?
+        .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
 
     tracing::info!(
         user_id = %user_id,
