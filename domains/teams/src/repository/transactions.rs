@@ -165,6 +165,73 @@ pub async fn delete_team_tx(
     Ok(())
 }
 
+/// Revoke an invitation within an existing transaction.
+pub async fn revoke_invitation_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    invitation_id: Uuid,
+) -> std::result::Result<(), RepositoryError> {
+    let result = sqlx::query(
+        "UPDATE invitations SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL",
+    )
+    .bind(invitation_id)
+    .execute(&mut **transaction)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(RepositoryError::NotFound);
+    }
+    Ok(())
+}
+
+/// Create an invitation within an existing transaction.
+pub async fn create_invitation_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    invitation: &crate::Invitation,
+) -> std::result::Result<crate::Invitation, sqlx::Error> {
+    let created: crate::Invitation = sqlx::query_as(
+        r#"
+        INSERT INTO invitations (id, team_id, invited_by, email, role, token, expires_at, accepted_at, declined_at, revoked_at, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id, team_id, invited_by, email, role, token, expires_at, accepted_at, declined_at, revoked_at, created_at
+        "#,
+    )
+    .bind(invitation.id)
+    .bind(invitation.team_id)
+    .bind(invitation.invited_by)
+    .bind(&invitation.email)
+    .bind(invitation.role.clone() as crate::InvitationRole)
+    .bind(&invitation.token)
+    .bind(invitation.expires_at)
+    .bind(invitation.accepted_at)
+    .bind(invitation.declined_at)
+    .bind(invitation.revoked_at)
+    .bind(invitation.created_at)
+    .fetch_one(&mut **transaction)
+    .await?;
+    Ok(created)
+}
+
+/// Count active (non-terminal) jobs for a team within an existing transaction.
+///
+/// CQRS read-side query: reads the jobs table directly.
+pub async fn count_active_jobs_for_team_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+) -> std::result::Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as(
+        r#"
+        SELECT COUNT(*)
+        FROM jobs
+        WHERE owner LIKE 'framecast:team:' || $1::text || '%'
+          AND status NOT IN ('completed', 'failed', 'canceled')
+        "#,
+    )
+    .bind(team_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    Ok(row.0)
+}
+
 /// Create a team within an existing transaction.
 ///
 /// Uses runtime `query_as` to avoid SQLX offline cache requirements.

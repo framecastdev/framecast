@@ -127,7 +127,7 @@ class TestInvitationWorkflowE2E:
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """Cannot invite same email twice while pending."""
+        """Re-inviting same email revokes existing and creates new invitation."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
@@ -146,14 +146,17 @@ class TestInvitationWorkflowE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 200
+        first_invitation_id = resp.json()["id"]
 
-        # Second invitation to same email should be rejected
+        # Second invitation to same email revokes old and creates new
         resp = await http_client.post(
             f"/v1/teams/{team_id}/invitations",
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 409  # Conflict
+        assert resp.status_code == 200
+        second_invitation_id = resp.json()["id"]
+        assert second_invitation_id != first_invitation_id
 
     async def test_non_owner_cannot_invite(
         self,

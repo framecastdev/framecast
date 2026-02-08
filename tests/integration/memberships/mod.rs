@@ -236,7 +236,7 @@ mod test_invite_member {
     }
 
     #[tokio::test]
-    async fn test_invite_pending_invitation_exists() {
+    async fn test_reinvite_revokes_existing_and_creates_new() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let router = create_test_router(&app).await;
@@ -263,7 +263,18 @@ mod test_invite_member {
         let response1 = router.clone().oneshot(request1).await.unwrap();
         assert_eq!(response1.status(), StatusCode::OK);
 
-        // Try to create second invitation (should fail)
+        let body1 = axum::body::to_bytes(response1.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let first_invitation: Value = serde_json::from_slice(&body1).unwrap();
+        let first_id = first_invitation["id"].as_str().unwrap().to_string();
+
+        // Re-invite same email — should revoke first and create new
+        let reinvite_data = json!({
+            "email": invitee_email,
+            "role": "admin"
+        });
+
         let request2 = Request::builder()
             .method(Method::POST)
             .uri(format!("/v1/teams/{}/invitations", team.id))
@@ -272,22 +283,34 @@ mod test_invite_member {
                 format!("Bearer {}", owner_fixture.jwt_token),
             )
             .header("content-type", "application/json")
-            .body(Body::from(invite_data.to_string()))
+            .body(Body::from(reinvite_data.to_string()))
             .unwrap();
 
         let response2 = router.oneshot(request2).await.unwrap();
+        assert_eq!(response2.status(), StatusCode::OK);
 
-        assert_eq!(response2.status(), StatusCode::CONFLICT);
-
-        let body = axum::body::to_bytes(response2.into_body(), usize::MAX)
+        let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
             .await
             .unwrap();
-        let error: Value = serde_json::from_slice(&body).unwrap();
+        let second_invitation: Value = serde_json::from_slice(&body2).unwrap();
+        let second_id = second_invitation["id"].as_str().unwrap().to_string();
 
-        assert!(error["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("pending invitation"));
+        // New invitation has different ID and updated role
+        assert_ne!(first_id, second_id);
+        assert_eq!(second_invitation["role"], "admin");
+        assert_eq!(second_invitation["state"], "pending");
+
+        // Verify old invitation was revoked in DB
+        let old_revoked: (Option<chrono::DateTime<chrono::Utc>>,) =
+            sqlx::query_as("SELECT revoked_at FROM invitations WHERE id = $1")
+                .bind(uuid::Uuid::parse_str(&first_id).unwrap())
+                .fetch_one(&app.pool)
+                .await
+                .unwrap();
+        assert!(
+            old_revoked.0.is_some(),
+            "First invitation should be revoked"
+        );
 
         app.cleanup().await.unwrap();
     }
@@ -1110,6 +1133,78 @@ mod test_update_member_role {
         // INV-T2: Cannot demote the last owner — this is a business invariant
         // (409 Conflict), not a permission error (403 Forbidden)
         assert_eq!(response3.status(), StatusCode::CONFLICT);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_promote_to_owner_exceeds_max_owned_teams() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add member who already owns 10 teams
+        let member_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"INSERT INTO memberships (id, team_id, user_id, role, created_at)
+            VALUES ($1, $2, $3, $4::membership_role, $5)"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        // Create 10 teams where member is owner (hitting INV-T7 limit)
+        for i in 0..10 {
+            let t_id = Uuid::new_v4();
+            let slug = format!(
+                "inv-t7-{}-{}",
+                i,
+                Uuid::new_v4().to_string().get(..8).unwrap()
+            );
+            sqlx::query(
+                "INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at) VALUES ($1, $2, $3, 0, 0, '{}'::jsonb, NOW(), NOW())",
+            )
+            .bind(t_id)
+            .bind(format!("Owned Team {}", i))
+            .bind(&slug)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+
+            sqlx::query(
+                "INSERT INTO memberships (id, team_id, user_id, role, created_at) VALUES ($1, $2, $3, 'owner'::membership_role, NOW())",
+            )
+            .bind(Uuid::new_v4())
+            .bind(t_id)
+            .bind(member_fixture.user.id)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+        }
+
+        let router = create_test_router(&app).await;
+
+        // Try to promote member to owner — should fail (INV-T7)
+        let request = Request::builder()
+            .method(Method::PATCH)
+            .uri(format!(
+                "/v1/teams/{}/members/{}",
+                team.id, member_fixture.user.id
+            ))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .header("content-type", "application/json")
+            .body(Body::from(json!({"role": "owner"}).to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
 
         app.cleanup().await.unwrap();
     }

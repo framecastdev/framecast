@@ -148,7 +148,7 @@ impl TeamRepository {
             FROM teams t
             INNER JOIN memberships m ON t.id = m.team_id
             WHERE m.user_id = $1
-            ORDER BY t.created_at ASC
+            ORDER BY t.name ASC
             "#,
             user_id
         )

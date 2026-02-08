@@ -4,10 +4,11 @@
 //! with proper authorization and business rule enforcement.
 
 use crate::{
-    count_members_for_team_tx, count_owners_for_team_tx, create_membership_tx,
-    delete_membership_tx, delete_team_tx, get_membership_by_team_and_user_tx,
-    mark_invitation_accepted_tx, upgrade_user_tier_tx, Invitation, InvitationRole, InvitationState,
-    Membership, MembershipRole, MembershipWithUser, UserTier, MAX_TEAM_MEMBERSHIPS,
+    count_members_for_team_tx, count_owners_for_team_tx, create_invitation_tx,
+    create_membership_tx, delete_membership_tx, delete_team_tx, get_membership_by_team_and_user_tx,
+    mark_invitation_accepted_tx, revoke_invitation_tx, upgrade_user_tier_tx, Invitation,
+    InvitationRole, InvitationState, Membership, MembershipRole, MembershipWithUser, UserTier,
+    MAX_OWNED_TEAMS, MAX_TEAM_MEMBERSHIPS,
 };
 use anyhow::Context;
 use axum::{
@@ -332,7 +333,7 @@ pub async fn invite_member(
         }
     }
 
-    // Check for existing pending invitation
+    // Check for existing pending invitation — if one exists, revoke it and create a new one
     let existing_invitation = state
         .repos
         .invitations
@@ -340,40 +341,66 @@ pub async fn invite_member(
         .await
         .map_err(|e| Error::Internal(format!("Failed to check existing invitation: {}", e)))?;
 
-    if let Some(existing) = existing_invitation {
-        if existing.state() == InvitationState::Pending {
-            return Err(Error::Conflict(
-                "User already has a pending invitation to this team".to_string(),
-            ));
+    let existing_pending_id = existing_invitation.and_then(|inv| {
+        if inv.state() == InvitationState::Pending {
+            Some(inv.id)
+        } else {
+            None
         }
-    }
+    });
 
     // Business rule: Check max pending invitations (CARD-4)
-    let pending_count = state
-        .repos
-        .invitations
-        .count_pending_for_team(team_id)
-        .await
-        .map_err(|e| Error::Internal(format!("Failed to count pending invitations: {}", e)))?;
+    // If we're revoking an existing one, the net count stays the same, so skip the check
+    if existing_pending_id.is_none() {
+        let pending_count = state
+            .repos
+            .invitations
+            .count_pending_for_team(team_id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to count pending invitations: {}", e)))?;
 
-    if pending_count >= 50 {
-        return Err(Error::Conflict(
-            "Team has reached maximum pending invitations limit (50)".to_string(),
-        ));
+        if pending_count >= 50 {
+            return Err(Error::Conflict(
+                "Team has reached maximum pending invitations limit (50)".to_string(),
+            ));
+        }
     }
 
     let role_display = request.role.to_string();
     let recipient_email = request.email.clone();
 
-    // Create invitation
+    // Create invitation (revoke existing pending one if present, atomically)
     let invitation = Invitation::new(team_id, user.id, request.email, request.role)?;
 
-    let created_invitation = state
-        .repos
-        .invitations
-        .create(&invitation)
-        .await
-        .map_err(|e| Error::Internal(format!("Failed to create invitation: {}", e)))?;
+    let created_invitation = if let Some(old_id) = existing_pending_id {
+        // Revoke + create in a transaction
+        let mut tx = state
+            .repos
+            .begin()
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
+
+        revoke_invitation_tx(&mut tx, old_id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to revoke existing invitation: {}", e)))?;
+
+        let created = create_invitation_tx(&mut tx, &invitation)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to create invitation: {}", e)))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to commit transaction: {}", e)))?;
+
+        created
+    } else {
+        state
+            .repos
+            .invitations
+            .create(&invitation)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to create invitation: {}", e)))?
+    };
 
     // Send invitation email
     let team = state
@@ -765,6 +792,10 @@ pub async fn resend_invitation(
 /// Removes a member from the team. Only owners and admins can remove members.
 /// Admins cannot remove owners.
 ///
+/// All checks and mutations run inside a single transaction with `FOR UPDATE`
+/// row locking to prevent concurrent remove/leave operations from violating
+/// the "every team has ≥ 1 owner" invariant (INV-T2).
+///
 /// **Business Rules:**
 /// - Only owner/admin can remove members (permission matrix)
 /// - Admins cannot remove owners
@@ -783,7 +814,8 @@ pub async fn remove_member(
         ));
     }
 
-    // Check if acting user has permission (owner or admin)
+    // Check if acting user has permission (owner or admin) — outside TX is fine
+    // since the acting user's role doesn't change during the remove operation
     let acting_membership = state
         .repos
         .memberships
@@ -801,11 +833,20 @@ pub async fn remove_member(
         ));
     }
 
-    // Get target member
-    let target_membership = state
+    // Begin transaction — lock membership rows and perform all mutations atomically
+    let mut tx = state
         .repos
-        .memberships
-        .get_by_team_and_user(team_id, member_user_id)
+        .begin()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
+
+    // Lock all membership rows for this team (FOR UPDATE)
+    count_members_for_team_tx(&mut tx, team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
+
+    // Get target member (rows are locked, membership state is current)
+    let target_membership = get_membership_by_team_and_user_tx(&mut tx, team_id, member_user_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to get target membership: {}", e)))?
         .ok_or_else(|| Error::NotFound("Member not found in this team".to_string()))?;
@@ -815,22 +856,6 @@ pub async fn remove_member(
         return Err(Error::Authorization(
             "Admins cannot remove team owners".to_string(),
         ));
-    }
-
-    // Business rule: Cannot remove the last owner (INV-T2)
-    if target_membership.role == MembershipRole::Owner {
-        let owner_count = state
-            .repos
-            .memberships
-            .count_owners(team_id)
-            .await
-            .map_err(|e| Error::Internal(format!("Failed to count owners: {}", e)))?;
-
-        if owner_count <= 1 {
-            return Err(Error::Conflict(
-                "Cannot remove the last owner from the team".to_string(),
-            ));
-        }
     }
 
     // INV-U2: Cannot remove a Creator from their last team
@@ -856,30 +881,38 @@ pub async fn remove_member(
         }
     }
 
+    // Business rule: Cannot remove the last owner (INV-T2)
+    if target_membership.role == MembershipRole::Owner {
+        let owner_count = count_owners_for_team_tx(&mut tx, team_id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to count owners: {}", e)))?;
+
+        if owner_count <= 1 {
+            return Err(Error::Conflict(
+                "Cannot remove the last owner from the team".to_string(),
+            ));
+        }
+    }
+
     // Remove membership
-    state
-        .repos
-        .memberships
-        .delete(team_id, member_user_id)
+    delete_membership_tx(&mut tx, team_id, member_user_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to remove member: {}", e)))?;
 
     // Auto-delete team if no members remain
-    let remaining_members = state
-        .repos
-        .memberships
-        .count_for_team(team_id)
+    let remaining_members = count_members_for_team_tx(&mut tx, team_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
 
     if remaining_members == 0 {
-        state
-            .repos
-            .teams
-            .delete(team_id)
+        delete_team_tx(&mut tx, team_id)
             .await
             .map_err(|e| Error::Internal(format!("Failed to auto-delete empty team: {}", e)))?;
     }
+
+    tx.commit()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to commit transaction: {}", e)))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -945,6 +978,23 @@ pub async fn update_member_role(
         return Err(Error::Authorization(
             "Admins cannot promote members to owner role".to_string(),
         ));
+    }
+
+    // Business rule: Promoting to owner must not exceed MAX_OWNED_TEAMS (INV-T7)
+    if request.role == MembershipRole::Owner && target_membership.role != MembershipRole::Owner {
+        let owned_teams_count = state
+            .repos
+            .memberships
+            .count_owned_teams(member_user_id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to count owned teams: {}", e)))?;
+
+        if owned_teams_count >= MAX_OWNED_TEAMS {
+            return Err(Error::Conflict(format!(
+                "User cannot own more than {} teams",
+                MAX_OWNED_TEAMS
+            )));
+        }
     }
 
     // Business rule: Cannot demote the last owner (INV-T2)

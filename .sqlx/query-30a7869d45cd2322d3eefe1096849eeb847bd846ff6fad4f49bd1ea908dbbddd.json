@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT t.id, t.name, t.slug, t.credits, t.ephemeral_storage_bytes,\n                   t.settings, t.created_at, t.updated_at,\n                   m.role as \"role: MembershipRole\"\n            FROM teams t\n            INNER JOIN memberships m ON t.id = m.team_id\n            WHERE m.user_id = $1\n            ORDER BY t.created_at ASC\n            ",
+  "query": "\n            SELECT t.id, t.name, t.slug, t.credits, t.ephemeral_storage_bytes,\n                   t.settings, t.created_at, t.updated_at,\n                   m.role as \"role: MembershipRole\"\n            FROM teams t\n            INNER JOIN memberships m ON t.id = m.team_id\n            WHERE m.user_id = $1\n            ORDER BY t.name ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -78,5 +78,5 @@
       false
     ]
   },
-  "hash": "bed74a9546ad74e7afcd005640724ca8c84ce6e852f858b0d5dd0cc308ca30e8"
+  "hash": "30a7869d45cd2322d3eefe1096849eeb847bd846ff6fad4f49bd1ea908dbbddd"
 }
