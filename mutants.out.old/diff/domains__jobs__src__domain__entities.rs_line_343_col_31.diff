@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace && with || in Job::validate
+@@ -335,17 +335,17 @@
+         // INV-J9: Credits values cannot be negative
+         if self.credits_refunded < 0 || self.credits_charged < 0 {
+             return Err(Error::Validation(
+                 "Credits values cannot be negative".to_string(),
+             ));
+         }
+
+         // INV-J2: Terminal jobs have completion timestamp
+-        if self.is_terminal() && self.completed_at.is_none() {
++        if self.is_terminal() || /* ~ changed by cargo-mutants ~ */ self.completed_at.is_none() {
+             return Err(Error::Validation(
+                 "Terminal jobs must have completion timestamp".to_string(),
+             ));
+         }
+
+         // INV-J3: Processing jobs have start timestamp
+         if self.status == JobStatus::Processing && self.started_at.is_none() {
+             return Err(Error::Validation(

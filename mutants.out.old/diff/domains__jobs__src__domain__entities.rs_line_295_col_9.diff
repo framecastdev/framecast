@@ -1,0 +1,49 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::update_progress -> Result<()> with Ok(())
+@@ -287,45 +287,17 @@
+
+     /// Apply refund to the job based on failure type
+     pub fn apply_refund(&mut self, failure_type: JobFailureType) {
+         self.credits_refunded = self.calculate_refund(failure_type);
+     }
+
+     /// Update progress percentage
+     pub fn update_progress(&mut self, percent: f64) -> Result<()> {
+-        if !(0.0..=100.0).contains(&percent) {
+-            return Err(Error::Validation(
+-                "Progress must be between 0 and 100".to_string(),
+-            ));
+-        }
+-
+-        if let Some(progress_obj) = self.progress.0.as_object_mut() {
+-            progress_obj.insert(
+-                "percent".to_string(),
+-                serde_json::Value::Number(
+-                    serde_json::Number::from_f64(percent)
+-                        .ok_or_else(|| Error::Validation("Invalid progress value".to_string()))?,
+-                ),
+-            );
+-        } else {
+-            // Create new progress object
+-            let mut progress_map = serde_json::Map::new();
+-            progress_map.insert(
+-                "percent".to_string(),
+-                serde_json::Value::Number(
+-                    serde_json::Number::from_f64(percent)
+-                        .ok_or_else(|| Error::Validation("Invalid progress value".to_string()))?,
+-                ),
+-            );
+-            self.progress = Json(serde_json::Value::Object(progress_map));
+-        }
+-
+-        self.updated_at = Utc::now();
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Validate invariants per spec
+     pub fn validate(&self) -> Result<()> {
+         // INV-J8: Cannot refund more than charged
+         if self.credits_refunded > self.credits_charged {
+             return Err(Error::Validation(
+                 "Cannot refund more than charged".to_string(),

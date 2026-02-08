@@ -60,6 +60,19 @@ and system behaviors required for implementation.
 - **9.2:** Added Archive/Unarchive permissions for projects (Owner/Admin only)
 - **9.3:** Added `webhooks:read` and `webhooks:write` scopes
 
+### v0.0.1-SNAPSHOT Changes (Operations Completeness — Sections 8.1-8.8)
+
+- **8.1:** Added complete User Operations (get_profile, signup, update_profile, upgrade, delete_user)
+- **8.2:** Added complete Team Operations (list_teams, get_team, create_team, update_team, delete_team)
+- **8.3:** Added complete Membership Operations (list_members, update_member_role, remove_member, leave_team)
+- **8.4:** Added complete Invitation Operations (list/create/revoke/resend/accept/decline)
+- **8.5:** Added complete Job Operations (list/get/create_ephemeral/create_project/events/cancel/delete/clone)
+- **8.6:** Added complete Project Operations (list/get/create/update/update_spec/delete)
+- **8.7:** Added complete Asset Operations (list/get/create_upload_url/confirm_upload/delete)
+- **8.8:** Added complete System Asset Operations (list/get)
+- **8.9-8.11:** Fixed UTF-8 encoding of mathematical symbols (∃, ∈, ∧, →, etc.)
+- **8.13:** Added get_profile to endpoint mapping table; added Membership section
+
 ### v0.0.1-SNAPSHOT Changes (Entity & Operations Completeness)
 
 - **4.2:** Added NOT NULL constraint to Team.name (`String!`, min 1)

@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/state.rs
++++ delete match arm (JobState::Queued, JobEvent::Cancel) in JobStateMachine::transition
+@@ -105,17 +105,17 @@
+         // Check for terminal state
+         if current.is_terminal() {
+             return Err(StateError::TerminalState(current.to_string()));
+         }
+
+         let next = match (&current, &event) {
+             // From Queued
+             (JobState::Queued, JobEvent::WorkerPicksUp) => JobState::Processing,
+-            (JobState::Queued, JobEvent::Cancel) => JobState::Canceled,
++             /* ~ changed by cargo-mutants ~ */
+
+             // From Processing
+             (JobState::Processing, JobEvent::Success) => JobState::Completed,
+             (JobState::Processing, JobEvent::Failure) => JobState::Failed,
+             (JobState::Processing, JobEvent::Cancel) => JobState::Canceled,
+
+             // Invalid transitions
+             _ => {

@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::is_terminal -> bool with false
+@@ -141,17 +141,17 @@
+
+     /// Check if job is ephemeral (not tied to project)
+     pub fn is_ephemeral(&self) -> bool {
+         self.project_id.is_none()
+     }
+
+     /// Check if job is terminal
+     pub fn is_terminal(&self) -> bool {
+-        self.status.is_terminal()
++        false /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Get net credits (charged - refunded)
+     pub fn net_credits(&self) -> i32 {
+         self.credits_charged - self.credits_refunded
+     }
+
+     /// Start job processing

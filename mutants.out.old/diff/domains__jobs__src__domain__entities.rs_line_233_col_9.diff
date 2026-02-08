@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::owner_urn -> Result<Urn> with Ok(Default::default())
+@@ -225,17 +225,17 @@
+
+     /// Check if a transition is valid without applying it
+     pub fn can_transition(&self, event: &JobEvent) -> bool {
+         JobStateMachine::can_transition(self.status.to_state(), event)
+     }
+
+     /// Get owner URN
+     pub fn owner_urn(&self) -> Result<Urn> {
+-        self.owner.parse()
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Calculate refund amount based on failure type and progress
+     pub fn calculate_refund(&self, failure_type: JobFailureType) -> i32 {
+         let progress_percent_raw = self.get_progress_percent();
+
+         // Convert to integer with 2 decimal precision (10000 = 100.00%)
+         let progress_int = (progress_percent_raw * 100.0).round() as i32;

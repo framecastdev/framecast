@@ -1,0 +1,96 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::validate -> Result<()> with Ok(())
+@@ -321,92 +321,17 @@
+
+         self.updated_at = Utc::now();
+         Ok(())
+     }
+
+     /// Validate invariants per spec
+     pub fn validate(&self) -> Result<()> {
+         // INV-J8: Cannot refund more than charged
+-        if self.credits_refunded > self.credits_charged {
+-            return Err(Error::Validation(
+-                "Cannot refund more than charged".to_string(),
+-            ));
+-        }
+-
+-        // INV-J9: Credits values cannot be negative
+-        if self.credits_refunded < 0 || self.credits_charged < 0 {
+-            return Err(Error::Validation(
+-                "Credits values cannot be negative".to_string(),
+-            ));
+-        }
+-
+-        // INV-J2: Terminal jobs have completion timestamp
+-        if self.is_terminal() && self.completed_at.is_none() {
+-            return Err(Error::Validation(
+-                "Terminal jobs must have completion timestamp".to_string(),
+-            ));
+-        }
+-
+-        // INV-J3: Processing jobs have start timestamp
+-        if self.status == JobStatus::Processing && self.started_at.is_none() {
+-            return Err(Error::Validation(
+-                "Processing jobs must have start timestamp".to_string(),
+-            ));
+-        }
+-
+-        // INV-J4: Completed jobs must have output
+-        if self.status == JobStatus::Completed && self.output.is_none() {
+-            return Err(Error::Validation(
+-                "Completed jobs must have output".to_string(),
+-            ));
+-        }
+-
+-        // INV-J5: Failed jobs must have error
+-        if self.status == JobStatus::Failed && self.error.is_none() {
+-            return Err(Error::Validation("Failed jobs must have error".to_string()));
+-        }
+-
+-        // INV-J6 & J7: Failure type consistency
+-        match (&self.status, &self.failure_type) {
+-            (JobStatus::Failed | JobStatus::Canceled, None) => {
+-                return Err(Error::Validation(
+-                    "Failed/canceled jobs must have failure type".to_string(),
+-                ));
+-            }
+-            (JobStatus::Completed, Some(_)) => {
+-                return Err(Error::Validation(
+-                    "Completed jobs must not have failure type".to_string(),
+-                ));
+-            }
+-            _ => {}
+-        }
+-
+-        // INV-J11: Project jobs must be team-owned
+-        if self.project_id.is_some() {
+-            let urn = self.owner_urn()?;
+-            if !urn.is_team() {
+-                return Err(Error::Validation(
+-                    "Project-based jobs must be team-owned".to_string(),
+-                ));
+-            }
+-        }
+-
+-        // SPEC: Cancellation must charge at least 10% (maximum 90% refund)
+-        if let Some(JobFailureType::Canceled) = self.failure_type {
+-            let min_charge = (self.credits_charged * 10) / 100; // 10% minimum
+-            let actual_charge = self.credits_charged - self.credits_refunded;
+-            if actual_charge < min_charge {
+-                return Err(Error::Validation(
+-                    "Cancellation must charge at least 10%".to_string(),
+-                ));
+-            }
+-        }
+-
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+
+ /// Usage entity for billing metrics
+ #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+ pub struct Usage {
+     pub id: Uuid,
+     pub owner: String,  // URN as string

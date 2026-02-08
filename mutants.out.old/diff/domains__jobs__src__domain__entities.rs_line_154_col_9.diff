@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::net_credits -> i32 with 0
+@@ -146,17 +146,17 @@
+
+     /// Check if job is terminal
+     pub fn is_terminal(&self) -> bool {
+         self.status.is_terminal()
+     }
+
+     /// Get net credits (charged - refunded)
+     pub fn net_credits(&self) -> i32 {
+-        self.credits_charged - self.credits_refunded
++        0 /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Start job processing
+     pub fn start(&mut self) -> Result<()> {
+         let new_state = self.apply_transition(JobEvent::WorkerPicksUp)?;
+         self.status = JobStatus::from_state(new_state);
+         self.started_at = Some(Utc::now());
+         self.updated_at = Utc::now();

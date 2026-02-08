@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace * with + in Job::calculate_refund
+@@ -233,17 +233,17 @@
+         self.owner.parse()
+     }
+
+     /// Calculate refund amount based on failure type and progress
+     pub fn calculate_refund(&self, failure_type: JobFailureType) -> i32 {
+         let progress_percent_raw = self.get_progress_percent();
+
+         // Convert to integer with 2 decimal precision (10000 = 100.00%)
+-        let progress_int = (progress_percent_raw * 100.0).round() as i32;
++        let progress_int = (progress_percent_raw + /* ~ changed by cargo-mutants ~ */ 100.0).round() as i32;
+         let progress_int = progress_int.clamp(0, 10000); // 0.00% to 100.00%
+
+         match failure_type {
+             // Full refund for system errors and timeouts
+             JobFailureType::System | JobFailureType::Timeout => self.credits_charged,
+
+             // Partial refund based on remaining work for validation errors
+             JobFailureType::Validation => {

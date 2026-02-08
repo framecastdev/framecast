@@ -1,0 +1,25 @@
+--- domains/jobs/src/domain/entities.rs
++++ delete match arm (JobStatus::Completed, Some(_)) in Job::validate
+@@ -367,21 +367,17 @@
+
+         // INV-J6 & J7: Failure type consistency
+         match (&self.status, &self.failure_type) {
+             (JobStatus::Failed | JobStatus::Canceled, None) => {
+                 return Err(Error::Validation(
+                     "Failed/canceled jobs must have failure type".to_string(),
+                 ));
+             }
+-            (JobStatus::Completed, Some(_)) => {
+-                return Err(Error::Validation(
+-                    "Completed jobs must not have failure type".to_string(),
+-                ));
+-            }
++             /* ~ changed by cargo-mutants ~ */
+             _ => {}
+         }
+
+         // INV-J11: Project jobs must be team-owned
+         if self.project_id.is_some() {
+             let urn = self.owner_urn()?;
+             if !urn.is_team() {
+                 return Err(Error::Validation(

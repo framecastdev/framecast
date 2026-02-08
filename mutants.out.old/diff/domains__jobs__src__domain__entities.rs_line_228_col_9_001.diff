@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::can_transition -> bool with false
+@@ -220,17 +220,17 @@
+                 state
+             )),
+             StateError::GuardFailed(msg) => Error::Validation(msg),
+         })
+     }
+
+     /// Check if a transition is valid without applying it
+     pub fn can_transition(&self, event: &JobEvent) -> bool {
+-        JobStateMachine::can_transition(self.status.to_state(), event)
++        false /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Get owner URN
+     pub fn owner_urn(&self) -> Result<Urn> {
+         self.owner.parse()
+     }
+
+     /// Calculate refund amount based on failure type and progress

@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace && with || in Job::validate
+@@ -356,17 +356,17 @@
+         // INV-J4: Completed jobs must have output
+         if self.status == JobStatus::Completed && self.output.is_none() {
+             return Err(Error::Validation(
+                 "Completed jobs must have output".to_string(),
+             ));
+         }
+
+         // INV-J5: Failed jobs must have error
+-        if self.status == JobStatus::Failed && self.error.is_none() {
++        if self.status == JobStatus::Failed || /* ~ changed by cargo-mutants ~ */ self.error.is_none() {
+             return Err(Error::Validation("Failed jobs must have error".to_string()));
+         }
+
+         // INV-J6 & J7: Failure type consistency
+         match (&self.status, &self.failure_type) {
+             (JobStatus::Failed | JobStatus::Canceled, None) => {
+                 return Err(Error::Validation(
+                     "Failed/canceled jobs must have failure type".to_string(),

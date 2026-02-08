@@ -6,7 +6,7 @@
 //! - POST /v1/account/upgrade - Upgrade user tier
 
 use crate::{User, UserTier};
-use axum::{extract::State, Json};
+use axum::{extract::State, http::StatusCode, Json};
 use chrono::{DateTime, Utc};
 use framecast_common::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -95,6 +95,38 @@ pub async fn update_profile(
         .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
 
     Ok(Json(UserResponse::from(updated_user)))
+}
+
+/// DELETE /v1/account - Delete user account
+pub async fn delete_account(
+    AuthUser(auth_context): AuthUser,
+    State(state): State<TeamsState>,
+) -> Result<StatusCode> {
+    let user_id = auth_context.user.id;
+
+    // INV-T2: Check if user is the sole owner of any team
+    let sole_owner_teams = state
+        .repos
+        .memberships
+        .find_teams_where_sole_owner(user_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to check team ownership: {}", e)))?;
+
+    if !sole_owner_teams.is_empty() {
+        return Err(Error::Conflict(
+            "Cannot delete account while being the sole owner of a team. Transfer ownership or delete the team first.".to_string(),
+        ));
+    }
+
+    // DB cascades handle memberships + API keys
+    state
+        .repos
+        .users
+        .delete(user_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to delete account: {}", e)))?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// POST /v1/account/upgrade - Upgrade user tier

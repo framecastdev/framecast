@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace && with || in Job::validate
+@@ -342,17 +342,17 @@
+         // INV-J2: Terminal jobs have completion timestamp
+         if self.is_terminal() && self.completed_at.is_none() {
+             return Err(Error::Validation(
+                 "Terminal jobs must have completion timestamp".to_string(),
+             ));
+         }
+
+         // INV-J3: Processing jobs have start timestamp
+-        if self.status == JobStatus::Processing && self.started_at.is_none() {
++        if self.status == JobStatus::Processing || /* ~ changed by cargo-mutants ~ */ self.started_at.is_none() {
+             return Err(Error::Validation(
+                 "Processing jobs must have start timestamp".to_string(),
+             ));
+         }
+
+         // INV-J4: Completed jobs must have output
+         if self.status == JobStatus::Completed && self.output.is_none() {
+             return Err(Error::Validation(

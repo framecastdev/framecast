@@ -1,0 +1,54 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::calculate_refund -> i32 with 1
+@@ -230,50 +230,17 @@
+
+     /// Get owner URN
+     pub fn owner_urn(&self) -> Result<Urn> {
+         self.owner.parse()
+     }
+
+     /// Calculate refund amount based on failure type and progress
+     pub fn calculate_refund(&self, failure_type: JobFailureType) -> i32 {
+-        let progress_percent_raw = self.get_progress_percent();
+-
+-        // Convert to integer with 2 decimal precision (10000 = 100.00%)
+-        let progress_int = (progress_percent_raw * 100.0).round() as i32;
+-        let progress_int = progress_int.clamp(0, 10000); // 0.00% to 100.00%
+-
+-        match failure_type {
+-            // Full refund for system errors and timeouts
+-            JobFailureType::System | JobFailureType::Timeout => self.credits_charged,
+-
+-            // Partial refund based on remaining work for validation errors
+-            JobFailureType::Validation => {
+-                let remaining_work_int = 10000 - progress_int; // Remaining work as integer
+-                                                               // FLOOR operation: integer division automatically floors for positive numbers
+-                                                               // Use i64 for intermediate calculation to prevent overflow
+-                let result = (self.credits_charged as i64 * remaining_work_int as i64) / 10000;
+-                result as i32 // Safe because result will be <= self.credits_charged (which fits in i32)
+-            }
+-
+-            // Partial refund with 10% cancellation fee
+-            JobFailureType::Canceled => {
+-                let remaining_work_int = 10000 - progress_int;
+-
+-                // Calculate: credits * remaining_work * 0.9 using i64 to prevent overflow
+-                // = (credits * remaining_work * 9000) / (10000 * 10000)
+-                let refund_before_cap =
+-                    (self.credits_charged as i64 * remaining_work_int as i64 * 9000) / 100_000_000; // 10000 * 10000
+-
+-                // Enforce minimum 10% charge (maximum 90% refund) - SPEC REQUIREMENT
+-                let max_refund = (self.credits_charged as i64 * 9000) / 10000; // 90% of charged amount
+-
+-                std::cmp::min(refund_before_cap as i32, max_refund as i32)
+-            }
+-        }
++        1 /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Get progress percentage from progress field
+     pub fn get_progress_percent(&self) -> f64 {
+         let raw_progress = self
+             .progress
+             .0
+             .get("percent")

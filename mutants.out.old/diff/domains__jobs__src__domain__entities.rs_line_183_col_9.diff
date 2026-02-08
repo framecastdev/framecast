@@ -1,0 +1,30 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::fail -> Result<()> with Ok(())
+@@ -175,27 +175,17 @@
+         self.output_size_bytes = output_size_bytes;
+         self.completed_at = Some(Utc::now());
+         self.updated_at = Utc::now();
+         Ok(())
+     }
+
+     /// Fail job
+     pub fn fail(&mut self, error: serde_json::Value, failure_type: JobFailureType) -> Result<()> {
+-        let new_state = self.apply_transition(JobEvent::Failure)?;
+-        self.status = JobStatus::from_state(new_state);
+-        self.error = Some(Json(error));
+-        self.failure_type = Some(failure_type.clone());
+-
+-        // Apply refund based on failure type and progress
+-        self.apply_refund(failure_type);
+-
+-        self.completed_at = Some(Utc::now());
+-        self.updated_at = Utc::now();
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Cancel job
+     pub fn cancel(&mut self) -> Result<()> {
+         let new_state = self.apply_transition(JobEvent::Cancel)?;
+         self.status = JobStatus::from_state(new_state);
+         self.failure_type = Some(JobFailureType::Canceled);

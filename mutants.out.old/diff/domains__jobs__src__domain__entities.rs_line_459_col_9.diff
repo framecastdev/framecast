@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Usage::owner_urn -> Result<Urn> with Ok(Default::default())
+@@ -451,17 +451,17 @@
+
+     /// Get net credits (used - refunded)
+     pub fn net_credits(&self) -> i32 {
+         self.credits_used - self.credits_refunded
+     }
+
+     /// Get owner URN
+     pub fn owner_urn(&self) -> Result<Urn> {
+-        self.owner.parse()
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Validate invariants per spec
+     pub fn validate(&self) -> Result<()> {
+         // Period format validation - check length first, then regex
+         if self.period.len() != 7 {
+             return Err(Error::Validation(
+                 "Period format must be YYYY-MM".to_string(),

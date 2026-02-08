@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/state.rs
++++ delete match arm (JobState::Processing, JobEvent::Cancel) in JobStateMachine::transition
+@@ -110,17 +110,17 @@
+         let next = match (&current, &event) {
+             // From Queued
+             (JobState::Queued, JobEvent::WorkerPicksUp) => JobState::Processing,
+             (JobState::Queued, JobEvent::Cancel) => JobState::Canceled,
+
+             // From Processing
+             (JobState::Processing, JobEvent::Success) => JobState::Completed,
+             (JobState::Processing, JobEvent::Failure) => JobState::Failed,
+-            (JobState::Processing, JobEvent::Cancel) => JobState::Canceled,
++             /* ~ changed by cargo-mutants ~ */
+
+             // Invalid transitions
+             _ => {
+                 return Err(StateError::InvalidTransition {
+                     from: current.to_string(),
+                     to: "unknown".to_string(),
+                     event: event.to_string(),
+                 });

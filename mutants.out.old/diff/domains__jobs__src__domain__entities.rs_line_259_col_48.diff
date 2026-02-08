@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace - with + in Job::calculate_refund
+@@ -251,17 +251,17 @@
+                                                                // FLOOR operation: integer division automatically floors for positive numbers
+                                                                // Use i64 for intermediate calculation to prevent overflow
+                 let result = (self.credits_charged as i64 * remaining_work_int as i64) / 10000;
+                 result as i32 // Safe because result will be <= self.credits_charged (which fits in i32)
+             }
+
+             // Partial refund with 10% cancellation fee
+             JobFailureType::Canceled => {
+-                let remaining_work_int = 10000 - progress_int;
++                let remaining_work_int = 10000 + /* ~ changed by cargo-mutants ~ */ progress_int;
+
+                 // Calculate: credits * remaining_work * 0.9 using i64 to prevent overflow
+                 // = (credits * remaining_work * 9000) / (10000 * 10000)
+                 let refund_before_cap =
+                     (self.credits_charged as i64 * remaining_work_int as i64 * 9000) / 100_000_000; // 10000 * 10000
+
+                 // Enforce minimum 10% charge (maximum 90% refund) - SPEC REQUIREMENT
+                 let max_refund = (self.credits_charged as i64 * 9000) / 10000; // 90% of charged amount

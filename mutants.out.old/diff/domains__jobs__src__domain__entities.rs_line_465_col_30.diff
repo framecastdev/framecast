@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace != with == in Usage::validate
+@@ -457,17 +457,17 @@
+     /// Get owner URN
+     pub fn owner_urn(&self) -> Result<Urn> {
+         self.owner.parse()
+     }
+
+     /// Validate invariants per spec
+     pub fn validate(&self) -> Result<()> {
+         // Period format validation - check length first, then regex
+-        if self.period.len() != 7 {
++        if self.period.len() == /* ~ changed by cargo-mutants ~ */ 7 {
+             return Err(Error::Validation(
+                 "Period format must be YYYY-MM".to_string(),
+             ));
+         }
+
+         let regex = regex::Regex::new(r"^\d{4}-(0[1-9]|1[0-2])$").unwrap();
+         if !regex.is_match(&self.period) {
+             return Err(Error::Validation(

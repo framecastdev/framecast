@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace > with >= in Job::validate
+@@ -321,17 +321,17 @@
+
+         self.updated_at = Utc::now();
+         Ok(())
+     }
+
+     /// Validate invariants per spec
+     pub fn validate(&self) -> Result<()> {
+         // INV-J8: Cannot refund more than charged
+-        if self.credits_refunded > self.credits_charged {
++        if self.credits_refunded >= /* ~ changed by cargo-mutants ~ */ self.credits_charged {
+             return Err(Error::Validation(
+                 "Cannot refund more than charged".to_string(),
+             ));
+         }
+
+         // INV-J9: Credits values cannot be negative
+         if self.credits_refunded < 0 || self.credits_charged < 0 {
+             return Err(Error::Validation(

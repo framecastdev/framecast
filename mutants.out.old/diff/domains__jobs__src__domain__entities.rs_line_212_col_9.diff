@@ -1,0 +1,32 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::apply_transition -> Result<JobState> with Ok(Default::default())
+@@ -204,28 +204,17 @@
+
+         self.completed_at = Some(Utc::now());
+         self.updated_at = Utc::now();
+         Ok(())
+     }
+
+     /// Apply a state transition using the state machine
+     fn apply_transition(&self, event: JobEvent) -> Result<JobState> {
+-        let current_state = self.status.to_state();
+-        JobStateMachine::transition(current_state, event).map_err(|e| match e {
+-            StateError::InvalidTransition { from, event, .. } => Error::Validation(format!(
+-                "Invalid job transition: cannot apply '{}' event from '{}' state",
+-                event, from
+-            )),
+-            StateError::TerminalState(state) => Error::Validation(format!(
+-                "Job is in terminal state '{}' and cannot transition",
+-                state
+-            )),
+-            StateError::GuardFailed(msg) => Error::Validation(msg),
+-        })
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Check if a transition is valid without applying it
+     pub fn can_transition(&self, event: &JobEvent) -> bool {
+         JobStateMachine::can_transition(self.status.to_state(), event)
+     }
+
+     /// Get owner URN

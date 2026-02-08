@@ -4,9 +4,10 @@
 //! with proper authorization and business rule enforcement.
 
 use crate::{
-    create_membership_tx, mark_invitation_accepted_tx, upgrade_user_tier_tx, Invitation,
-    InvitationRole, InvitationState, Membership, MembershipRole, MembershipWithUser, UserTier,
-    MAX_TEAM_MEMBERSHIPS,
+    count_members_for_team_tx, count_owners_for_team_tx, create_membership_tx,
+    delete_membership_tx, delete_team_tx, get_membership_by_team_and_user_tx,
+    mark_invitation_accepted_tx, upgrade_user_tier_tx, Invitation, InvitationRole, InvitationState,
+    Membership, MembershipRole, MembershipWithUser, UserTier, MAX_TEAM_MEMBERSHIPS,
 };
 use anyhow::Context;
 use axum::{
@@ -149,6 +150,10 @@ pub async fn list_members(
 ///
 /// Removes the authenticated user from the team.
 /// The last owner cannot leave (INV-T2).
+///
+/// All checks and mutations run inside a single transaction with `FOR UPDATE`
+/// row locking to prevent concurrent leave/remove operations from violating
+/// the "every team has ≥ 1 owner" invariant.
 pub async fn leave_team(
     auth_context: AuthUser,
     State(state): State<TeamsState>,
@@ -156,28 +161,27 @@ pub async fn leave_team(
 ) -> Result<StatusCode> {
     let user = &auth_context.0.user;
 
-    // Check if user is a member of the team
-    let membership = state
+    // Begin transaction — all checks and mutations happen atomically
+    let mut tx = state
         .repos
-        .memberships
-        .get_by_team_and_user(team_id, user.id)
+        .begin()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
+
+    // Lock all membership rows for this team (FOR UPDATE) and count members.
+    // The lock prevents concurrent leave/remove from proceeding until this TX completes.
+    let member_count = count_members_for_team_tx(&mut tx, team_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
+
+    // Verify user is a member (rows are locked, membership state is current)
+    let membership = get_membership_by_team_and_user_tx(&mut tx, team_id, user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to get membership: {}", e)))?
         .ok_or_else(|| Error::NotFound("Not a member of this team".to_string()))?;
 
-    // Check member and owner counts for business rules
-    let member_count = state
-        .repos
-        .memberships
-        .count_for_team(team_id)
-        .await
-        .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
-
     if membership.role.is_owner() {
-        let owner_count = state
-            .repos
-            .memberships
-            .count_owners(team_id)
+        let owner_count = count_owners_for_team_tx(&mut tx, team_id)
             .await
             .map_err(|e| Error::Internal(format!("Failed to count owners: {}", e)))?;
 
@@ -201,9 +205,12 @@ pub async fn leave_team(
                     }
                 }
                 // Auto-delete the team (cascades memberships)
-                state.repos.teams.delete(team_id).await.map_err(|e| {
+                delete_team_tx(&mut tx, team_id).await.map_err(|e| {
                     Error::Internal(format!("Failed to auto-delete empty team: {}", e))
                 })?;
+                tx.commit()
+                    .await
+                    .map_err(|e| Error::Internal(format!("Failed to commit transaction: {}", e)))?;
                 return Ok(StatusCode::NO_CONTENT);
             }
             // Last owner but other members exist — cannot leave (INV-T2)
@@ -229,29 +236,25 @@ pub async fn leave_team(
     }
 
     // Remove membership
-    state
-        .repos
-        .memberships
-        .delete(team_id, user.id)
+    delete_membership_tx(&mut tx, team_id, user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to leave team: {}", e)))?;
 
     // Auto-delete team if no members remain
-    let remaining_members = state
-        .repos
-        .memberships
-        .count_for_team(team_id)
+    let remaining_members = count_members_for_team_tx(&mut tx, team_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to count team members: {}", e)))?;
 
     if remaining_members == 0 {
-        state
-            .repos
-            .teams
-            .delete(team_id)
+        delete_team_tx(&mut tx, team_id)
             .await
             .map_err(|e| Error::Internal(format!("Failed to auto-delete empty team: {}", e)))?;
     }
+
+    // Explicit commit — drop without commit = rollback (RAII)
+    tx.commit()
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to commit transaction: {}", e)))?;
 
     Ok(StatusCode::NO_CONTENT)
 }

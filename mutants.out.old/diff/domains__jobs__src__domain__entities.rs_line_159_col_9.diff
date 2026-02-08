@@ -1,0 +1,25 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace Job::start -> Result<()> with Ok(())
+@@ -151,21 +151,17 @@
+
+     /// Get net credits (charged - refunded)
+     pub fn net_credits(&self) -> i32 {
+         self.credits_charged - self.credits_refunded
+     }
+
+     /// Start job processing
+     pub fn start(&mut self) -> Result<()> {
+-        let new_state = self.apply_transition(JobEvent::WorkerPicksUp)?;
+-        self.status = JobStatus::from_state(new_state);
+-        self.started_at = Some(Utc::now());
+-        self.updated_at = Utc::now();
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Complete job successfully
+     pub fn complete(
+         &mut self,
+         output: serde_json::Value,
+         output_size_bytes: Option<i64>,
+     ) -> Result<()> {

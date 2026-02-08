@@ -1,0 +1,6 @@
+domains/jobs/src/domain/entities.rs:36:9: replace JobStatus::to_state -> JobState with Default::default()
+domains/jobs/src/domain/entities.rs:212:9: replace Job::apply_transition -> Result<JobState> with Ok(Default::default())
+domains/jobs/src/domain/entities.rs:233:9: replace Job::owner_urn -> Result<Urn> with Ok(Default::default())
+domains/jobs/src/domain/entities.rs:459:9: replace Usage::owner_urn -> Result<Urn> with Ok(Default::default())
+domains/jobs/src/domain/state.rs:51:9: replace JobState::valid_transitions -> &'static[JobState] with Vec::leak(vec![Default::default()])
+domains/jobs/src/domain/state.rs:106:9: replace JobStateMachine::transition -> Result<JobState, StateError> with Ok(Default::default())

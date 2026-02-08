@@ -1,0 +1,21 @@
+--- domains/jobs/src/domain/entities.rs
++++ replace JobStatus::is_terminal -> bool with true
+@@ -23,17 +23,17 @@
+     Completed,
+     Failed,
+     Canceled,
+ }
+
+ impl JobStatus {
+     /// Check if status is terminal (job has finished)
+     pub fn is_terminal(&self) -> bool {
+-        self.to_state().is_terminal()
++        true /* ~ changed by cargo-mutants ~ */
+     }
+
+     /// Convert to state machine state
+     pub fn to_state(&self) -> JobState {
+         match self {
+             JobStatus::Queued => JobState::Queued,
+             JobStatus::Processing => JobState::Processing,
+             JobStatus::Completed => JobState::Completed,
