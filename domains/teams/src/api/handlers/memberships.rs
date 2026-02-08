@@ -833,30 +833,6 @@ pub async fn remove_member(
         ));
     }
 
-    // INV-U2: Cannot remove a Creator from their last team
-    // Fetch target user outside TX (user tier doesn't change during remove)
-    let target_user = state
-        .repos
-        .users
-        .find(member_user_id)
-        .await
-        .map_err(|e| Error::Internal(format!("Failed to get user: {}", e)))?
-        .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
-
-    if target_user.tier == UserTier::Creator {
-        let target_membership_count = state
-            .repos
-            .memberships
-            .count_for_user(member_user_id)
-            .await
-            .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
-        if target_membership_count <= 1 {
-            return Err(Error::Conflict(
-                "Cannot remove: creators must belong to at least one team (INV-U2)".to_string(),
-            ));
-        }
-    }
-
     // Begin transaction — lock membership rows and perform all mutations atomically
     let mut tx = state
         .repos
@@ -880,6 +856,29 @@ pub async fn remove_member(
         return Err(Error::Authorization(
             "Admins cannot remove team owners".to_string(),
         ));
+    }
+
+    // INV-U2: Cannot remove a Creator from their last team
+    let target_user = state
+        .repos
+        .users
+        .find(member_user_id)
+        .await
+        .map_err(|e| Error::Internal(format!("Failed to get user: {}", e)))?
+        .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
+
+    if target_user.tier == UserTier::Creator {
+        let target_membership_count = state
+            .repos
+            .memberships
+            .count_for_user(member_user_id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
+        if target_membership_count <= 1 {
+            return Err(Error::Conflict(
+                "Cannot remove: creators must belong to at least one team (INV-U2)".to_string(),
+            ));
+        }
     }
 
     // Business rule: Cannot remove the last owner (INV-T2)
