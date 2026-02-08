@@ -211,6 +211,88 @@ pub async fn create_invitation_tx(
     Ok(created)
 }
 
+/// Count all memberships for a user within an existing transaction.
+///
+/// Used for INV-U2 checks (creators must belong to ≥1 team) inside
+/// transactions that already hold row locks, ensuring the count
+/// participates in the same snapshot isolation.
+pub async fn count_for_user_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+) -> std::result::Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM memberships WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+    Ok(row.0)
+}
+
+/// Count pending invitations for a team within an existing transaction.
+///
+/// Used for CARD-4 checks (max 50 pending invitations) inside transactions
+/// to prevent concurrent invitations from exceeding the limit.
+pub async fn count_pending_for_team_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+) -> std::result::Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as(
+        r#"
+        SELECT COUNT(*)
+        FROM invitations
+        WHERE team_id = $1
+          AND accepted_at IS NULL
+          AND declined_at IS NULL
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+        "#,
+    )
+    .bind(team_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    Ok(row.0)
+}
+
+/// Update a membership's role within an existing transaction.
+///
+/// Uses runtime `query_as` to avoid SQLX offline cache requirements.
+/// `MembershipRole` derives `sqlx::Type` so it encodes correctly via `.bind()`.
+pub async fn update_role_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+    user_id: Uuid,
+    new_role: MembershipRole,
+) -> std::result::Result<Membership, sqlx::Error> {
+    let updated: Membership = sqlx::query_as(
+        r#"
+        UPDATE memberships
+        SET role = $3
+        WHERE team_id = $1 AND user_id = $2
+        RETURNING id, team_id, user_id, role, created_at
+        "#,
+    )
+    .bind(team_id)
+    .bind(user_id)
+    .bind(new_role)
+    .fetch_one(&mut **transaction)
+    .await?;
+    Ok(updated)
+}
+
+/// Count how many teams a user owns within an existing transaction.
+///
+/// Cross-team read used for INV-T7 (max owned teams) checks.
+pub async fn count_owned_teams_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+) -> std::result::Result<i64, sqlx::Error> {
+    let row: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM memberships WHERE user_id = $1 AND role = 'owner'")
+            .bind(user_id)
+            .fetch_one(&mut **transaction)
+            .await?;
+    Ok(row.0)
+}
+
 /// Count active (non-terminal) jobs for a team within an existing transaction.
 ///
 /// CQRS read-side query: reads the jobs table directly.
