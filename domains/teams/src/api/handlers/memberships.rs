@@ -165,21 +165,6 @@ pub async fn leave_team(
         .map_err(|e| Error::Internal(format!("Failed to get membership: {}", e)))?
         .ok_or_else(|| Error::NotFound("Not a member of this team".to_string()))?;
 
-    // INV-U2: Creator must belong to at least one team
-    if user.tier == UserTier::Creator {
-        let user_membership_count = state
-            .repos
-            .memberships
-            .count_for_user(user.id)
-            .await
-            .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
-        if user_membership_count <= 1 {
-            return Err(Error::Conflict(
-                "Cannot leave: creators must belong to at least one team (INV-U2)".to_string(),
-            ));
-        }
-    }
-
     // Check member and owner counts for business rules
     let member_count = state
         .repos
@@ -198,7 +183,24 @@ pub async fn leave_team(
 
         if owner_count <= 1 {
             if member_count <= 1 {
-                // Last member AND last owner — auto-delete the team (cascades memberships)
+                // Last member AND last owner — check INV-U2 before auto-deleting
+                if user.tier == UserTier::Creator {
+                    let user_membership_count = state
+                        .repos
+                        .memberships
+                        .count_for_user(user.id)
+                        .await
+                        .map_err(|e| {
+                            Error::Internal(format!("Failed to count user memberships: {}", e))
+                        })?;
+                    if user_membership_count <= 1 {
+                        return Err(Error::Conflict(
+                            "Cannot leave: creators must belong to at least one team (INV-U2)"
+                                .to_string(),
+                        ));
+                    }
+                }
+                // Auto-delete the team (cascades memberships)
                 state.repos.teams.delete(team_id).await.map_err(|e| {
                     Error::Internal(format!("Failed to auto-delete empty team: {}", e))
                 })?;
@@ -207,6 +209,21 @@ pub async fn leave_team(
             // Last owner but other members exist — cannot leave (INV-T2)
             return Err(Error::Conflict(
                 "Cannot leave: you are the last owner of this team".to_string(),
+            ));
+        }
+    }
+
+    // INV-U2: Creator must belong to at least one team
+    if user.tier == UserTier::Creator {
+        let user_membership_count = state
+            .repos
+            .memberships
+            .count_for_user(user.id)
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to count user memberships: {}", e)))?;
+        if user_membership_count <= 1 {
+            return Err(Error::Conflict(
+                "Cannot leave: creators must belong to at least one team (INV-U2)".to_string(),
             ));
         }
     }

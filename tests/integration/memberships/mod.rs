@@ -708,8 +708,9 @@ mod test_remove_member {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add a member to remove
+        // Add a member to remove (give them a second team so INV-U2 is satisfied)
         let member_fixture = UserFixture::creator(&app).await.unwrap();
+        app.create_test_team(member_fixture.user.id).await.unwrap();
         sqlx::query(
             r#"
             INSERT INTO memberships (id, team_id, user_id, role, created_at)
@@ -1281,8 +1282,9 @@ mod test_leave_team {
         let app = TestApp::new().await.unwrap();
         let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add a member
+        // Add a member (give them a second team so INV-U2 is satisfied when leaving)
         let member_fixture = UserFixture::creator(&app).await.unwrap();
+        app.create_test_team(member_fixture.user.id).await.unwrap();
         sqlx::query(
             r#"
             INSERT INTO memberships (id, team_id, user_id, role, created_at)
@@ -1333,8 +1335,9 @@ mod test_leave_team {
         let app = TestApp::new().await.unwrap();
         let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add a viewer
+        // Add a viewer (give them a second team so INV-U2 is satisfied when leaving)
         let viewer_fixture = UserFixture::creator(&app).await.unwrap();
+        app.create_test_team(viewer_fixture.user.id).await.unwrap();
         sqlx::query(
             r#"
             INSERT INTO memberships (id, team_id, user_id, role, created_at)
@@ -1373,6 +1376,8 @@ mod test_leave_team {
     async fn test_last_owner_leaving_auto_deletes_team() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        // Give owner a second team so INV-U2 is satisfied when leaving
+        app.create_test_team(owner_fixture.user.id).await.unwrap();
         let router = create_test_router(&app).await;
 
         // Last owner (and sole member) leaving should auto-delete the team
@@ -1455,6 +1460,8 @@ mod test_leave_team {
     async fn test_owner_can_leave_if_other_owners_exist() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+        // Give owner a second team so INV-U2 is satisfied when leaving
+        app.create_test_team(owner_fixture.user.id).await.unwrap();
 
         // Add another owner
         let other_owner = UserFixture::creator(&app).await.unwrap();
@@ -2286,8 +2293,9 @@ mod test_team_auto_delete {
         let app = TestApp::new().await.unwrap();
         let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add a second owner so the first can leave
+        // Add a second owner so the first can leave (give them a second team for INV-U2)
         let second_owner = UserFixture::creator(&app).await.unwrap();
+        app.create_test_team(second_owner.user.id).await.unwrap();
         sqlx::query(
             r#"
             INSERT INTO memberships (id, team_id, user_id, role, created_at)
@@ -2335,8 +2343,9 @@ mod test_team_auto_delete {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add a member
+        // Add a member (give them a second team so INV-U2 is satisfied when removed)
         let member_fixture = UserFixture::creator(&app).await.unwrap();
+        app.create_test_team(member_fixture.user.id).await.unwrap();
         sqlx::query(
             r#"
             INSERT INTO memberships (id, team_id, user_id, role, created_at)
@@ -2772,8 +2781,9 @@ mod test_membership_exotic_inputs {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        // Add a member
+        // Add a member (give them a second team so INV-U2 is satisfied when leaving)
         let member_fixture = UserFixture::creator(&app).await.unwrap();
+        app.create_test_team(member_fixture.user.id).await.unwrap();
         sqlx::query(
             r#"
             INSERT INTO memberships (id, team_id, user_id, role, created_at)
