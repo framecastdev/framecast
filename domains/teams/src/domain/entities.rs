@@ -580,7 +580,7 @@ impl Invitation {
 }
 
 /// API Key entity
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ApiKey {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -593,6 +593,24 @@ pub struct ApiKey {
     pub expires_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+}
+
+impl std::fmt::Debug for ApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ApiKey")
+            .field("id", &self.id)
+            .field("user_id", &self.user_id)
+            .field("owner", &self.owner)
+            .field("name", &self.name)
+            .field("key_prefix", &self.key_prefix)
+            .field("key_hash", &"[REDACTED]")
+            .field("scopes", &self.scopes)
+            .field("last_used_at", &self.last_used_at)
+            .field("expires_at", &self.expires_at)
+            .field("revoked_at", &self.revoked_at)
+            .field("created_at", &self.created_at)
+            .finish()
+    }
 }
 
 impl ApiKey {
