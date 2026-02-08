@@ -4,6 +4,7 @@
 //! according to the permission matrix in docs/spec/08_Permissions.md
 
 use framecast_teams::{AuthError, AuthUser, MembershipRole, UserTier};
+use serde_json::Value;
 
 use axum::{
     extract::FromRequestParts,
@@ -414,5 +415,201 @@ mod test_auth_error_responses {
             error.get("message").unwrap().as_str().unwrap(),
             "Invalid or expired token"
         );
+    }
+}
+
+mod test_whoami {
+    use super::*;
+    use axum::body::Body;
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_whoami_with_jwt_auth() {
+        let app = TestApp::new().await.unwrap();
+        let fixture = UserFixture::starter(&app).await.unwrap();
+        let router = app.test_router();
+
+        let request = Request::builder()
+            .uri("/v1/auth/whoami")
+            .header("authorization", format!("Bearer {}", fixture.jwt_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let result: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result["auth_method"], "jwt");
+        assert_eq!(result["user"]["id"], fixture.user.id.to_string());
+        assert_eq!(result["user"]["email"], fixture.user.email);
+        assert_eq!(result["user"]["tier"], "starter");
+        assert!(result.get("api_key").is_none());
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_whoami_with_api_key_auth() {
+        let app = TestApp::new().await.unwrap();
+        let creator = UserFixture::creator(&app).await.unwrap();
+        let router = app.test_router();
+
+        // Create an API key via the endpoint
+        let create_req = Request::builder()
+            .method(axum::http::Method::POST)
+            .uri("/v1/auth/keys")
+            .header("authorization", format!("Bearer {}", creator.jwt_token))
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({"name": "Whoami Test Key", "scopes": ["generate", "jobs:read"]}).to_string(),
+            ))
+            .unwrap();
+
+        let create_resp = router.clone().oneshot(create_req).await.unwrap();
+        assert_eq!(create_resp.status(), StatusCode::CREATED);
+
+        let create_body = axum::body::to_bytes(create_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let create_result: Value = serde_json::from_slice(&create_body).unwrap();
+        let raw_key = create_result["raw_key"].as_str().unwrap().to_string();
+
+        // Call whoami with the API key
+        let whoami_req = Request::builder()
+            .uri("/v1/auth/whoami")
+            .header("authorization", format!("Bearer {}", raw_key))
+            .body(Body::empty())
+            .unwrap();
+
+        let whoami_resp = router.oneshot(whoami_req).await.unwrap();
+        assert_eq!(whoami_resp.status(), StatusCode::OK);
+
+        let whoami_body = axum::body::to_bytes(whoami_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let result: Value = serde_json::from_slice(&whoami_body).unwrap();
+
+        assert_eq!(result["auth_method"], "api_key");
+        assert_eq!(result["user"]["id"], creator.user.id.to_string());
+        assert_eq!(result["user"]["tier"], "creator");
+
+        let api_key_info = &result["api_key"];
+        assert!(api_key_info.get("id").is_some());
+        assert_eq!(api_key_info["name"], "Whoami Test Key");
+        assert!(api_key_info["key_prefix"]
+            .as_str()
+            .unwrap()
+            .starts_with("sk_live_"));
+        let scopes = api_key_info["scopes"].as_array().unwrap();
+        assert!(scopes.contains(&json!("generate")));
+        assert!(scopes.contains(&json!("jobs:read")));
+        assert!(api_key_info["owner"].as_str().unwrap().contains("user:"));
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_whoami_without_auth() {
+        let app = TestApp::new().await.unwrap();
+        let router = app.test_router();
+
+        let request = Request::builder()
+            .uri("/v1/auth/whoami")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let result: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            result["error"]["code"].as_str().unwrap(),
+            "MISSING_AUTHORIZATION"
+        );
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_whoami_with_invalid_token() {
+        let app = TestApp::new().await.unwrap();
+        let router = app.test_router();
+
+        let request = Request::builder()
+            .uri("/v1/auth/whoami")
+            .header("authorization", "Bearer invalid.jwt.token")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let result: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(result["error"]["code"].as_str().unwrap(), "INVALID_TOKEN");
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_whoami_starter_user() {
+        let app = TestApp::new().await.unwrap();
+        let starter = UserFixture::starter(&app).await.unwrap();
+        let router = app.test_router();
+
+        let request = Request::builder()
+            .uri("/v1/auth/whoami")
+            .header("authorization", format!("Bearer {}", starter.jwt_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let result: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result["auth_method"], "jwt");
+        assert_eq!(result["user"]["tier"], "starter");
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_whoami_creator_user() {
+        let app = TestApp::new().await.unwrap();
+        let creator = UserFixture::creator(&app).await.unwrap();
+        let router = app.test_router();
+
+        let request = Request::builder()
+            .uri("/v1/auth/whoami")
+            .header("authorization", format!("Bearer {}", creator.jwt_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let result: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result["auth_method"], "jwt");
+        assert_eq!(result["user"]["tier"], "creator");
+
+        app.cleanup().await.unwrap();
     }
 }
