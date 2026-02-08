@@ -9,6 +9,8 @@ User 1 ────────────────────────�
 User 1 ─────────────────────────────── 0..* Project (created_by)
 User 1 ─────────────────────────────── 0..* Invitation (invited_by)
 User 1 ─────────────────────────────── 0..* AssetFile (uploaded_by)
+User 1 ─────────────────────────────── 0..* Conversation (user_id)
+User 1 ─────────────────────────────── 0..* Artifact (created_by)
 
 Team 1 ─────────────────────────────── 1..* Membership
 Team 1 ◆───────────────────────────── 0..* Project
@@ -19,7 +21,12 @@ Membership ───────────────────────
 
 Project 1 ─────────────────────────── 0..* Job
 Project 1 ◆────────────────────────── 0..* AssetFile
+Project 1 ◆────────────────────────── 0..* Artifact
 
+Conversation 1 ◆──────────────────── 0..* Message
+Conversation 1 ─────────────────────── 0..* Artifact (conversation_id)
+
+Job 1 ─────────────────────────────── 0..* Artifact (source_job_id)
 Job 1 ◆────────────────────────────── 0..* JobEvent
 
 Webhook 1 ◆────────────────────────── 0..* WebhookDelivery
@@ -41,6 +48,12 @@ Webhook 1 ◆──────────────────────�
 | User | has | ApiKey | 1:0..* | CASCADE |
 | Project | has | AssetFile | 1:0..* | CASCADE |
 | User | uploads | AssetFile | 1:0..* | No cascade |
+| User | has | Conversation | 1:0..* | CASCADE |
+| Conversation | has | Message | 1:0..* | CASCADE |
+| User | creates | Artifact | 1:0..* | No cascade (audit) |
+| Project | has | Artifact | 1:0..* | CASCADE |
+| Conversation | produces | Artifact | 1:0..* | SET NULL on delete |
+| Job | outputs | Artifact | 1:0..* | SET NULL on delete |
 
 ---
 
@@ -261,4 +274,81 @@ Transitions:
   δ(attempt, permanent_failure) = failed    [guard: 4xx response]
   δ(retrying, attempt) = attempt     [exponential backoff, max 5 retries]
   δ(retrying, max_exceeded) = failed
+```
+
+## 6.6 Conversation.status State Machine
+
+```
+              ┌──────────┐
+   [create]──►│  active  │
+              └────┬─────┘
+                   │
+                   │ [archive]
+                   ▼
+              ┌──────────┐
+              │ archived │
+              └────┬─────┘
+                   │
+                   │ [unarchive]
+                   ▼
+              ┌──────────┐
+              │  active  │
+              └──────────┘
+```
+
+**Formal Definition:**
+
+```
+States(Conversation.status) = {active, archived}
+Initial = active
+Terminal = ∅
+
+Transitions:
+  δ(active, archive) = archived
+  δ(archived, unarchive) = active
+
+Guards:
+  archive: conversation.user_id = requesting_user.id
+  unarchive: conversation.user_id = requesting_user.id
+```
+
+## 6.7 Artifact.status State Machine
+
+```
+              ┌──────────┐
+   [create]──►│ pending  │
+              └────┬─────┘
+                   │
+          ┌────────┼────────┐
+          │                 │
+     [confirm]          [fail]
+          │                 │
+          ▼                 ▼
+     ┌──────────┐      ┌──────────┐
+     │  ready   │      │  failed  │
+     └──────────┘      └────┬─────┘
+                            │
+                            │ [retry]
+                            ▼
+                       ┌──────────┐
+                       │ pending  │
+                       └──────────┘
+```
+
+**Formal Definition:**
+
+```
+States(Artifact.status) = {pending, ready, failed}
+Initial = pending
+Terminal = ∅
+
+Transitions:
+  δ(pending, confirm) = ready      [guard: S3 object exists and validates]
+  δ(pending, fail) = failed        [guard: validation/upload failure]
+  δ(failed, retry) = pending       [guard: created_by = requesting_user.id]
+
+Notes:
+  - Storyboard artifacts may transition directly to 'ready' on creation
+  - Media artifacts start as 'pending' and require upload confirmation
+  - Job-output artifacts transition to 'ready' when job completes
 ```

@@ -35,6 +35,19 @@
 | `GET /v1/system-assets/:id` | ✓ | ✓ |
 | `POST /v1/spec/validate` | ✓ | ✓ |
 | `POST /v1/spec/estimate` | ✓ | ✓ |
+| `GET /v1/conversations` | ✓ (own) | ✓ (own) |
+| `GET /v1/conversations/:id` | ✓ (own) | ✓ (own) |
+| `POST /v1/conversations` | ✓ | ✓ |
+| `PATCH /v1/conversations/:id` | ✓ (own) | ✓ (own) |
+| `DELETE /v1/conversations/:id` | ✓ (own) | ✓ (own) |
+| `POST /v1/conversations/:id/messages` | ✓ (own) | ✓ (own) |
+| `GET /v1/conversations/:id/messages` | ✓ (own) | ✓ (own) |
+| `GET /v1/artifacts` | ✓ (own artifacts) | ✓ (accessible via owner URN) |
+| `GET /v1/artifacts/:id` | ✓ (own artifacts) | ✓ (accessible via owner URN) |
+| `POST /v1/artifacts/storyboard` | ✓ | ✓ |
+| `POST /v1/artifacts/upload-url` | ✓ | ✓ |
+| `POST /v1/artifacts/:id/confirm` | ✓ | ✓ |
+| `DELETE /v1/artifacts/:id` | ✓ (own artifacts) | ✓ (accessible via owner URN) |
 | `GET /v1/status` | ✓ | ✓ |
 
 **v4.1 Additions:**
@@ -71,6 +84,9 @@
 | Upload assets | ✓ | ✓ | ✓ | ✗ |
 | Delete assets | ✓ | ✓ | ✓ (own) | ✗ |
 | Manage webhooks | ✓ | ✓ | ✗ | ✗ |
+| View artifacts | ✓ | ✓ | ✓ | ✓ |
+| Create artifacts | ✓ | ✓ | ✓ | ✗ |
+| Delete artifacts | ✓ | ✓ | ✓ (own) | ✗ |
 | Manage API keys | ✓ | ✓ | ✓ (own) | ✗ |
 
 ---
@@ -106,6 +122,20 @@ Scope: team:admin
   Allows: All team management operations including POST /v1/teams
   (members, invitations, settings, and team creation)
 
+Scope: conversations:read
+  Allows: GET /v1/conversations, GET /v1/conversations/:id, GET /v1/conversations/:id/messages
+
+Scope: conversations:write
+  Allows: POST /v1/conversations, PATCH /v1/conversations/:id,
+          DELETE /v1/conversations/:id, POST /v1/conversations/:id/messages
+
+Scope: artifacts:read
+  Allows: GET /v1/artifacts, GET /v1/artifacts/:id
+
+Scope: artifacts:write
+  Allows: POST /v1/artifacts/storyboard, POST /v1/artifacts/upload-url,
+          POST /v1/artifacts/:id/confirm, DELETE /v1/artifacts/:id
+
 Scope: webhooks:read
   Allows: GET /v1/teams/:id/webhooks, GET /v1/webhooks/:id, GET /v1/webhooks/:id/deliveries
 
@@ -129,7 +159,7 @@ Scope: * (wildcard)
 
 | Tier | Allowed Scopes |
 |------|----------------|
-| Starter | `generate`, `jobs:read`, `jobs:write`, `assets:read`, `assets:write` |
+| Starter | `generate`, `jobs:read`, `jobs:write`, `assets:read`, `assets:write`, `artifacts:read`, `artifacts:write`, `conversations:read`, `conversations:write` |
 | Creator | All scopes |
 
 **Notes:**

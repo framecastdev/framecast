@@ -311,6 +311,59 @@ INV-SA3: âˆ€ a1, a2 âˆˆ SystemAsset : a1 â‰  a2 â†’ a1.s3_key â
         (S3 keys are unique)
 ```
 
+## 7.16 Conversation Invariants
+
+```
+INV-C1: ∀ c ∈ Conversation : c.status ∈ {'active', 'archived'}
+        (Conversation status must be one of allowed values)
+
+INV-C2: ∀ c ∈ Conversation : c.user_id ∈ {u.id : u ∈ User}
+        (Conversation user reference must exist)
+
+INV-C3: ∀ c ∈ Conversation : c.message_count ≥ 0
+        (Message count cannot be negative)
+
+INV-C4: ∀ c ∈ Conversation : c.message_count =
+        |{m ∈ Message : m.conversation_id = c.id}|
+        (Message count must match actual message records)
+
+INV-C5: ∀ c ∈ Conversation : c.created_at ≤ c.updated_at
+        (Creation timestamp precedes update timestamp)
+
+INV-C6: ∀ c ∈ Conversation :
+        (c.system_prompt IS NULL ∨ LENGTH(c.system_prompt) ≤ 10000)
+        (System prompt cannot exceed 10,000 characters)
+```
+
+## 7.17 Artifact Invariants
+
+```
+INV-ART1: ∀ a ∈ Artifact : a.status ∈ {'pending', 'ready', 'failed'}
+          (Artifact status must be one of allowed values)
+
+INV-ART2: ∀ a ∈ Artifact : a.kind ∈ {'storyboard', 'image', 'audio', 'video'}
+          (Artifact kind must be one of allowed values)
+
+INV-ART3: ∀ a ∈ Artifact : a.kind ∈ {'image', 'audio', 'video'} →
+          (a.filename IS NOT NULL ∧ a.s3_key IS NOT NULL ∧
+           a.content_type IS NOT NULL ∧ a.size_bytes IS NOT NULL)
+          (Media artifacts require filename, s3_key, content_type, and size_bytes)
+
+INV-ART4: ∀ a ∈ Artifact : a.kind = 'storyboard' → a.spec IS NOT NULL
+          (Storyboard artifacts require spec)
+
+INV-ART5: ∀ a ∈ Artifact : a.size_bytes IS NOT NULL →
+          (a.size_bytes > 0 ∧ a.size_bytes ≤ 50 * 1024 * 1024)
+          (Artifact size must be positive and cannot exceed 50MB)
+
+INV-ART6: ∀ a1, a2 ∈ Artifact : a1 ≠ a2 ∧ a1.s3_key IS NOT NULL →
+          a1.s3_key ≠ a2.s3_key
+          (S3 keys are unique among non-null values)
+
+INV-ART7: ∀ a ∈ Artifact : a.created_by ∈ {u.id : u ∈ User}
+          (Artifact creator reference must exist)
+```
+
 ## 7.13 Cross-Entity Invariants
 
 ```
@@ -334,12 +387,31 @@ INV-X4: âˆ€ k âˆˆ ApiKey :
         (k.owner MATCHES 'framecast:([^:]+):([^:]+)' AS (team_id, user_id)) â†’
         âˆƒ m âˆˆ Membership : m.team_id = team_id âˆ§ m.user_id = k.user_id
         (Membership URN keys require valid membership)
+
+INV-X5: âˆ€ a âˆˆ Artifact :
+        (a.owner = 'framecast:user:' || a.created_by) âˆ¨
+        (âˆƒ m âˆˆ Membership : m.team_id âˆˆ extract_team_from_urn(a.owner) âˆ§ m.user_id = a.created_by)
+        (Artifact owner URN must be accessible by created_by user)
+
+INV-X6: âˆ€ a âˆˆ Artifact :
+        (a.project_id IS NOT NULL) â†'
+        (a.owner STARTS WITH 'framecast:team:' âˆ§
+         âˆƒ p âˆˆ Project : p.id = a.project_id âˆ§ a.owner = 'framecast:team:' || p.team_id)
+        (Project-scoped artifacts must be owned by project's team)
+
+INV-X7: âˆ€ a âˆˆ Artifact :
+        (a.source = 'conversation') â†' a.conversation_id IS NOT NULL
+        (Conversation-sourced artifacts must reference a conversation)
+
+INV-X8: âˆ€ a âˆˆ Artifact :
+        (a.source = 'job') â†' a.source_job_id IS NOT NULL
+        (Job-sourced artifacts must reference a job)
 ```
 
 ## 7.14 Temporal Invariants
 
 ```
-INV-TIME1: âˆ€ e âˆˆ {User, Team, Project, Job, AssetFile, Webhook} :
+INV-TIME1: âˆ€ e âˆˆ {User, Team, Project, Job, AssetFile, Webhook, Conversation, Artifact} :
            e.created_at â‰¤ e.updated_at
            (Creation precedes last update)
 
