@@ -429,4 +429,5 @@ The `.claude/skills/` directory contains domain expertise modules:
 | `api-spec` | API operations, permissions, validation |
 | `rust-patterns` | Error handling, repository pattern, handlers |
 | `python-e2e` | pytest fixtures, async patterns |
+| `runpod-infra` | Docker images, GPU workload, ComfyUI |
 | `observability` | Structured logging, metrics, tracing |
