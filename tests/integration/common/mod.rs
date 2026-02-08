@@ -17,7 +17,6 @@ use axum::Router;
 use chrono::Utc;
 use framecast_email::{EmailConfig, EmailServiceFactory};
 use framecast_teams::*;
-use framecast_teams::{AuthConfig, TeamsState};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 

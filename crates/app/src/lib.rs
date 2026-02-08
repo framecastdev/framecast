@@ -16,7 +16,7 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
     // Create auth config from environment
     let auth_config = AuthConfig {
         jwt_secret: std::env::var("JWT_SECRET")
-            .expect("JWT_SECRET environment variable is required"),
+            .map_err(|_| anyhow::anyhow!("JWT_SECRET environment variable is required"))?,
         issuer: std::env::var("JWT_ISSUER").ok(),
         audience: std::env::var("JWT_AUDIENCE").ok(),
     };

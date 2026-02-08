@@ -132,6 +132,9 @@ pub trait EmailService: Send + Sync {
     /// Send an email message
     async fn send_email(&self, message: EmailMessage) -> Result<EmailReceipt, EmailError>;
 
+    /// Return the default "from" address for outgoing emails
+    fn default_from(&self) -> String;
+
     /// Send team invitation email
     async fn send_team_invitation(
         &self,
@@ -141,7 +144,32 @@ pub trait EmailService: Send + Sync {
         recipient_email: &str,
         inviter_name: &str,
         role: &str,
-    ) -> Result<EmailReceipt, EmailError>;
+    ) -> Result<EmailReceipt, EmailError> {
+        let invitation_url = format!(
+            "https://framecast.app/teams/{}/invitations/{}/accept",
+            team_id, invitation_id
+        );
+
+        let subject = format!("Invitation to join team: {}", team_name);
+        let body_text =
+            content::team_invitation_text(inviter_name, team_name, role, &invitation_url);
+        let body_html =
+            content::team_invitation_html(inviter_name, team_name, role, &invitation_url);
+
+        let message = EmailMessage::new(
+            recipient_email.to_string(),
+            self.default_from(),
+            subject,
+            body_text,
+        )
+        .with_html(body_html)
+        .with_metadata("email_type".to_string(), "team_invitation".to_string())
+        .with_metadata("team_id".to_string(), team_id.to_string())
+        .with_metadata("invitation_id".to_string(), invitation_id.to_string())
+        .with_metadata("role".to_string(), role.to_string());
+
+        self.send_email(message).await
+    }
 }
 
 /// Email service factory

@@ -19,19 +19,12 @@ serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
-anyhow.workspace = true
 
 # Database mapping
 sqlx.workspace = true
 
 # Additional dependencies for entities
 regex = "1.0"
-
-# Mutation testing
-mutants.workspace = true
-
-# Logging
-tracing.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
