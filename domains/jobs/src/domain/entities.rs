@@ -429,7 +429,8 @@ impl Usage {
             ));
         }
 
-        let regex = regex::Regex::new(r"^\d{4}-(0[1-9]|1[0-2])$").unwrap();
+        let regex = regex::Regex::new(r"^\d{4}-(0[1-9]|1[0-2])$")
+            .map_err(|e| Error::Validation(format!("Invalid regex pattern: {}", e)))?;
         if !regex.is_match(&period) {
             return Err(Error::Validation(
                 "Period must be YYYY-MM format".to_string(),
@@ -468,7 +469,8 @@ impl Usage {
             ));
         }
 
-        let regex = regex::Regex::new(r"^\d{4}-(0[1-9]|1[0-2])$").unwrap();
+        let regex = regex::Regex::new(r"^\d{4}-(0[1-9]|1[0-2])$")
+            .map_err(|e| Error::Validation(format!("Invalid regex pattern: {}", e)))?;
         if !regex.is_match(&self.period) {
             return Err(Error::Validation(
                 "Period format must be YYYY-MM".to_string(),

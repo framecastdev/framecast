@@ -253,9 +253,9 @@ impl UserFixture {
 /// Create a test JWT token for a user
 pub fn create_test_jwt(user: &User, secret: &str) -> Result<String> {
     use jsonwebtoken::{Algorithm, EncodingKey, Header};
-    use serde::{Deserialize, Serialize};
+    use serde::Serialize;
 
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Debug, Serialize)]
     struct TestClaims {
         sub: String,
         email: String,

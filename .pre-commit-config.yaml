@@ -234,7 +234,7 @@ repos:
       # Check for TODO/FIXME in production code
       - id: check-todos
         name: Check for TODO/FIXME in production code
-        entry: bash -c 'if grep -rn "TODO\|FIXME" crates/ --include="*.rs"; then echo "Remove TODOs from production code"; exit 1; fi'
+        entry: bash -c 'if grep -rn "TODO\|FIXME" crates/ domains/ --include="*.rs"; then echo "Remove TODOs from production code"; exit 1; fi'
         language: system
         pass_filenames: false
 

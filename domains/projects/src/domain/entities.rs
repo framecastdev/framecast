@@ -366,8 +366,8 @@ impl SystemAsset {
         let id = format!("asset_{}_{}", category_str, name);
 
         // Validate ID format
-        let id_regex =
-            regex::Regex::new(r"^asset_(sfx|ambient|music|transition)_[a-z0-9_]+$").unwrap();
+        let id_regex = regex::Regex::new(r"^asset_(sfx|ambient|music|transition)_[a-z0-9_]+$")
+            .map_err(|e| Error::Validation(format!("Invalid regex pattern: {}", e)))?;
         if !id_regex.is_match(&id) {
             return Err(Error::Validation(
                 "Invalid system asset ID format".to_string(),
@@ -398,8 +398,8 @@ impl SystemAsset {
     /// Validate invariants per spec
     pub fn validate(&self) -> Result<()> {
         // ID format validation
-        let id_regex =
-            regex::Regex::new(r"^asset_(sfx|ambient|music|transition)_[a-z0-9_]+$").unwrap();
+        let id_regex = regex::Regex::new(r"^asset_(sfx|ambient|music|transition)_[a-z0-9_]+$")
+            .map_err(|e| Error::Validation(format!("Invalid regex pattern: {}", e)))?;
         if !id_regex.is_match(&self.id) {
             return Err(Error::Validation(
                 "Invalid system asset ID format".to_string(),
