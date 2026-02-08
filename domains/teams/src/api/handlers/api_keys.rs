@@ -14,7 +14,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use framecast_common::{Error, Result, Urn, UrnComponents};
+use framecast_common::{Error, Result, Urn, UrnComponents, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -155,12 +155,8 @@ pub async fn get_api_key(
 pub async fn create_api_key(
     AuthUser(auth_context): AuthUser,
     State(state): State<TeamsState>,
-    Json(request): Json<CreateApiKeyRequest>,
+    ValidatedJson(request): ValidatedJson<CreateApiKeyRequest>,
 ) -> Result<(StatusCode, Json<CreateApiKeyResponse>)> {
-    request
-        .validate()
-        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
-
     let user = &auth_context.user;
 
     // Validate expires_at is in the future
@@ -221,12 +217,8 @@ pub async fn update_api_key(
     AuthUser(auth_context): AuthUser,
     State(state): State<TeamsState>,
     Path(key_id): Path<Uuid>,
-    Json(request): Json<UpdateApiKeyRequest>,
+    ValidatedJson(request): ValidatedJson<UpdateApiKeyRequest>,
 ) -> Result<Json<ApiKeyResponse>> {
-    request
-        .validate()
-        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
-
     // Check ownership first
     let existing = state
         .repos

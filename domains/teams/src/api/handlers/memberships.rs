@@ -16,7 +16,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use framecast_common::{Error, Result};
+use framecast_common::{Error, Result, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -270,13 +270,8 @@ pub async fn invite_member(
     CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
-    Json(request): Json<InviteMemberRequest>,
+    ValidatedJson(request): ValidatedJson<InviteMemberRequest>,
 ) -> Result<Json<InvitationResponse>> {
-    // Validate request
-    request
-        .validate()
-        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
-
     let user = &auth_context.user;
 
     // INV-I7: Cannot invite yourself
@@ -916,13 +911,8 @@ pub async fn update_member_role(
     CreatorUser(auth_context): CreatorUser,
     State(state): State<TeamsState>,
     Path((team_id, member_user_id)): Path<(Uuid, Uuid)>,
-    Json(request): Json<UpdateMemberRoleRequest>,
+    ValidatedJson(request): ValidatedJson<UpdateMemberRoleRequest>,
 ) -> Result<Json<MembershipResponse>> {
-    // Validate request
-    request
-        .validate()
-        .map_err(|e| Error::Validation(format!("Validation failed: {}", e)))?;
-
     let user = &auth_context.user;
 
     // Cannot change own role
