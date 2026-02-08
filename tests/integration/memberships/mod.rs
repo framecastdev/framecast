@@ -12,13 +12,12 @@
 use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use framecast_teams::{routes, InvitationRole};
+use framecast_teams::InvitationRole;
 
 use crate::common::{
     email_mock::{test_utils::InvitationTestScenario, MockEmailService},
@@ -34,18 +33,13 @@ fn invitation_role_to_str(role: &InvitationRole) -> &'static str {
     }
 }
 
-/// Create test router with all routes
-async fn create_test_router(app: &TestApp) -> Router {
-    routes().with_state(app.state.clone())
-}
-
 mod test_invite_member {
     use super::*;
 
     #[tokio::test]
     async fn test_invite_member_success_with_email_capture() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         let invite_data = json!({
             "email": scenario.invitee_email,
@@ -115,7 +109,7 @@ mod test_invite_member {
     async fn test_invite_member_owner_role_forbidden() {
         let app = TestApp::new().await.unwrap();
         let (inviter_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let invite_data = json!({
             "email": "new_owner@example.com",
@@ -152,7 +146,7 @@ mod test_invite_member {
         // Create another creator user (non-member)
         let non_member_fixture = UserFixture::creator(&app).await.unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Test: Non-member cannot invite
         let invite_data = json!({
@@ -200,7 +194,7 @@ mod test_invite_member {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let invite_data = json!({
             "email": existing_member.user.email,
@@ -239,7 +233,7 @@ mod test_invite_member {
     async fn test_reinvite_revokes_existing_and_creates_new() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let invitee_email = "pending@example.com";
 
@@ -319,7 +313,7 @@ mod test_invite_member {
     async fn test_invite_max_pending_limit() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create 50 pending invitations (the limit per CARD-4)
         for i in 0..50 {
@@ -402,7 +396,7 @@ mod test_invite_member {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let invite_data = json!({
             "email": "new_member@example.com",
@@ -451,7 +445,7 @@ mod test_invite_member {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Test: Admin can invite member
         let invite_member_data = json!({
@@ -513,7 +507,7 @@ mod test_accept_invitation {
             .await
             .unwrap();
 
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Accept the invitation
         let request = Request::builder()
@@ -558,7 +552,7 @@ mod test_accept_invitation {
     #[tokio::test]
     async fn test_accept_invitation_wrong_email() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Send invitation
         let invitation_id = scenario
@@ -586,7 +580,7 @@ mod test_accept_invitation {
     #[tokio::test]
     async fn test_accept_already_accepted_invitation() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Complete invitation workflow
         let (invitation_id, invitee_fixture) = scenario
@@ -630,7 +624,7 @@ mod test_accept_invitation {
     async fn test_accept_nonexistent_invitation() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let fake_invitation_id = Uuid::new_v4();
 
@@ -658,7 +652,7 @@ mod test_decline_invitation {
     #[tokio::test]
     async fn test_decline_invitation_success() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Send invitation and create invitee
         let (invitation_id, invitee_fixture) = scenario
@@ -697,7 +691,7 @@ mod test_decline_invitation {
     #[tokio::test]
     async fn test_decline_wrong_user() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Send invitation
         let invitation_id = scenario
@@ -749,7 +743,7 @@ mod test_remove_member {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -804,7 +798,7 @@ mod test_remove_member {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Admin tries to remove owner — should fail
         let request = Request::builder()
@@ -877,7 +871,7 @@ mod test_remove_member {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Member tries to remove other member
         let request = Request::builder()
@@ -926,7 +920,7 @@ mod test_update_member_role {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let role_update = json!({
             "role": "admin"
@@ -1011,7 +1005,7 @@ mod test_update_member_role {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let role_update = json!({
             "role": "owner"
@@ -1061,7 +1055,7 @@ mod test_update_member_role {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Demote second_owner to admin — succeeds (2 owners → 1)
         let role_update = json!({ "role": "admin" });
@@ -1186,7 +1180,7 @@ mod test_update_member_role {
             .unwrap();
         }
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Try to promote member to owner — should fail (INV-T7)
         let request = Request::builder()
@@ -1235,7 +1229,7 @@ mod test_list_members {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -1301,7 +1295,7 @@ mod test_list_members {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Viewer can list members
         let request = Request::builder()
@@ -1333,7 +1327,7 @@ mod test_list_members {
         let app = TestApp::new().await.unwrap();
         let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let non_member = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -1353,7 +1347,7 @@ mod test_list_members {
     async fn test_list_members_without_auth() {
         let app = TestApp::new().await.unwrap();
         let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -1395,7 +1389,7 @@ mod test_leave_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -1448,7 +1442,7 @@ mod test_leave_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -1473,7 +1467,7 @@ mod test_leave_team {
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         // Give owner a second team so INV-U2 is satisfied when leaving
         app.create_test_team(owner_fixture.user.id).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Last owner (and sole member) leaving should auto-delete the team
         let request = Request::builder()
@@ -1522,7 +1516,7 @@ mod test_leave_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Last owner tries to leave but other members exist — should fail
         let request = Request::builder()
@@ -1575,7 +1569,7 @@ mod test_leave_team {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -1599,7 +1593,7 @@ mod test_leave_team {
         let app = TestApp::new().await.unwrap();
         let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let non_member = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -1623,7 +1617,7 @@ mod test_invitation_lifecycle_with_email {
     async fn test_complete_invitation_lifecycle_with_email_capture() {
         let email_service = MockEmailService::new();
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Step 1: Send invitation
         let invite_data = json!({
@@ -1715,7 +1709,7 @@ mod test_invitation_lifecycle_with_email {
     #[tokio::test]
     async fn test_invitation_expiry_workflow() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Create expired invitation directly in database
         let invitation = framecast_teams::Invitation {
@@ -1788,7 +1782,7 @@ mod test_membership_guards {
     async fn test_remove_member_cannot_remove_self() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Owner tries to remove self via DELETE (should fail — use /leave instead)
         let request = Request::builder()
@@ -1825,7 +1819,7 @@ mod test_membership_guards {
     async fn test_update_role_cannot_change_own_role() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let role_update = json!({
             "role": "admin"
@@ -1867,7 +1861,7 @@ mod test_membership_guards {
     async fn test_invite_owner_role_rejected() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Send invitation with "owner" role — should fail at deserialization
         // since InvitationRole has no Owner variant
@@ -1899,7 +1893,7 @@ mod test_membership_guards {
     async fn test_invite_self_rejected() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Owner tries to invite themselves
         let invite_data = json!({
@@ -1942,7 +1936,7 @@ mod test_invitation_management {
     #[tokio::test]
     async fn test_list_invitations_owner_can_view() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Create invitations
         for i in 0..3 {
@@ -2016,7 +2010,7 @@ mod test_invitation_management {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -2037,7 +2031,7 @@ mod test_invitation_management {
     #[tokio::test]
     async fn test_revoke_invitation_by_owner() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Create an invitation
         let invitation_id = scenario
@@ -2091,7 +2085,7 @@ mod test_invitation_management {
     #[tokio::test]
     async fn test_revoke_non_pending_invitation() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Create and accept invitation
         let (invitation_id, invitee_fixture) = scenario
@@ -2138,7 +2132,7 @@ mod test_invitation_management {
         let app = TestApp::new().await.unwrap();
         let (owner_a, team_a, _) = UserFixture::creator_with_team(&app).await.unwrap();
         let (owner_b, team_b, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create invitation on team A
         let invite_data = json!({
@@ -2183,7 +2177,7 @@ mod test_invitation_management {
     #[tokio::test]
     async fn test_resend_invitation() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Create an invitation
         let invitation_id = scenario
@@ -2245,7 +2239,7 @@ mod test_invitation_management {
     #[tokio::test]
     async fn test_decline_sets_declined_not_revoked() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Create invitation and invitee
         let (invitation_id, invitee_fixture) = scenario
@@ -2319,7 +2313,7 @@ mod test_delete_team_sole_member {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Owner tries to delete team with other members — should fail
         let request = Request::builder()
@@ -2352,7 +2346,7 @@ mod test_delete_team_sole_member {
     async fn test_delete_team_sole_member_succeeds() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Owner is the only member — should succeed
         let request = Request::builder()
@@ -2406,7 +2400,7 @@ mod test_team_auto_delete {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Second owner leaves — 1 member remains, team should NOT be deleted
         let leave_request = Request::builder()
@@ -2456,7 +2450,7 @@ mod test_team_auto_delete {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Owner removes the member
         let remove_request = Request::builder()
@@ -2493,7 +2487,7 @@ mod test_invitation_state_filter {
     #[tokio::test]
     async fn test_list_invitations_with_state_filter() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Create a pending invitation
         let invite_data = json!({
@@ -2610,7 +2604,7 @@ mod test_authorization_edge_cases {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let role_update = json!({ "role": "admin" });
 
@@ -2674,7 +2668,7 @@ mod test_authorization_edge_cases {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -2706,7 +2700,7 @@ mod test_authorization_edge_cases {
         // Create team B with owner B
         let (_, team_b, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Owner of team A tries to invite someone to team B
         let invite_data = json!({
@@ -2739,7 +2733,7 @@ mod test_authorization_edge_cases {
         // Create team B with owner B
         let (_, team_b, _) = UserFixture::creator_with_team(&app).await.unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Owner of team A tries to list members of team B
         let request = Request::builder()
@@ -2760,7 +2754,7 @@ mod test_authorization_edge_cases {
     async fn test_invite_to_nonexistent_team() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, _, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let fake_team_id = Uuid::new_v4();
         let invite_data = json!({
@@ -2800,7 +2794,7 @@ mod test_membership_exotic_inputs {
     async fn test_invite_email_with_plus_addressing() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let invite_data = json!({
             "email": "user+tag@example.com",
@@ -2836,7 +2830,7 @@ mod test_membership_exotic_inputs {
     async fn test_invite_email_case_handling() {
         let app = TestApp::new().await.unwrap();
         let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Invite with mixed-case email
         let invite_data = json!({
@@ -2894,7 +2888,7 @@ mod test_membership_exotic_inputs {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Step 1: Member leaves team
         let leave_request = Request::builder()
@@ -3004,7 +2998,7 @@ mod test_membership_exotic_inputs {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Rapid role changes: member → admin → viewer → member
         let role_sequence = ["admin", "viewer", "member"];
@@ -3059,7 +3053,7 @@ mod test_membership_exotic_inputs {
     #[tokio::test]
     async fn test_invite_after_previous_declined() {
         let scenario = InvitationTestScenario::new().await.unwrap();
-        let router = create_test_router(&scenario.app).await;
+        let router = scenario.app.test_router();
 
         // Step 1: Send initial invitation
         let invite_data = json!({

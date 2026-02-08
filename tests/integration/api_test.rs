@@ -2,6 +2,8 @@
 //!
 //! Tests for all teams-domain API endpoints: users, teams, memberships, api_keys, auth, invariants.
 
+#![allow(dead_code)]
+
 mod api_keys;
 mod auth;
 mod common;

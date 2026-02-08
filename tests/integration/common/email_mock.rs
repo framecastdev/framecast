@@ -22,7 +22,6 @@ pub struct MockEmail {
     pub invitation_code: Option<String>,
 }
 
-#[allow(dead_code)]
 impl MockEmail {
     /// Extract invitation ID from email content
     pub fn extract_invitation_id(&mut self) -> Option<Uuid> {
@@ -99,21 +98,17 @@ impl MockEmail {
 
 /// Mock email service that captures and stores emails
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct MockEmailService {
     emails: Arc<Mutex<Vec<MockEmail>>>,
     email_by_recipient: Arc<Mutex<HashMap<String, Vec<MockEmail>>>>,
-    webhook_delivery_enabled: bool,
 }
 
-#[allow(dead_code)]
 impl MockEmailService {
     /// Create a new mock email service
     pub fn new() -> Self {
         Self {
             emails: Arc::new(Mutex::new(Vec::new())),
             email_by_recipient: Arc::new(Mutex::new(HashMap::new())),
-            webhook_delivery_enabled: true,
         }
     }
 
@@ -257,31 +252,6 @@ impl MockEmailService {
     pub fn was_invitation_sent_to(&self, email: &str) -> bool {
         self.get_invitation_id_for_email(email).is_some()
     }
-
-    /// Simulate webhook delivery (for integration with Inngest/webhook system)
-    pub async fn trigger_webhook_delivery(
-        &self,
-        _team_id: Uuid,
-        _invitation_id: Uuid,
-    ) -> Result<(), String> {
-        if !self.webhook_delivery_enabled {
-            return Ok(());
-        }
-
-        // In a real system, this would trigger an Inngest event or webhook
-        // For testing, we simulate the email sending process
-
-        // Find the invitation in the database and send the email
-        // This is a simplified mock - in reality, this would be triggered by
-        // a webhook event after the invitation is created
-
-        Ok(())
-    }
-
-    /// Enable/disable webhook delivery simulation
-    pub fn set_webhook_delivery_enabled(&mut self, enabled: bool) {
-        self.webhook_delivery_enabled = enabled;
-    }
 }
 
 impl Default for MockEmailService {
@@ -291,7 +261,6 @@ impl Default for MockEmailService {
 }
 
 /// Test utilities for invitation email workflows
-#[allow(dead_code)]
 pub mod test_utils {
     use super::*;
     use crate::common::{TestApp, UserFixture};

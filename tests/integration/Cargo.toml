@@ -4,10 +4,6 @@ version = "0.0.1-SNAPSHOT"
 edition = "2021"
 
 [[test]]
-name = "simple_test"
-path = "simple_test.rs"
-
-[[test]]
 name = "api_test"
 path = "api_test.rs"
 
@@ -30,7 +26,6 @@ reqwest = { workspace = true }
 sqlx = { workspace = true }
 
 # === Testing Framework ===
-tokio-test = { workspace = true }
 tempfile = { workspace = true }
 test-log = { workspace = true }
 serial_test = { workspace = true }
