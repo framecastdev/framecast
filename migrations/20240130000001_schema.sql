@@ -1,5 +1,5 @@
--- Migration: 001_initial_schema.sql
--- Description: Create initial database schema with all core entities
+-- Migration: 001_schema.sql
+-- Description: Create database schema with all core entities, indexes, triggers, and constraints
 -- Based on: docs/spec/04_Entities.md and docs/spec/06_Invariants.md
 
 -- Enable UUID extension
@@ -118,13 +118,18 @@ CREATE TABLE invitations (
     token        VARCHAR(255) NOT NULL UNIQUE,
     expires_at   TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '7 days',
     accepted_at  TIMESTAMPTZ,
+    declined_at  TIMESTAMPTZ,
     revoked_at   TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     -- Constraints
     CONSTRAINT valid_email_invitation CHECK (email ~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'),
-    CONSTRAINT acceptance_revocation_exclusion CHECK (
-        NOT (accepted_at IS NOT NULL AND revoked_at IS NOT NULL)
+    CONSTRAINT invitation_terminal_state_exclusion CHECK (
+        (
+            CASE WHEN accepted_at IS NOT NULL THEN 1 ELSE 0 END
+            + CASE WHEN declined_at IS NOT NULL THEN 1 ELSE 0 END
+            + CASE WHEN revoked_at IS NOT NULL THEN 1 ELSE 0 END
+        ) <= 1
     )
 );
 
@@ -469,7 +474,15 @@ RETURNS TRIGGER AS $$
 DECLARE
     remaining_members INTEGER;
     remaining_owners INTEGER;
+    team_exists BOOLEAN;
 BEGIN
+    -- Check if the team itself is being deleted (CASCADE)
+    SELECT EXISTS(SELECT 1 FROM teams WHERE id = OLD.team_id) INTO team_exists;
+    IF NOT team_exists THEN
+        -- Team is being deleted, allow cascade removal of memberships
+        RETURN OLD;
+    END IF;
+
     -- Count remaining members after deletion
     SELECT COUNT(*) INTO remaining_members
     FROM memberships
@@ -526,6 +539,7 @@ BEGIN
     IF (SELECT COUNT(*) FROM invitations
         WHERE team_id = NEW.team_id
         AND accepted_at IS NULL
+        AND declined_at IS NULL
         AND revoked_at IS NULL
         AND expires_at > NOW()) >= 50 THEN
         RAISE EXCEPTION 'Team has reached maximum pending invitations limit (50)';
@@ -558,15 +572,3 @@ COMMENT ON TABLE webhooks IS 'HTTP callback registrations';
 COMMENT ON TABLE webhook_deliveries IS 'Webhook delivery attempt records';
 COMMENT ON TABLE usage IS 'Aggregated usage metrics for billing';
 COMMENT ON TABLE system_assets IS 'System-provided audio/visual assets';
-
--- ============================================================================
--- GRANTS (if needed for specific users)
--- ============================================================================
-
--- Grant permissions to application user (adjust as needed)
--- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO framecast_app;
--- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO framecast_app;
-
--- ============================================================================
--- END OF MIGRATION
--- ============================================================================

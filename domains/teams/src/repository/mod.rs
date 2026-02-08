@@ -14,10 +14,11 @@ pub use invitations::InvitationRepository;
 pub use memberships::{MembershipRepository, MembershipWithUser};
 pub use teams::TeamRepository;
 pub use transactions::{
-    count_active_jobs_for_team_tx, count_members_for_team_tx, count_owners_for_team_tx,
+    count_active_jobs_for_team_tx, count_for_user_tx, count_members_for_team_tx,
+    count_owned_teams_tx, count_owners_for_team_tx, count_pending_for_team_tx,
     create_invitation_tx, create_membership_tx, create_team_tx, delete_membership_tx,
     delete_team_tx, get_membership_by_team_and_user_tx, mark_invitation_accepted_tx,
-    revoke_invitation_tx, upgrade_user_tier_tx,
+    revoke_invitation_tx, update_role_tx, upgrade_user_tier_tx,
 };
 pub use users::UserRepository;
 

@@ -129,22 +129,31 @@ git commit -m "some changes"
 
 1. Create feature/fix branch
 2. Implement/fix
-3. Test thoroughly (`just test`, `just check`)
-4. Commit with conventional commit message
+3. Commit with conventional commit message
+4. Push and let CI verify
 5. Switch to new branch for next task
 6. Merge to main via PR (when ready for deployment)
 
-### Rule 11: Mutation-Test Critical Logic
+### Rule 11: CI Runs All Checks — Never Run Checks Locally
 
-**YOU MUST** run `just mutants-domain` after adding or modifying business logic
-in `domains/*/` or `crates/common/`. Fix surviving mutants by adding
-targeted test assertions — do NOT use `#[mutants::skip]` to silence legitimate gaps.
+**NEVER** run tests, clippy, fmt, or any verification commands locally.
+CI is the single source of truth for all checks. After committing and pushing,
+let CI validate the change.
 
-Use `#[mutants::skip]` ONLY for:
+```bash
+# ❌ FORBIDDEN — Never run checks locally
+just test            # WRONG
+just check           # WRONG
+just clippy          # WRONG
+just fmt             # WRONG
+just ci-clippy       # WRONG
+just mutants-domain  # WRONG
 
-- Display/Debug impls (cosmetic output)
-- Trivial From/Default conversions
-- Functions where mutation is meaningless (logging, metrics)
+# ✅ CORRECT — Commit, push, let CI run
+git add <files> && git commit -m "feat: ..."
+git push
+# Then wait for CI results
+```
 
 ### Rule 12: No Placeholder Code
 
@@ -177,7 +186,7 @@ Before executing ANY command, ask yourself:
 - Am I following best practices? → Review SOLID, DRY, YAGNI principles
 - Did I break this into phases/tasks? → Plan before implementing
 - Am I working on main branch? → STOP, create feature branch
-- Did I modify domain/common logic? → Run `just mutants-domain` (covers `domains/*/` and `crates/common/`)
+- Am I about to run tests/clippy/fmt/checks locally? → STOP, let CI do it
 - Am I adding placeholder code? → STOP, YAGNI — add it when it's needed
 </law>
 
