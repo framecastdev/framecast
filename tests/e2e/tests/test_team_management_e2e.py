@@ -111,6 +111,16 @@ class TestTeamManagementE2E:
         for m in members_from_invitee:
             assert "user_email" in m, f"Missing user_email in member response: {m}"
 
+        # Step 7b: Give invitee a second team so INV-U2 is satisfied when leaving
+        resp = await http_client.post(
+            "/v1/teams",
+            json=test_data_factory.team_data(),
+            headers=invitee.auth_headers(),
+        )
+        assert resp.status_code == 201, (
+            f"Create second team for invitee failed: {resp.status_code} {resp.text}"
+        )
+
         # Step 8: Invitee leaves team
         resp = await http_client.post(
             f"/v1/teams/{team_id}/leave", headers=invitee.auth_headers()
@@ -128,10 +138,12 @@ class TestTeamManagementE2E:
         assert len(members_after_leave) == 1
         assert members_after_leave[0]["role"] == "owner"
 
-        # Step 10: Invitee lists teams — should be empty
+        # Step 10: Invitee lists teams — should only have their second team
         resp = await http_client.get("/v1/teams", headers=invitee.auth_headers())
         assert resp.status_code == 200
-        assert resp.json() == []
+        invitee_remaining = resp.json()
+        assert len(invitee_remaining) == 1
+        assert invitee_remaining[0]["id"] != team_id
 
     async def test_last_owner_leaving_auto_deletes_team(
         self,
@@ -149,6 +161,14 @@ class TestTeamManagementE2E:
         )
         assert resp.status_code == 201
         team_id = resp.json()["id"]
+
+        # Step 1b: Create a second team so INV-U2 is satisfied when leaving
+        resp = await http_client.post(
+            "/v1/teams",
+            json=test_data_factory.team_data(),
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 201
 
         # Step 2: Owner leaves — team should be auto-deleted (204)
         resp = await http_client.post(
