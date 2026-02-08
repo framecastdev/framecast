@@ -20,7 +20,6 @@ from conftest import SeededUsers, TestDataFactory  # noqa: E402
 
 
 @pytest.mark.auth
-@pytest.mark.real_services
 class TestApiKeysE2E:
     """API key operations end-to-end tests."""
 

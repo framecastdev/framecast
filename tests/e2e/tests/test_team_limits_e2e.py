@@ -18,7 +18,6 @@ from conftest import SeededUsers, TestDataFactory  # noqa: E402
 
 
 @pytest.mark.teams
-@pytest.mark.real_services
 @pytest.mark.slow
 class TestTeamLimitsE2E:
     """Cardinality and limit enforcement end-to-end tests."""

@@ -29,7 +29,6 @@ from conftest import (  # noqa: E402
 
 
 @pytest.mark.teams
-@pytest.mark.real_services
 class TestDataIntegrityE2E:
     """Data integrity and invariant verification end-to-end tests."""
 

@@ -207,9 +207,8 @@ just test teams               # Test specific crate
 just test "job"               # Test matching pattern
 
 # E2E tests (Python)
-just test-e2e-mocked          # Fast E2E tests (CI-friendly)
-just test-e2e-with-email      # E2E with LocalStack email verification
-just test-invitation-workflow # Complete invitation flow (Rust + Python)
+just test-e2e                  # Run all E2E tests (requires local services)
+just test-invitation-workflow  # Complete invitation flow (Rust + Python)
 
 # Database
 just migrate                  # Run pending migrations

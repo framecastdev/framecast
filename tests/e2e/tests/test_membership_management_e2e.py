@@ -19,7 +19,6 @@ from conftest import SeededUsers, TestDataFactory  # noqa: E402
 
 
 @pytest.mark.teams
-@pytest.mark.real_services
 class TestMembershipManagementE2E:
     """Membership management end-to-end tests."""
 

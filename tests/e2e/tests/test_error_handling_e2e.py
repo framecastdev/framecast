@@ -17,7 +17,6 @@ from conftest import SeededUsers  # noqa: E402
 
 
 @pytest.mark.error_handling
-@pytest.mark.real_services
 class TestErrorHandlingE2E:
     """Error handling and edge case end-to-end tests."""
 

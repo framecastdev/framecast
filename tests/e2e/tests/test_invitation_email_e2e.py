@@ -5,7 +5,7 @@ Tests invitation email content via LocalStack SES (8 stories):
   - Resend and re-invite emails (IE5-IE6)
   - No-email scenarios (IE7-IE8)
 
-Requires LocalStack SES — tagged @pytest.mark.real_services
+Requires LocalStack SES
 """
 
 import asyncio
@@ -21,7 +21,6 @@ from utils.localstack_email import LocalStackEmailClient  # noqa: E402
 
 
 @pytest.mark.invitation
-@pytest.mark.real_services
 class TestInvitationEmailE2E:
     """Invitation email verification end-to-end tests."""
 

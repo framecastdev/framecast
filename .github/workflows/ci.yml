@@ -469,7 +469,7 @@ jobs:
           TEST_LOCALSTACK_SES_URL: http://localhost:4566
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/framecast_test  # pragma: allowlist secret
         run: |
-          cd tests/e2e && uv run pytest tests/ -m "real_services" -v --tb=short \
+          cd tests/e2e && uv run pytest tests/ -v --tb=short \
             --junitxml=../../e2e-results.xml
 
       - name: Job summary

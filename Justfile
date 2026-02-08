@@ -215,15 +215,9 @@ test-watch:
     @echo "Running tests with file watching..."
     cargo watch -x "test --workspace"
 
-# Run all E2E tests in mocked mode (fast, CI-friendly)
-test-e2e-mocked:
-    @echo "Running E2E tests in mocked mode..."
-    cd tests/e2e && uv run pytest tests/ -m "not real_services" --tb=short
-
-# Run all E2E tests with real services (slower, pre-release)
-test-e2e-real:
-    @echo "Running E2E tests with real services..."
-    @echo "This requires valid API credentials in .env"
+# Run all E2E tests (requires local services: API, Postgres, LocalStack)
+test-e2e:
+    @echo "Running E2E tests..."
     cd tests/e2e && uv run pytest tests/ --tb=short
 
 # Run E2E tests with email verification
@@ -422,7 +416,7 @@ ci-test-e2e:
     #!/usr/bin/env bash
     set -e
     echo "Running Python E2E tests (CI mode)..."
-    cd tests/e2e && uv run pytest tests/ -m "real_services" -v --tb=short
+    cd tests/e2e && uv run pytest tests/ -v --tb=short
 
 # ============================================================================
 # MUTATION TESTING
@@ -636,7 +630,7 @@ deploy-staging: lambda-build
     @echo "Staging deployment complete"
 
 # Deploy to AWS production environment (runs tests first)
-deploy-prod: test test-e2e-mocked lambda-build
+deploy-prod: test test-e2e lambda-build
     @echo "Deploying to AWS production environment..."
     @read -p "Deploy to PRODUCTION? Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ]
     cd infra/opentofu && tofu init && \

@@ -44,7 +44,6 @@ addopts = [
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
-    "real_services: tests that require real external services",
     "auth: authentication related tests",
     "jobs: job lifecycle tests",
     "assets: asset management tests",

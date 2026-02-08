@@ -18,7 +18,6 @@ from conftest import SeededUsers, TestDataFactory  # noqa: E402
 
 
 @pytest.mark.teams
-@pytest.mark.real_services
 class TestTeamCrudE2E:
     """Team CRUD end-to-end tests."""
 

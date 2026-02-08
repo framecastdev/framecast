@@ -19,7 +19,6 @@ from conftest import SeededUsers, TestDataFactory  # noqa: E402
 
 @pytest.mark.teams
 @pytest.mark.security
-@pytest.mark.real_services
 class TestRoleBasedAccessE2E:
     """Role-based access end-to-end tests."""
 

@@ -147,7 +147,7 @@ just health-check
 just seed
 
 # Run tests
-just test-e2e-mocked
+just test-e2e
 ```
 
 ### Maintenance Tasks

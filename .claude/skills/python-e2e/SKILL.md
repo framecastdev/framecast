@@ -225,28 +225,10 @@ class TestVideoGeneration:
         return job if job.status in ("completed", "failed", "canceled") else None
 ```
 
-## Two Test Modes
-
-### Mocked (`just test-e2e-mocked`)
-
-- Uses `respx` to mock Anthropic/RunPod
-- Real LocalStack for S3
-- Local Inngest
-- Fast, deterministic, CI-friendly
-
-### Real RunPod (`just test-e2e-real`)
-
-- Real RunPod execution
-- Requires Cloudflare Tunnel (`just tunnel`)
-- Slow, costs money
-- Mark with `@pytest.mark.real_runpod`
-
 ## Just Targets
 
 ```bash
-just test-e2e-mocked          # Mocked mode
-just test-e2e-real            # Real RunPod
-just test-e2e-all             # All E2E
+just test-e2e                 # Run all E2E tests
 just test-e2e "test_name"     # Specific test
 just test-e2e-lint            # ruff + mypy
 just test-e2e-fmt             # Format

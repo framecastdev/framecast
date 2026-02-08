@@ -26,7 +26,6 @@ from conftest import (  # noqa: E402
 
 
 @pytest.mark.auth
-@pytest.mark.real_services
 class TestUserAccountE2E:
     """User account management end-to-end tests."""
 

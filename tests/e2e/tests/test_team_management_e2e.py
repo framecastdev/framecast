@@ -18,7 +18,6 @@ from conftest import SeededUsers, TestDataFactory  # noqa: E402
 
 
 @pytest.mark.teams
-@pytest.mark.real_services
 class TestTeamManagementE2E:
     """Team management end-to-end tests."""
 
