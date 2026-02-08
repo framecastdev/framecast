@@ -17,8 +17,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 from conftest import SeededUsers, TestDataFactory  # noqa: E402
-from hypothesis import given  # noqa: E402
-from strategies import e2e_settings, invalid_scopes, starter_scopes  # noqa: E402
 
 
 @pytest.mark.auth
@@ -643,38 +641,52 @@ class TestApiKeysE2E:
         )
 
     # -----------------------------------------------------------------------
-    # Property-Based Tests
+    # Validation: Parametrized Tests
     # -----------------------------------------------------------------------
 
-    @e2e_settings
-    @given(scopes=starter_scopes)
+    @pytest.mark.parametrize(
+        "scopes",
+        [
+            ["generate"],
+            ["jobs:read", "jobs:write"],
+            ["generate", "assets:read", "assets:write"],
+        ],
+        ids=["single-scope", "jobs-pair", "generate-plus-assets"],
+    )
     async def test_starter_valid_scopes_always_succeed(
         self,
         scopes: list[str],
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """Property: any combination of starter-allowed scopes succeeds."""
+        """Any combination of starter-allowed scopes succeeds."""
         invitee = seed_users.invitee
 
         resp = await http_client.post(
             "/v1/auth/keys",
-            json={"name": "Property Test", "scopes": scopes},
+            json={"name": "Parametrize Test", "scopes": scopes},
             headers=invitee.auth_headers(),
         )
         assert resp.status_code == 201, (
             f"Starter scopes {scopes} should succeed, got {resp.status_code} {resp.text}"
         )
 
-    @e2e_settings
-    @given(scopes=invalid_scopes)
+    @pytest.mark.parametrize(
+        "scopes",
+        [
+            ["invalid_scope_xyz"],
+            ["badscope", "another_bad"],
+            ["nonexistent"],
+        ],
+        ids=["single-invalid", "two-invalid", "nonexistent"],
+    )
     async def test_invalid_scopes_always_rejected(
         self,
         scopes: list[str],
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """Property: invalid scope names always return 400."""
+        """Invalid scope names always return 400."""
         owner = seed_users.owner
 
         resp = await http_client.post(

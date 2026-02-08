@@ -16,8 +16,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 from conftest import SeededUsers, TestDataFactory  # noqa: E402
-from hypothesis import given  # noqa: E402
-from strategies import e2e_settings, invitation_roles  # noqa: E402
 from utils.localstack_email import LocalStackEmailClient  # noqa: E402
 
 
@@ -866,11 +864,10 @@ class TestInvitationLifecycleE2E:
         )
 
     # -----------------------------------------------------------------------
-    # Property-Based Tests
+    # Validation: Parametrized Tests
     # -----------------------------------------------------------------------
 
-    @e2e_settings
-    @given(role=invitation_roles)
+    @pytest.mark.parametrize("role", ["admin", "member", "viewer"])
     async def test_invite_with_any_valid_role(
         self,
         role: str,
@@ -878,14 +875,14 @@ class TestInvitationLifecycleE2E:
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """Property: invitations with any valid non-owner role succeed."""
+        """Invitations with any valid non-owner role succeed."""
         owner = seed_users.owner
 
         team_id = await self._create_team(http_client, owner, test_data_factory)
 
         resp = await http_client.post(
             f"/v1/teams/{team_id}/invitations",
-            json={"email": f"property-{role}@test.com", "role": role},
+            json={"email": f"parametrize-{role}@test.com", "role": role},
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 200, (

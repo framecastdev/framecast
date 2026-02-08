@@ -15,13 +15,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 from conftest import SeededUsers, TestDataFactory  # noqa: E402
-from hypothesis import given  # noqa: E402
-from strategies import (  # noqa: E402
-    e2e_settings,
-    invalid_team_names,
-    invalid_team_slugs,
-    team_names,
-)
 
 
 @pytest.mark.teams
@@ -599,18 +592,26 @@ class TestTeamCrudE2E:
         assert resp.json()["name"] == "Admin Updated"
 
     # -----------------------------------------------------------------------
-    # Property-Based Tests
+    # Validation: Parametrized Tests
     # -----------------------------------------------------------------------
 
-    @e2e_settings
-    @given(name=team_names)
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "Simple Team",
+            "Team !@#$%",
+            "X" * 100,
+            "\u65e5\u672c\u8a9e\u30c1\u30fc\u30e0",
+        ],
+        ids=["ascii", "special-chars", "max-length", "unicode"],
+    )
     async def test_valid_team_name_never_returns_500(
         self,
         name: str,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """Property: any valid team name either succeeds (201) or validation error, never 500."""
+        """Any valid team name either succeeds (201) or validation error, never 500."""
         owner = seed_users.owner
 
         resp = await http_client.post(
@@ -622,15 +623,18 @@ class TestTeamCrudE2E:
             f"Unexpected status {resp.status_code} for name={name!r}: {resp.text}"
         )
 
-    @e2e_settings
-    @given(name=invalid_team_names)
+    @pytest.mark.parametrize(
+        "name",
+        ["", "A" * 101],
+        ids=["empty", "too-long"],
+    )
     async def test_invalid_team_name_always_rejected(
         self,
         name: str,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """Property: invalid team names always return 400."""
+        """Invalid team names always return 400."""
         owner = seed_users.owner
 
         resp = await http_client.post(
@@ -642,15 +646,18 @@ class TestTeamCrudE2E:
             f"Expected 400 for invalid name={name!r}, got {resp.status_code}"
         )
 
-    @e2e_settings
-    @given(slug=invalid_team_slugs)
+    @pytest.mark.parametrize(
+        "slug",
+        ["---", "UPPERCASE", "-leading", "trailing-"],
+        ids=["all-hyphens", "uppercase", "leading-hyphen", "trailing-hyphen"],
+    )
     async def test_invalid_slug_always_rejected(
         self,
         slug: str,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """Property: invalid slugs always return 400."""
+        """Invalid slugs always return 400."""
         owner = seed_users.owner
 
         resp = await http_client.post(

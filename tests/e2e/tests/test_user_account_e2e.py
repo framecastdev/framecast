@@ -23,8 +23,6 @@ from conftest import (  # noqa: E402
     TestDataFactory,
     assert_credits_non_negative,
 )
-from hypothesis import given  # noqa: E402
-from strategies import e2e_settings, user_names  # noqa: E402
 
 
 @pytest.mark.auth
@@ -520,18 +518,21 @@ class TestUserAccountE2E:
         )
 
     # -----------------------------------------------------------------------
-    # Property-Based Tests
+    # Validation: Parametrized Tests
     # -----------------------------------------------------------------------
 
-    @e2e_settings
-    @given(name=user_names)
+    @pytest.mark.parametrize(
+        "name",
+        ["John Doe", "Alice O'Brien", "X" * 100, "\u540d\u524d"],
+        ids=["simple", "apostrophe", "max-length", "unicode"],
+    )
     async def test_valid_name_never_returns_500(
         self,
         name: str,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """Property: any valid name either succeeds (200) or returns validation error (400), never 500."""
+        """Any valid name either succeeds (200) or returns validation error (400), never 500."""
         owner = seed_users.owner
 
         resp = await http_client.patch(
