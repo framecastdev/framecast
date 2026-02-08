@@ -179,7 +179,7 @@ $RECYCLE.BIN/
 /uv.lock
 
 # === Mutation Testing ===
-mutants.out/
+mutants.out*
 
 # === CI Artifacts ===
 e2e-results.xml
