@@ -71,7 +71,7 @@ impl std::fmt::Display for JobState {
 }
 
 /// Events that trigger job state transitions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum JobEvent {
     /// Worker picks up the job for processing
     WorkerPicksUp,
@@ -132,7 +132,7 @@ impl JobStateMachine {
 
     /// Check if a transition is valid without performing it
     pub fn can_transition(current: JobState, event: &JobEvent) -> bool {
-        Self::transition(current, event.clone()).is_ok()
+        Self::transition(current, *event).is_ok()
     }
 }
 
