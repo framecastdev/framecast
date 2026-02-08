@@ -10,7 +10,7 @@ description: Python E2E testing patterns. Use when writing, debugging, or unders
 E2E tests verify the **entire system** from an external client perspective. Written in Python because:
 
 - Industry standard for test automation
-- Rich ecosystem (pytest, httpx, respx)
+- Rich ecosystem (pytest, httpx)
 - Faster iteration than compiled tests
 
 ## Project Configuration
@@ -18,46 +18,29 @@ E2E tests verify the **entire system** from an external client perspective. Writ
 ```toml
 # tests/e2e/pyproject.toml
 [project]
-name = "framecast-e2e"
-version = "0.1.0"
-requires-python = ">=3.11"
+name = "framecast-e2e-tests"
 dependencies = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-    "pytest-timeout>=2.3",
-    "pytest-cov>=4.1",
-    "httpx>=0.27",
-    "respx>=0.21",           # Mock httpx
-    "pydantic>=2.6",
-    "polyfactory>=2.15",     # Test data factories
-    "python-dotenv>=1.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "ruff>=0.3",
-    "mypy>=1.9",
-    "pip-audit>=2.7",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.26.0",
+    "faker>=21.0.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "PyJWT>=2.8.0",
+    "asyncpg>=0.29.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
-    "real_runpod: requires real RunPod",
-    "slow: takes >30 seconds",
+    "slow: marks tests as slow",
+    "auth: authentication related tests",
+    "teams: team management tests",
+    "security: security validation tests",
+    "invitation: invitation workflow tests",
+    "error_handling: error handling and edge case tests",
 ]
-
-[tool.ruff]
-target-version = "py311"
-line-length = 100
-
-[tool.ruff.lint]
-select = ["E", "W", "F", "I", "B", "C4", "UP", "ARG", "SIM"]
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
 ```
 
 ## Directory Structure
@@ -66,188 +49,71 @@ strict = true
 tests/e2e/
 ├── pyproject.toml
 ├── uv.lock
-├── conftest.py              # Shared fixtures
-├── src/e2e/
-│   ├── __init__.py
-│   ├── client.py            # Type-safe API client
-│   ├── config.py            # Test config
-│   ├── fixtures/
-│   │   ├── specs.py         # Sample specs
-│   │   └── factories.py     # Polyfactory generators
-│   ├── mocks/
-│   │   ├── anthropic.py     # Mock Anthropic
-│   │   └── runpod.py        # Mock RunPod
-│   └── utils/
-│       ├── polling.py       # Async polling
-│       └── assertions.py    # Custom assertions
+├── conftest.py              # Shared fixtures, UserPersona, E2EConfig
+├── utils/
+│   └── localstack_email.py  # LocalStack SES email retrieval client
 └── tests/
-    ├── test_video_generation.py
-    ├── test_job_lifecycle.py
-    └── test_credits_refunds.py
+    ├── test_*.py             # E2E test files (user stories)
+    └── ...
 ```
 
-## Type-Safe API Client
+## Key Components
+
+### UserPersona
+
+Test users with JWT auth built-in:
 
 ```python
-# src/e2e/client.py
-from typing import Self
-import httpx
-from pydantic import BaseModel
+class UserPersona(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    tier: str  # "starter", "creator"
+    credits: int = 0
 
-class Job(BaseModel):
-    id: str
-    status: str
-    owner: str
-    credits_charged: int
-    credits_refunded: int = 0
+    def to_auth_token(self) -> str:
+        """Generate HS256 JWT token."""
+        ...
 
-class FramecastClient:
-    def __init__(self, base_url: str, token: str | None = None) -> None:
-        self.base_url = base_url
-        self._client = httpx.AsyncClient(
-            base_url=base_url,
-            headers={"Authorization": f"Bearer {token}"} if token else {},
-            timeout=30.0,
-        )
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, *args: object) -> None:
-        await self._client.aclose()
-
-    async def create_job(self, spec: dict) -> Job:
-        response = await self._client.post("/v1/generate", json={"spec": spec})
-        response.raise_for_status()
-        return Job.model_validate(response.json())
-
-    async def get_job(self, job_id: str) -> Job:
-        response = await self._client.get(f"/v1/jobs/{job_id}")
-        response.raise_for_status()
-        return Job.model_validate(response.json())
+    def auth_headers(self) -> dict[str, str]:
+        """Return Authorization header dict."""
+        ...
 ```
 
-## Async Polling Utility
+### E2EConfig
+
+Loaded from environment variables with `TEST_` prefix:
 
 ```python
-# src/e2e/utils/polling.py
-import asyncio
-from typing import Callable, TypeVar, Awaitable
-from datetime import timedelta
-
-T = TypeVar("T")
-
-class TimeoutError(Exception):
-    pass
-
-async def poll_until(
-    check: Callable[[], Awaitable[T | None]],
-    *,
-    timeout: timedelta = timedelta(seconds=60),
-    interval: timedelta = timedelta(milliseconds=500),
-    description: str = "condition",
-) -> T:
-    deadline = asyncio.get_event_loop().time() + timeout.total_seconds()
-
-    while asyncio.get_event_loop().time() < deadline:
-        result = await check()
-        if result is not None:
-            return result
-        await asyncio.sleep(interval.total_seconds())
-
-    raise TimeoutError(f"Timeout waiting for {description}")
+class E2EConfig(BaseSettings):
+    local_api_url: str = "http://localhost:3000"
+    database_url: str = "..."
+    localstack_ses_url: str = "http://localhost:4566"
+    model_config = ConfigDict(env_prefix="TEST_", env_file=".env.test")
 ```
 
-## Fixtures
+### Core Fixtures
+
+- `test_config` — session-scoped E2EConfig
+- `http_client` — httpx.AsyncClient pointed at API
+- `seed_users` — seeds owner + invitee into DB, yields SeededUsers, truncates after
+- `localstack_email_client` — LocalStack SES client for email verification
+- `test_data_factory` — TestDataFactory for generating team data
+
+### LocalStack Email Client
+
+For verifying invitation emails sent via SES:
 
 ```python
-# conftest.py
-import pytest
-import pytest_asyncio
-from e2e.client import FramecastClient
-from e2e.config import TestConfig
-
-@pytest.fixture(scope="session")
-def config() -> TestConfig:
-    return TestConfig.from_env()
-
-@pytest_asyncio.fixture
-async def client(config: TestConfig) -> FramecastClient:
-    async with FramecastClient(config.api_base_url, config.test_token) as c:
-        yield c
-
-@pytest.fixture
-def sample_spec() -> dict:
-    return {
-        "title": "Test Video",
-        "scenes": [{"id": "scene1", "prompt": "A cat", "duration": 3}],
-    }
+client = LocalStackEmailClient("http://localhost:4566")
+emails = await client.get_emails_for("invitee@example.com")
 ```
 
-## Example Test
-
-```python
-# tests/test_video_generation.py
-import pytest
-from datetime import timedelta
-from e2e.utils.polling import poll_until
-
-pytestmark = pytest.mark.asyncio
-
-class TestVideoGeneration:
-    async def test_generate_mocked(
-        self, client, mock_anthropic, mock_runpod, sample_spec
-    ) -> None:
-        mock_runpod.set_completion_delay(seconds=2)
-
-        job = await client.create_job(sample_spec)
-        assert job.status == "queued"
-
-        completed = await poll_until(
-            lambda: self._check_terminal(client, job.id),
-            timeout=timedelta(seconds=30),
-        )
-        assert completed.status == "completed"
-
-    @pytest.mark.real_runpod
-    @pytest.mark.timeout(300)
-    async def test_generate_real(self, client, sample_spec) -> None:
-        job = await client.create_job(sample_spec)
-
-        completed = await poll_until(
-            lambda: self._check_terminal(client, job.id),
-            timeout=timedelta(minutes=5),
-        )
-        assert completed.status == "completed"
-
-    async def _check_terminal(self, client, job_id):
-        job = await client.get_job(job_id)
-        return job if job.status in ("completed", "failed", "canceled") else None
-```
-
-## Two Test Modes
-
-### Mocked (`just test-e2e-mocked`)
-
-- Uses `respx` to mock Anthropic/RunPod
-- Real LocalStack for S3
-- Local Inngest
-- Fast, deterministic, CI-friendly
-
-### Real RunPod (`just test-e2e-real`)
-
-- Real RunPod execution
-- Requires Cloudflare Tunnel (`just tunnel`)
-- Slow, costs money
-- Mark with `@pytest.mark.real_runpod`
+Note: LocalStack `/_aws/ses` filters by **sender** only. The client fetches all emails and filters by recipient client-side.
 
 ## Just Targets
 
 ```bash
-just test-e2e-mocked          # Mocked mode
-just test-e2e-real            # Real RunPod
-just test-e2e-all             # All E2E
-just test-e2e "test_name"     # Specific test
-just test-e2e-lint            # ruff + mypy
-just test-e2e-fmt             # Format
+just test-e2e           # Run all E2E tests
+just ci-test-e2e        # Run in CI mode
 ```

@@ -1,12 +1,8 @@
 """
 E2E Test Configuration and Fixtures
 
-Provides user personas, service mocking, and test infrastructure for comprehensive
-end-to-end testing of the Framecast API.
-
-Supports two modes:
-- Mocked mode (TEST_MODE=mocked): Fast tests with mocked external services
-- Real mode (TEST_MODE=real): Integration tests with actual services
+Provides user personas, service clients, and test infrastructure for
+end-to-end testing of the Framecast API against a running local stack.
 """
 
 import asyncio
@@ -30,9 +26,6 @@ from utils.localstack_email import LocalStackEmailClient
 class E2EConfig(BaseSettings):
     """Configuration for E2E tests loaded from environment variables."""
 
-    # Test mode: "mocked" or "real"
-    test_mode: str = "mocked"
-
     # API base URL
     local_api_url: str = "http://localhost:3000"
 
@@ -43,15 +36,6 @@ class E2EConfig(BaseSettings):
 
     # Database settings
     database_url: str = "postgresql://postgres:password@localhost:5432/framecast_test"  # pragma: allowlist secret
-
-    # External service URLs (used in real mode)
-    supabase_url: str = "http://localhost:54321"
-    supabase_anon_key: str = "test-anon-key"
-    supabase_service_role_key: str = "test-service-role-key"
-    inngest_event_key: str = "test-inngest-key"
-    runpod_api_key: str = "test-runpod-key"
-    runpod_endpoint_id: str = "test-endpoint-id"
-    anthropic_api_key: str = "test-anthropic-key"
 
     # S3 settings (LocalStack in test)
     s3_bucket_outputs: str = "test-framecast-outputs"
@@ -97,59 +81,6 @@ class UserPersona(BaseModel):
     def auth_headers(self) -> dict[str, str]:
         """Return authorization headers for HTTP requests."""
         return {"Authorization": f"Bearer {self.to_auth_token()}"}
-
-
-# Standard user personas for testing
-@pytest.fixture
-def starter_user() -> UserPersona:
-    """A starter tier user with some credits."""
-    fake = Faker()
-    return UserPersona(
-        user_id=str(uuid.uuid4()),
-        email=fake.email(),
-        name=fake.name(),
-        tier="starter",
-        credits=1000,
-    )
-
-
-@pytest.fixture
-def creator_user() -> UserPersona:
-    """A creator tier user with team memberships."""
-    fake = Faker()
-    return UserPersona(
-        user_id=str(uuid.uuid4()),
-        email=fake.email(),
-        name=fake.name(),
-        tier="creator",
-        credits=5000,
-    )
-
-
-@pytest.fixture
-def team_owner() -> UserPersona:
-    """A creator user who owns multiple teams."""
-    fake = Faker()
-    return UserPersona(
-        user_id=str(uuid.uuid4()),
-        email=fake.email(),
-        name=fake.name(),
-        tier="creator",
-        credits=10000,
-    )
-
-
-@pytest.fixture
-def team_member() -> UserPersona:
-    """A creator user who is a member of teams but doesn't own any."""
-    fake = Faker()
-    return UserPersona(
-        user_id=str(uuid.uuid4()),
-        email=fake.email(),
-        name=fake.name(),
-        tier="creator",
-        credits=2000,
-    )
 
 
 # Configuration and test environment
@@ -265,17 +196,6 @@ async def http_client(
         yield client
 
 
-@pytest.fixture
-async def authenticated_client(
-    http_client: httpx.AsyncClient, starter_user: UserPersona
-) -> httpx.AsyncClient:
-    """HTTP client with starter user authentication."""
-    http_client.headers.update(
-        {"Authorization": f"Bearer {starter_user.to_auth_token()}"}
-    )
-    return http_client
-
-
 # LocalStack email client for E2E testing
 @pytest.fixture
 async def localstack_email_client(
@@ -289,50 +209,9 @@ async def localstack_email_client(
         await client.close()
 
 
-@pytest.fixture
-async def email_cleanup(localstack_email_client: LocalStackEmailClient):
-    """Clean up emails after test completion."""
-    collected_emails = []
-
-    def register_email(email_address: str, message_id: str):
-        """Register an email for cleanup after test completion."""
-        collected_emails.append((email_address, message_id))
-
-    yield register_email
-
-    # Cleanup after test
-    for _email_address, msg_id in collected_emails:
-        await localstack_email_client.delete_email(msg_id)
-
-
 # Test data factories
 class TestDataFactory:
     """Factory for generating test data."""
-
-    @staticmethod
-    def video_spec(scene_count: int = 3) -> dict[str, Any]:
-        """Generate a valid video specification."""
-        fake = Faker()
-
-        scenes = []
-        for i in range(scene_count):
-            scenes.append(
-                {
-                    "id": f"scene_{i}",
-                    "prompt": fake.sentence(),
-                    "duration": 5.0,
-                    "assets": [],
-                    "style": "cinematic",
-                }
-            )
-
-        return {
-            "title": fake.sentence(nb_words=3),
-            "description": fake.text(),
-            "scenes": scenes,
-            "settings": {"resolution": "1920x1080", "fps": 30, "format": "mp4"},
-            "metadata": {"client_version": "e2e-tests", "test_run": True},
-        }
 
     @staticmethod
     def team_data() -> dict[str, Any]:
@@ -355,13 +234,7 @@ def test_data_factory() -> TestDataFactory:
 @pytest.fixture(scope="session", autouse=True)
 async def setup_test_environment(test_config: E2EConfig):
     """Set up the test environment before running tests."""
-    print(f"\n🧪 Setting up E2E test environment (mode: {test_config.test_mode})")
-
-    if test_config.test_mode == "real":
-        print("⚠️  Running in REAL mode - using actual external services")
-        # TODO: Verify real services are available
-    else:
-        print("🎭 Running in MOCKED mode - using service mocks")
+    print(f"\n🧪 Setting up E2E test environment (API: {test_config.api_base_url})")
 
     yield
 
@@ -369,30 +242,6 @@ async def setup_test_environment(test_config: E2EConfig):
 
 
 # Utility functions for tests
-def assert_valid_urn(urn: str, expected_type: str = None) -> None:
-    """Assert that a URN is valid and optionally of a specific type."""
-    parts = urn.split(":")
-    assert len(parts) >= 3, f"Invalid URN format: {urn}"
-    assert parts[0] == "framecast", f"URN must start with 'framecast': {urn}"
-
-    if expected_type:
-        assert parts[1] == expected_type, (
-            f"Expected URN type {expected_type}, got {parts[1]}"
-        )
-
-
-def assert_job_status_valid(status: str) -> None:
-    """Assert that a job status is valid."""
-    valid_statuses = ["queued", "processing", "completed", "failed", "canceled"]
-    assert status in valid_statuses, f"Invalid job status: {status}"
-
-
-def assert_user_tier_valid(tier: str) -> None:
-    """Assert that a user tier is valid."""
-    valid_tiers = ["visitor", "starter", "creator"]
-    assert tier in valid_tiers, f"Invalid user tier: {tier}"
-
-
 def assert_credits_non_negative(credits: int) -> None:
     """Assert that credits are non-negative (business invariant)."""
     assert credits >= 0, f"Credits cannot be negative: {credits}"
@@ -405,18 +254,9 @@ __all__ = [
     "SeededUsers",
     "test_config",
     "http_client",
-    "authenticated_client",
     "localstack_email_client",
-    "email_cleanup",
     "seed_users",
-    "starter_user",
-    "creator_user",
-    "team_owner",
-    "team_member",
     "test_data_factory",
     "TestDataFactory",
-    "assert_valid_urn",
-    "assert_job_status_valid",
-    "assert_user_tier_valid",
     "assert_credits_non_negative",
 ]

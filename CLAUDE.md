@@ -207,15 +207,12 @@ just test teams               # Test specific crate
 just test "job"               # Test matching pattern
 
 # E2E tests (Python)
-just test-e2e-mocked          # Fast E2E tests (CI-friendly)
-just test-e2e-with-email      # E2E with LocalStack email verification
-just test-invitation-workflow # Complete invitation flow (Rust + Python)
+just test-e2e                  # Run all E2E tests (requires local services)
 
 # Database
 just migrate                  # Run pending migrations
 just migrate-new <name>       # Create new migration
 just migrate-status           # Check migration status
-just seed                     # Seed test data
 
 # Code quality
 just fmt                      # Format all code
@@ -275,8 +272,6 @@ domains/                   # Domain-driven vertical slices
 crates/                    # Shared infrastructure
 ├── app/                   # framecast-app: Composition root, Lambda + local binaries
 ├── email/                 # framecast-email: AWS SES email service
-├── inngest/               # framecast-inngest: Job orchestration client
-├── comfyui/               # framecast-comfyui: RunPod/ComfyUI client
 └── common/                # framecast-common: Shared error types, URN parsing
 ```
 
@@ -311,7 +306,7 @@ domains/teams/src/
          ↑                   │
     framecast-webhooks ──────┘
          ↑
-    framecast-app → ALL domains + email + inngest + comfyui
+    framecast-app → ALL domains + email
 ```
 
 - Each domain owns entities + repositories + API handlers (vertical slice)
@@ -371,8 +366,6 @@ framecast/
 ├── crates/
 │   ├── app/                # Composition root, Lambda + local binaries
 │   ├── email/              # AWS SES email service (IV)
-│   ├── inngest/            # Job orchestration (IV)
-│   ├── comfyui/            # RunPod client (IV)
 │   └── common/             # Shared utilities
 ├── tests/
 │   ├── integration/        # Rust integration tests
@@ -380,8 +373,7 @@ framecast/
 │       ├── pyproject.toml  # Dependencies (II)
 │       └── uv.lock         # Lockfile (II) ✓ committed
 ├── infra/
-│   ├── opentofu/           # IaC (V)
-│   └── runpod/             # Docker images (V, X)
+│   └── opentofu/           # IaC (V)
 ├── migrations/             # Database migrations (XII)
 └── scripts/                # Admin processes (XII)
 ```
@@ -436,6 +428,6 @@ The `.claude/skills/` directory contains domain expertise modules:
 |-------|-------------|
 | `api-spec` | API operations, permissions, validation |
 | `rust-patterns` | Error handling, repository pattern, handlers |
-| `python-e2e` | pytest fixtures, async patterns, mocking |
+| `python-e2e` | pytest fixtures, async patterns |
 | `runpod-infra` | Docker images, GPU workload, ComfyUI |
 | `observability` | Structured logging, metrics, tracing |

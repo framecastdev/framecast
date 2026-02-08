@@ -18,7 +18,6 @@ from utils.localstack_email import LocalStackEmailClient  # noqa: E402
 
 
 @pytest.mark.invitation
-@pytest.mark.real_services
 class TestInvitationWorkflowE2E:
     """Complete invitation workflow end-to-end tests."""
 
