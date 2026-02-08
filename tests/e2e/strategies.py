@@ -13,7 +13,7 @@ from hypothesis import strategies as st
 e2e_settings = settings(
     max_examples=30,
     deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 
 # ---------------------------------------------------------------------------

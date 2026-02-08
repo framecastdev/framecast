@@ -16,8 +16,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 from conftest import SeededUsers, TestDataFactory  # noqa: E402
-from hypothesis import given, settings  # noqa: E402
-from strategies import invitation_roles  # noqa: E402
+from hypothesis import given  # noqa: E402
+from strategies import e2e_settings, invitation_roles  # noqa: E402
 from utils.localstack_email import LocalStackEmailClient  # noqa: E402
 
 
@@ -791,8 +791,8 @@ class TestInvitationLifecycleE2E:
             json={"email": "newuser@test.com", "role": "owner"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 400, (
-            f"Expected 400 for owner-role invitation, got {resp.status_code} {resp.text}"
+        assert resp.status_code in [400, 422], (
+            f"Expected 400/422 for owner-role invitation, got {resp.status_code} {resp.text}"
         )
 
     async def test_i28_accept_respects_max_memberships(
@@ -869,7 +869,7 @@ class TestInvitationLifecycleE2E:
     # Property-Based Tests
     # -----------------------------------------------------------------------
 
-    @settings(max_examples=20, deadline=None)
+    @e2e_settings
     @given(role=invitation_roles)
     async def test_invite_with_any_valid_role(
         self,

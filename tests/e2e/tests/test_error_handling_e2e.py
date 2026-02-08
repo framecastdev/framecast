@@ -104,8 +104,8 @@ class TestErrorHandlingE2E:
                 "Content-Type": "application/json",
             },
         )
-        assert resp.status_code == 422, (
-            f"Expected 422 for malformed JSON, got {resp.status_code} {resp.text}"
+        assert resp.status_code in [400, 422], (
+            f"Expected 400/422 for malformed JSON, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------

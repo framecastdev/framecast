@@ -17,8 +17,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 from conftest import SeededUsers, TestDataFactory  # noqa: E402
-from hypothesis import given, settings  # noqa: E402
-from strategies import invalid_scopes, starter_scopes  # noqa: E402
+from hypothesis import given  # noqa: E402
+from strategies import e2e_settings, invalid_scopes, starter_scopes  # noqa: E402
 
 
 @pytest.mark.auth
@@ -46,11 +46,10 @@ class TestApiKeysE2E:
         assert resp.status_code == 201, (
             f"Create API key failed: {resp.status_code} {resp.text}"
         )
-        key = resp.json()
-        assert "raw_key" in key or "key" in key, (
-            "Raw key should be in creation response"
-        )
-        assert "id" in key
+        data = resp.json()
+        assert "raw_key" in data, "Raw key should be in creation response"
+        assert "api_key" in data
+        assert "id" in data["api_key"]
 
     async def test_ak2_create_api_key_with_custom_name(
         self,
@@ -66,7 +65,7 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        assert resp.json()["name"] == "My CI Key"
+        assert resp.json()["api_key"]["name"] == "My CI Key"
 
     async def test_ak3_create_api_key_with_specific_scopes(
         self,
@@ -83,7 +82,7 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        returned_scopes = resp.json().get("scopes", [])
+        returned_scopes = resp.json()["api_key"].get("scopes", [])
         assert set(returned_scopes) == set(scopes)
 
     async def test_ak4_create_api_key_with_expiration(
@@ -104,7 +103,7 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        assert resp.json().get("expires_at") is not None
+        assert resp.json()["api_key"].get("expires_at") is not None
 
     async def test_ak5_list_api_keys(
         self,
@@ -148,7 +147,7 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        key_id = resp.json()["id"]
+        key_id = resp.json()["api_key"]["id"]
 
         # Get
         resp = await http_client.get(
@@ -173,7 +172,7 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        key_id = resp.json()["id"]
+        key_id = resp.json()["api_key"]["id"]
 
         resp = await http_client.patch(
             f"/v1/auth/keys/{key_id}",
@@ -199,7 +198,7 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        key_id = resp.json()["id"]
+        key_id = resp.json()["api_key"]["id"]
 
         resp = await http_client.delete(
             f"/v1/auth/keys/{key_id}", headers=owner.auth_headers()
@@ -220,9 +219,10 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        key_id = resp.json()["id"]
-        # Creation response should have raw_key
-        assert "raw_key" in resp.json() or "key" in resp.json()
+        creation_data = resp.json()
+        key_id = creation_data["api_key"]["id"]
+        # Creation response should have raw_key at top level
+        assert "raw_key" in creation_data
 
         # Subsequent GET should NOT have raw_key
         resp = await http_client.get(
@@ -485,8 +485,8 @@ class TestApiKeysE2E:
         )
         assert resp.status_code == 201
         key_data = resp.json()
-        key_id = key_data["id"]
-        raw_key = key_data.get("raw_key", key_data.get("key", ""))
+        key_id = key_data["api_key"]["id"]
+        raw_key = key_data.get("raw_key", "")
 
         # Revoke
         resp = await http_client.delete(
@@ -518,7 +518,7 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        key_id = resp.json()["id"]
+        key_id = resp.json()["api_key"]["id"]
 
         # First revoke
         resp = await http_client.delete(
@@ -548,7 +548,7 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        key_id = resp.json()["id"]
+        key_id = resp.json()["api_key"]["id"]
 
         # Revoke
         resp = await http_client.delete(
@@ -585,7 +585,7 @@ class TestApiKeysE2E:
         )
         # Server may reject past expiry at creation time (400) or accept it
         if resp.status_code == 201:
-            raw_key = resp.json().get("raw_key", resp.json().get("key", ""))
+            raw_key = resp.json().get("raw_key", "")
             if raw_key:
                 resp = await http_client.get(
                     "/v1/account",
@@ -632,7 +632,7 @@ class TestApiKeysE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        key_id = resp.json()["id"]
+        key_id = resp.json()["api_key"]["id"]
 
         # Invitee tries to access owner's key
         resp = await http_client.get(
@@ -646,7 +646,7 @@ class TestApiKeysE2E:
     # Property-Based Tests
     # -----------------------------------------------------------------------
 
-    @settings(max_examples=20, deadline=None)
+    @e2e_settings
     @given(scopes=starter_scopes)
     async def test_starter_valid_scopes_always_succeed(
         self,
@@ -666,7 +666,7 @@ class TestApiKeysE2E:
             f"Starter scopes {scopes} should succeed, got {resp.status_code} {resp.text}"
         )
 
-    @settings(max_examples=20, deadline=None)
+    @e2e_settings
     @given(scopes=invalid_scopes)
     async def test_invalid_scopes_always_rejected(
         self,

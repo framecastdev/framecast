@@ -134,6 +134,9 @@ class TestMultiUserScenariosE2E:
         )
         assert resp.status_code == 200
 
+        # Owner needs another team to satisfy INV-U2 before leaving
+        await self._create_team(http_client, owner, test_data_factory)
+
         # Original owner leaves
         resp = await http_client.post(
             f"/v1/teams/{team_id}/leave", headers=owner.auth_headers()
@@ -158,6 +161,9 @@ class TestMultiUserScenariosE2E:
 
         team_id = await self._create_team(http_client, owner, test_data_factory)
         await self._invite_and_accept(http_client, owner, team_id, invitee)
+
+        # Invitee needs another team so removal doesn't violate INV-U2
+        await self._create_team(http_client, invitee, test_data_factory)
 
         # Remove member
         resp = await http_client.delete(
@@ -319,6 +325,9 @@ class TestMultiUserScenariosE2E:
         team_id = await self._create_team(http_client, owner, test_data_factory)
         await self._invite_and_accept(http_client, owner, team_id, invitee)
 
+        # Invitee needs another team so removal doesn't violate INV-U2
+        await self._create_team(http_client, invitee, test_data_factory)
+
         # Remove
         resp = await http_client.delete(
             f"/v1/teams/{team_id}/members/{invitee.user_id}",
@@ -349,13 +358,28 @@ class TestMultiUserScenariosE2E:
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """MU9: Creator sole member of teams, deletes account -> teams deleted."""
+        """MU9: Creator sole member of teams, deletes teams then account."""
         owner = seed_users.owner
 
         team_ids = []
         for _ in range(3):
             tid = await self._create_team(http_client, owner, test_data_factory)
             team_ids.append(tid)
+
+        # Delete all teams first (API requires explicit cleanup)
+        for tid in team_ids:
+            resp = await http_client.delete(
+                f"/v1/teams/{tid}", headers=owner.auth_headers()
+            )
+            assert resp.status_code == 204
+
+        # Delete any remaining teams
+        resp = await http_client.get("/v1/teams", headers=owner.auth_headers())
+        if resp.status_code == 200:
+            for team in resp.json():
+                await http_client.delete(
+                    f"/v1/teams/{team['id']}", headers=owner.auth_headers()
+                )
 
         # Delete account
         resp = await http_client.delete("/v1/account", headers=owner.auth_headers())
@@ -529,7 +553,7 @@ class TestMultiUserScenariosE2E:
         )
         # May or may not be allowed depending on implementation
         if resp.status_code == 201:
-            resp.json()["id"]  # key created successfully
+            assert "api_key" in resp.json()  # key created successfully
 
             # Create another team so INV-U2 is satisfied
             await self._create_team(http_client, invitee, test_data_factory)

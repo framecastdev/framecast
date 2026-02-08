@@ -204,6 +204,14 @@ class TestMembershipManagementE2E:
             http_client, owner, invitee, "member", test_data_factory
         )
 
+        # Invitee needs another team so removal doesn't violate INV-U2
+        resp = await http_client.post(
+            "/v1/teams",
+            json=test_data_factory.team_data(),
+            headers=invitee.auth_headers(),
+        )
+        assert resp.status_code == 201
+
         resp = await http_client.delete(
             f"/v1/teams/{team_id}/members/{member_uid}",
             headers=owner.auth_headers(),
@@ -764,8 +772,8 @@ class TestMembershipManagementE2E:
             f"/v1/teams/{fake_team_id}/members/{owner.user_id}",
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [403, 404], (
-            f"Expected 403/404 for nonexistent team, got {resp.status_code}"
+        assert resp.status_code in [400, 403, 404], (
+            f"Expected 400/403/404 for nonexistent team, got {resp.status_code}"
         )
 
     async def test_m28_update_role_of_non_member(

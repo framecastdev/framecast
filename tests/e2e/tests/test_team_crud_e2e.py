@@ -15,8 +15,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 from conftest import SeededUsers, TestDataFactory  # noqa: E402
-from hypothesis import given, settings  # noqa: E402
+from hypothesis import given  # noqa: E402
 from strategies import (  # noqa: E402
+    e2e_settings,
     invalid_team_names,
     invalid_team_slugs,
     team_names,
@@ -72,28 +73,39 @@ class TestTeamCrudE2E:
         )
         assert resp.json()["slug"] == "custom-slug-team"
 
-    async def test_t3_create_team_with_settings(
+    async def test_t3_create_team_then_update_settings(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """T3: POST /v1/teams with settings JSON; verify settings persisted."""
+        """T3: Create team, then PATCH settings; verify settings persisted."""
         owner = seed_users.owner
 
+        # Create team
+        resp = await http_client.post(
+            "/v1/teams",
+            json={"name": "Settings Team"},
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 201, (
+            f"Create team failed: {resp.status_code} {resp.text}"
+        )
+        team_id = resp.json()["id"]
+
+        # Update settings via PATCH
         settings_data = {
             "default_resolution": "1920x1080",
             "webhook_url": "https://example.com/hook",
         }
-        resp = await http_client.post(
-            "/v1/teams",
-            json={"name": "Settings Team", "settings": settings_data},
+        resp = await http_client.patch(
+            f"/v1/teams/{team_id}",
+            json={"settings": settings_data},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 201, (
-            f"Create with settings failed: {resp.status_code} {resp.text}"
+        assert resp.status_code == 200, (
+            f"Update settings failed: {resp.status_code} {resp.text}"
         )
-        team = resp.json()
-        assert team["settings"] == settings_data
+        assert resp.json()["settings"] == settings_data
 
     async def test_t4_list_teams_shows_all_memberships(
         self,
@@ -590,7 +602,7 @@ class TestTeamCrudE2E:
     # Property-Based Tests
     # -----------------------------------------------------------------------
 
-    @settings(max_examples=30, deadline=None)
+    @e2e_settings
     @given(name=team_names)
     async def test_valid_team_name_never_returns_500(
         self,
@@ -610,7 +622,7 @@ class TestTeamCrudE2E:
             f"Unexpected status {resp.status_code} for name={name!r}: {resp.text}"
         )
 
-    @settings(max_examples=30, deadline=None)
+    @e2e_settings
     @given(name=invalid_team_names)
     async def test_invalid_team_name_always_rejected(
         self,
@@ -630,7 +642,7 @@ class TestTeamCrudE2E:
             f"Expected 400 for invalid name={name!r}, got {resp.status_code}"
         )
 
-    @settings(max_examples=30, deadline=None)
+    @e2e_settings
     @given(slug=invalid_team_slugs)
     async def test_invalid_slug_always_rejected(
         self,

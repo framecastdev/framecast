@@ -75,16 +75,16 @@ class TestTeamLimitsE2E:
         resp = await http_client.get("/v1/account", headers=owner.auth_headers())
         assert resp.status_code == 200
 
-    async def test_tl3_owned_teams_includes_auto_team(
+    async def test_tl3_upgraded_user_max_10_owned_teams(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """TL3: After upgrade (auto-team), can create 9 more, 10th fails."""
+        """TL3: After upgrade, can create 10 teams, 11th fails."""
         invitee = seed_users.invitee
 
-        # Upgrade creates auto-team (1 owned)
+        # Upgrade (no auto-team created)
         resp = await http_client.post(
             "/v1/account/upgrade",
             json={"target_tier": "creator"},
@@ -92,8 +92,8 @@ class TestTeamLimitsE2E:
         )
         assert resp.status_code in [200, 409]
 
-        # Create 9 more teams
-        for i in range(9):
+        # Create 10 teams
+        for i in range(10):
             resp = await http_client.post(
                 "/v1/teams",
                 json={"name": f"Post-Upgrade Team {i}"},
@@ -103,7 +103,7 @@ class TestTeamLimitsE2E:
                 f"Team {i} post-upgrade failed: {resp.status_code} {resp.text}"
             )
 
-        # 10th additional (11th total with auto-team) should fail
+        # 11th should fail
         resp = await http_client.post(
             "/v1/teams",
             json={"name": "Over Limit Post-Upgrade"},
