@@ -17,6 +17,22 @@ and system behaviors required for implementation.
 
 ## Changelog
 
+### v0.5.0 Changes
+
+- **4.14:** Added Conversation entity
+- **4.15:** Added Message entity
+- **4.16:** Added Artifact entity (replaces AssetFile)
+- **5.1:** Added Conversation, Message, Artifact relationships
+- **6.6:** Added Conversation state machine
+- **6.7:** Added Artifact state machine
+- **7.16:** Added Conversation invariants
+- **7.17:** Added Artifact invariants (replaces AssetFile invariants)
+- **8.15:** Added Conversation operations
+- **8.16:** Added Artifact operations (replaces Asset operations)
+- **9.1:** Added Conversation and Artifact permissions
+- **9.3:** Added conversation and artifact API key scopes
+- **14:** Updated ER diagram with new entities
+
 ### v0.4.0 Changes
 
 - **4.4:** Added `revoked_at` field to Invitation entity

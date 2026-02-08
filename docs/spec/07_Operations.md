@@ -975,6 +975,10 @@ Operation: create_api_key(user_id: UUID, params: ApiKeyParams) → {api_key: Api
     - jobs:write
     - assets:read
     - assets:write
+    - artifacts:read
+    - artifacts:write
+    - conversations:read
+    - conversations:write
     - projects:read
     - projects:write
     - team:read
@@ -987,6 +991,10 @@ Operation: create_api_key(user_id: UUID, params: ApiKeyParams) → {api_key: Api
     - jobs:write
     - assets:read
     - assets:write
+    - artifacts:read
+    - artifacts:write
+    - conversations:read
+    - conversations:write
 
 Operation: update_api_key(key_id: UUID, user_id: UUID, updates: ApiKeyUpdates) → ApiKey
   Pre:  ∃ k ∈ ApiKey : k.id = key_id ∧ k.user_id = user_id ∧ k.revoked_at IS NULL
@@ -1173,6 +1181,21 @@ Operation: estimate_spec(spec: JSONB, user_id: UUID, owner?: URN) → EstimateRe
 | create_api_key | POST | /v1/auth/keys |
 | update_api_key | PATCH | /v1/auth/keys/:id |
 | revoke_api_key | DELETE | /v1/auth/keys/:id |
+| **Conversation** | | |
+| list_conversations | GET | /v1/conversations |
+| get_conversation | GET | /v1/conversations/:id |
+| create_conversation | POST | /v1/conversations |
+| update_conversation | PATCH | /v1/conversations/:id |
+| delete_conversation | DELETE | /v1/conversations/:id |
+| send_message | POST | /v1/conversations/:id/messages |
+| list_messages | GET | /v1/conversations/:id/messages |
+| **Artifact** | | |
+| list_artifacts | GET | /v1/artifacts |
+| get_artifact | GET | /v1/artifacts/:id |
+| create_storyboard | POST | /v1/artifacts/storyboard |
+| create_upload_url | POST | /v1/artifacts/upload-url |
+| confirm_upload | POST | /v1/artifacts/:id/confirm |
+| delete_artifact | DELETE | /v1/artifacts/:id |
 | **Auth** | | |
 | whoami | GET | /v1/auth/whoami |
 
@@ -1197,6 +1220,294 @@ Operation: whoami() → WhoamiResponse
     - Available to both Starter and Creator tiers
     - Primary use case: auth verification and debugging
     - API key metadata is a subset (excludes user_id, revoked_at, last_used_at, created_at)
+```
+
+---
+
+## 8.15 Conversation Operations
+
+```
+Operation: list_conversations(user_id: UUID, filters: ConversationFilters?) → Page<Conversation>
+  Pre:  ∃ u ∈ User : u.id = user_id
+  Post: Returns conversations WHERE user_id = user_id
+        ∧ (filters applied)
+        Ordered by last_message_at DESC NULLS LAST, created_at DESC
+
+  ConversationFilters:
+    status?: {active | archived} (default: active)
+    limit?: Integer (1-100, default 20)
+    cursor?: String
+
+  Notes:
+    - Available to both Starter and Creator tiers
+    - Only returns conversations owned by the requesting user
+    - Archived conversations excluded by default
+
+Operation: get_conversation(conversation_id: UUID, user_id: UUID) → Conversation
+  Pre:  ∃ c ∈ Conversation : c.id = conversation_id ∧ c.user_id = user_id
+  Post: Returns conversation with all fields
+        ∧ Includes message_count and last_message_at
+
+  Notes:
+    - Only the conversation owner can view it
+
+Operation: create_conversation(user_id: UUID, params: CreateConversationParams) → Conversation
+  Pre:  ∃ u ∈ User : u.id = user_id
+        ∧ (params.title IS NULL ∨ |params.title| ≤ 200)
+        ∧ |params.model| ≤ 100
+        ∧ (params.system_prompt IS NULL ∨ LENGTH(params.system_prompt) ≤ 10000)
+  Post: Conversation created with:
+          id = uuid()
+          user_id = user_id
+          title = params.title
+          model = params.model
+          system_prompt = params.system_prompt
+          status = 'active'
+          message_count = 0
+          last_message_at = NULL
+
+  CreateConversationParams:
+    model: String! (max 100)
+    title?: String (max 200)
+    system_prompt?: Text (max 10,000)
+
+  Notes:
+    - Available to both Starter and Creator tiers
+    - Model must be a valid LLM model identifier
+
+Operation: update_conversation(conversation_id: UUID, user_id: UUID, updates: ConversationUpdates) → Conversation
+  Pre:  ∃ c ∈ Conversation : c.id = conversation_id ∧ c.user_id = user_id
+        ∧ (updates.title IS NULL ∨ |updates.title| ≤ 200)
+  Post: Conversation updated with provided fields
+        ∧ c.updated_at = now()
+
+  ConversationUpdates:
+    title?: String (max 200)
+    status?: {active | archived}
+
+  Notes:
+    - Only the conversation owner can update it
+    - Model and system_prompt cannot be changed after creation
+
+Operation: delete_conversation(conversation_id: UUID, user_id: UUID) → void
+  Pre:  ∃ c ∈ Conversation : c.id = conversation_id ∧ c.user_id = user_id
+  Post: Conversation deleted (cascades to Message)
+        ∧ Artifacts with conversation_id = conversation_id have conversation_id SET NULL
+
+  Notes:
+    - Only the conversation owner can delete it
+    - Artifacts are preserved (conversation_id set to NULL) for continuity
+    - Messages are deleted (cascade)
+
+Operation: send_message(conversation_id: UUID, user_id: UUID, params: SendMessageParams) → {user_message: Message, assistant_message: Message}
+  Pre:  ∃ c ∈ Conversation : c.id = conversation_id
+        ∧ c.user_id = user_id
+        ∧ c.status = 'active'
+        ∧ LENGTH(TRIM(params.content)) > 0
+  Post: BEGIN TRANSACTION
+          User Message created with:
+            id = uuid()
+            conversation_id = conversation_id
+            role = 'user'
+            content = params.content
+            sequence = next_sequence(conversation_id)
+          ∧ c.message_count += 1
+          ∧ c.last_message_at = now()
+          ∧ c.updated_at = now()
+        COMMIT
+        ∧ LLM invoked with conversation history + system_prompt
+        ∧ BEGIN TRANSACTION
+            Assistant Message created with:
+              id = uuid()
+              conversation_id = conversation_id
+              role = 'assistant'
+              content = llm_response.content
+              artifacts = llm_response.artifacts (if any)
+              model = c.model
+              input_tokens = llm_response.input_tokens
+              output_tokens = llm_response.output_tokens
+              sequence = next_sequence(conversation_id)
+            ∧ c.message_count += 1
+            ∧ c.last_message_at = now()
+            ∧ c.updated_at = now()
+            ∧ IF llm_response.artifacts IS NOT NULL THEN
+                ∀ artifact_ref ∈ llm_response.artifacts :
+                  Artifact created with source = 'conversation', conversation_id = conversation_id
+          COMMIT
+
+  SendMessageParams:
+    content: Text! (non-empty)
+
+  Notes:
+    - Only the conversation owner can send messages
+    - Conversation must be active (not archived)
+    - LLM may produce artifacts (storyboard specs) as part of the response
+    - Token counts are recorded for usage tracking
+
+Operation: list_messages(conversation_id: UUID, user_id: UUID, filters: MessageFilters?) → Page<Message>
+  Pre:  ∃ c ∈ Conversation : c.id = conversation_id ∧ c.user_id = user_id
+  Post: Returns messages WHERE conversation_id = conversation_id
+        Ordered by sequence ASC
+
+  MessageFilters:
+    limit?: Integer (1-100, default 50)
+    cursor?: String
+    before_sequence?: Integer (for loading older messages)
+
+  Notes:
+    - Only the conversation owner can list messages
+    - Cursor-based pagination
+    - Messages are returned in chronological order (oldest first)
+```
+
+---
+
+## 8.16 Artifact Operations
+
+```
+Operation: list_artifacts(user_id: UUID, filters: ArtifactFilters?) → Page<Artifact>
+  Pre:  ∃ u ∈ User : u.id = user_id
+  Post: Returns artifacts accessible to user:
+          IF u.tier = 'starter' THEN
+            WHERE owner = 'framecast:user:' || user_id
+          ELSE
+            WHERE owner ∈ user_accessible_urns(user_id)
+        ∧ (filters applied)
+        Ordered by created_at DESC
+
+  ArtifactFilters:
+    owner?: URN
+    project_id?: UUID
+    kind?: {storyboard | image | audio | video}
+    source?: {upload | conversation | job}
+    status?: {pending | ready | failed}
+    limit?: Integer (1-100, default 20)
+    cursor?: String
+
+  Notes:
+    - Starters see only personal artifacts
+    - Creators see artifacts for all accessible URNs
+    - Cursor-based pagination
+
+Operation: get_artifact(artifact_id: UUID, user_id: UUID) → Artifact
+  Pre:  ∃ a ∈ Artifact : a.id = artifact_id
+        ∧ user_can_access_owner(user_id, a.owner)
+  Post: Returns artifact with all fields
+        ∧ Includes presigned download URL (1 hour expiry) if status = 'ready' and kind ∈ {image, audio, video}
+
+  Notes:
+    - Access determined by owner URN
+
+Operation: create_storyboard(user_id: UUID, params: CreateStoryboardParams) → Artifact
+  Pre:  ∃ u ∈ User : u.id = user_id
+        ∧ valid_json(params.spec)
+        ∧ (params.owner IS NULL ∨ user_can_use_owner_urn(user_id, params.owner))
+        ∧ (params.project_id IS NULL ∨ (
+            ∃ p ∈ Project : p.id = params.project_id
+            ∧ ∃ m ∈ Membership : m.team_id = p.team_id ∧ m.user_id = user_id
+                ∧ m.role ∈ {owner, admin, member}
+          ))
+  Post: Artifact created with:
+          id = uuid()
+          owner = params.owner ?? 'framecast:user:' || user_id
+          created_by = user_id
+          project_id = params.project_id
+          kind = 'storyboard'
+          status = 'ready'
+          source = params.source ?? 'upload'
+          spec = params.spec
+          conversation_id = params.conversation_id
+
+  CreateStoryboardParams:
+    spec: JSONB! (valid storyboard spec)
+    owner?: URN
+    project_id?: UUID
+    source?: {upload | conversation}
+    conversation_id?: UUID (required if source = 'conversation')
+
+  Notes:
+    - Storyboard artifacts are created with status = 'ready' immediately
+    - Spec is NOT validated against rendering rules (use validate_spec separately)
+    - If project_id is set, owner must match project's team (INV-X6)
+
+Operation: create_upload_url(user_id: UUID, params: UploadParams) → {artifact: Artifact, upload_url: String}
+  Pre:  ∃ u ∈ User : u.id = user_id
+        ∧ params.kind ∈ {image, audio, video}
+        ∧ |params.filename| ≤ 255
+        ∧ params.content_type ∈ allowed_content_types(params.kind)
+        ∧ params.size_bytes > 0 ∧ params.size_bytes ≤ 50 * 1024 * 1024
+        ∧ (params.owner IS NULL ∨ user_can_use_owner_urn(user_id, params.owner))
+        ∧ (params.project_id IS NULL ∨ (
+            ∃ p ∈ Project : p.id = params.project_id
+            ∧ ∃ m ∈ Membership : m.team_id = p.team_id ∧ m.user_id = user_id
+                ∧ m.role ∈ {owner, admin, member}
+          ))
+  Post: Artifact created with:
+          id = uuid()
+          owner = params.owner ?? 'framecast:user:' || user_id
+          created_by = user_id
+          project_id = params.project_id
+          kind = params.kind
+          status = 'pending'
+          source = 'upload'
+          filename = params.filename
+          s3_key = generate_s3_key(owner, id, filename)
+          content_type = params.content_type
+          size_bytes = params.size_bytes
+        ∧ Presigned S3 upload URL returned (15 minute expiry)
+
+  UploadParams:
+    kind: {image | audio | video}
+    filename: String! (max 255)
+    content_type: String! (valid MIME type for kind)
+    size_bytes: Integer! (1 to 50MB)
+    owner?: URN
+    project_id?: UUID
+
+  allowed_content_types:
+    image: {'image/jpeg', 'image/png', 'image/webp'}
+    audio: {'audio/mpeg', 'audio/wav', 'audio/ogg'}
+    video: {'video/mp4'}
+
+  Notes:
+    - Available to both tiers
+    - Artifact starts in 'pending' status
+    - Client must upload file to presigned URL, then call confirm_upload
+    - Upload URL expires in 15 minutes
+    - If project_id is set, owner must match project's team (INV-X6)
+
+Operation: confirm_upload(artifact_id: UUID, user_id: UUID) → Artifact
+  Pre:  ∃ a ∈ Artifact : a.id = artifact_id ∧ a.status = 'pending'
+        ∧ a.created_by = user_id
+        ∧ a.kind ∈ {image, audio, video}
+        ∧ S3 object exists at a.s3_key
+        ∧ S3 object size matches a.size_bytes (±5%)
+        ∧ S3 object content type matches a.content_type
+  Post: a.status = 'ready'
+        ∧ a.updated_at = now()
+        ∧ Storage quota updated for owner
+
+  Notes:
+    - Only the creator can confirm
+    - Validates that the S3 upload actually completed
+    - If validation fails, status transitions to 'failed'
+    - Storage quota for owner is incremented by size_bytes
+
+Operation: delete_artifact(artifact_id: UUID, user_id: UUID) → void
+  Pre:  ∃ a ∈ Artifact : a.id = artifact_id
+        ∧ user_can_access_owner(user_id, a.owner)
+        ∧ (a.created_by = user_id
+           ∨ ∃ m ∈ Membership : m.team_id = extract_team_from_urn(a.owner)
+               ∧ m.user_id = user_id ∧ m.role ∈ {owner, admin})
+  Post: Artifact deleted
+        ∧ IF a.s3_key IS NOT NULL THEN S3 object deleted
+        ∧ Storage quota decremented for owner (if media artifact)
+
+  Notes:
+    - Creators can delete their own artifacts
+    - Team owner/admin can delete any team artifact
+    - Members can delete only their own artifacts within team
+    - Viewers cannot delete artifacts
 ```
 
 ---

@@ -437,3 +437,106 @@ Indexes:
 Constraints:
   - id MATCHES '^asset_(sfx|ambient|music|transition)_[a-z0-9_]+$'
 ```
+
+## 4.14 Conversation
+
+```
+Entity: Conversation
+Description: A chat thread between a user and the LLM that produces artifacts
+
+Attributes:
+  id              : UUID PK
+  user_id         : UUID FK → User (ON DELETE CASCADE)
+  title           : String? (max 200)
+  model           : String! (max 100, e.g. "claude-sonnet-4-20250514")
+  system_prompt   : Text? (max 10,000)
+  status          : {active | archived} DEFAULT active
+  message_count   : Integer DEFAULT 0
+  last_message_at : Timestamp?
+  created_at      : Timestamp DEFAULT now()
+  updated_at      : Timestamp DEFAULT now()
+
+Indexes:
+  - INDEX(user_id, status)
+  - INDEX(user_id, last_message_at DESC)
+
+Triggers:
+  - ON UPDATE: SET updated_at = now()
+
+Constraints:
+  - system_prompt IS NULL OR LENGTH(system_prompt) <= 10000
+  - message_count >= 0
+```
+
+## 4.15 Message
+
+```
+Entity: Message
+Description: A single turn in a conversation (user or assistant)
+
+Attributes:
+  id              : UUID PK
+  conversation_id : UUID FK → Conversation (ON DELETE CASCADE)
+  role            : {user | assistant}
+  content         : Text! (non-empty)
+  artifacts       : JSONB? (array of ArtifactRef for assistant messages)
+  model           : String? (max 100, assistant only)
+  input_tokens    : Integer? (assistant only)
+  output_tokens   : Integer? (assistant only)
+  sequence        : Integer (monotonically increasing per conversation)
+  created_at      : Timestamp DEFAULT now()
+
+Indexes:
+  - INDEX(conversation_id, sequence ASC)
+  - UNIQUE(conversation_id, sequence)
+
+Constraints:
+  - sequence >= 1
+  - LENGTH(TRIM(content)) > 0
+```
+
+## 4.16 Artifact
+
+```
+Entity: Artifact
+Description: A creative output — storyboard spec, uploaded media, or job output.
+             Replaces AssetFile as the unified entity for all creative content.
+
+Attributes:
+  id              : UUID PK
+  owner           : URN (determines visibility and storage quota)
+  created_by      : UUID FK → User
+  project_id      : UUID? FK → Project (ON DELETE CASCADE)
+  kind            : {storyboard | image | audio | video}
+  status          : {pending | ready | failed} DEFAULT pending
+  source          : {upload | conversation | job} DEFAULT upload
+  filename        : String? (max 255, required for media)
+  s3_key          : String? (unique, required for media)
+  content_type    : String? (MIME type, required for media)
+  size_bytes      : BigInt? (required for media, max 50MB)
+  spec            : JSONB? (required for storyboard)
+  conversation_id : UUID? FK → Conversation (ON DELETE SET NULL)
+  source_job_id   : UUID? FK → Job (ON DELETE SET NULL)
+  metadata        : JSONB DEFAULT {}
+  created_at      : Timestamp DEFAULT now()
+  updated_at      : Timestamp DEFAULT now()
+
+Indexes:
+  - UNIQUE(s3_key) WHERE s3_key IS NOT NULL
+  - INDEX(owner)
+  - INDEX(project_id)
+  - INDEX(created_by)
+  - INDEX(kind)
+
+Triggers:
+  - ON UPDATE: SET updated_at = now()
+
+Constraints:
+  - Media kinds (image/audio/video) require filename, s3_key, content_type, size_bytes
+  - Storyboard kind requires spec
+  - source=conversation requires conversation_id
+  - source=job requires source_job_id
+  - project_id IS NOT NULL → owner STARTS WITH 'framecast:team:'
+  - size_bytes > 0 AND size_bytes ≤ 50MB (when set)
+  - content_type ∈ allowed list per kind
+```
