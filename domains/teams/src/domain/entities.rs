@@ -586,12 +586,15 @@ pub struct ApiKey {
 
 impl ApiKey {
     /// Create a new API key with validation
+    ///
+    /// Returns `(ApiKey, raw_key)` — the raw key is only available at creation time.
     pub fn new(
         user_id: Uuid,
         owner: Urn,
         name: Option<String>,
         scopes: Option<Vec<String>>,
-    ) -> Result<Self> {
+        expires_at: Option<DateTime<Utc>>,
+    ) -> Result<(Self, String)> {
         let name = name.unwrap_or_else(|| "Default".to_string());
         if name.len() > 100 {
             return Err(Error::Validation(
@@ -613,7 +616,7 @@ impl ApiKey {
         let salt: [u8; 32] = rand::thread_rng().gen();
         let key_hash = Self::hash_key(&full_key, &salt);
 
-        Ok(ApiKey {
+        let api_key = ApiKey {
             id: Uuid::new_v4(),
             user_id,
             owner: owner.to_string(),
@@ -622,10 +625,12 @@ impl ApiKey {
             key_hash,
             scopes: Json(scopes),
             last_used_at: None,
-            expires_at: None,
+            expires_at,
             revoked_at: None,
             created_at: Utc::now(),
-        })
+        };
+
+        Ok((api_key, full_key))
     }
 
     /// Check if key is valid (not revoked or expired)
@@ -937,7 +942,8 @@ mod tests {
         let owner = Urn::user(user_id);
         let name = Some("Test Key".to_string());
 
-        let api_key = ApiKey::new(user_id, owner.clone(), name.clone(), None).unwrap();
+        let (api_key, raw_key) =
+            ApiKey::new(user_id, owner.clone(), name.clone(), None, None).unwrap();
 
         assert_eq!(api_key.user_id, user_id);
         assert_eq!(api_key.owner_urn().unwrap(), owner);
@@ -945,6 +951,7 @@ mod tests {
         assert!(api_key.key_prefix.starts_with("sk_live_"));
         assert!(!api_key.key_hash.is_empty());
         assert!(api_key.is_valid());
+        assert!(raw_key.starts_with("sk_live_"));
     }
 
     #[test]
@@ -953,18 +960,19 @@ mod tests {
         let owner = Urn::user(user_id);
 
         // Test name too long
-        let result = ApiKey::new(user_id, owner.clone(), Some("a".repeat(101)), None);
+        let result = ApiKey::new(user_id, owner.clone(), Some("a".repeat(101)), None, None);
         assert!(result.is_err());
 
         // Test valid key
-        let api_key = ApiKey::new(user_id, owner, None, None).unwrap();
+        let (api_key, _raw_key) = ApiKey::new(user_id, owner, None, None, None).unwrap();
         assert!(api_key.validate().is_ok());
     }
 
     #[test]
     fn test_api_key_revocation() {
         let user_id = Uuid::new_v4();
-        let mut api_key = ApiKey::new(user_id, Urn::user(user_id), None, None).unwrap();
+        let (mut api_key, _raw_key) =
+            ApiKey::new(user_id, Urn::user(user_id), None, None, None).unwrap();
 
         assert!(api_key.is_valid());
 
@@ -974,12 +982,44 @@ mod tests {
     }
 
     #[test]
+    fn test_api_key_new_returns_raw_key() {
+        let user_id = Uuid::new_v4();
+        let (_, raw_key) = ApiKey::new(user_id, Urn::user(user_id), None, None, None).unwrap();
+        assert!(raw_key.starts_with("sk_live_"));
+    }
+
+    #[test]
+    fn test_api_key_new_raw_key_verifies() {
+        let user_id = Uuid::new_v4();
+        let (api_key, raw_key) =
+            ApiKey::new(user_id, Urn::user(user_id), None, None, None).unwrap();
+        assert!(api_key.verify_key(&raw_key));
+        assert!(!api_key.verify_key("sk_live_wrong"));
+    }
+
+    #[test]
+    fn test_api_key_new_with_expires_at() {
+        let user_id = Uuid::new_v4();
+        let future = Utc::now() + chrono::Duration::days(30);
+        let (api_key, _) =
+            ApiKey::new(user_id, Urn::user(user_id), None, None, Some(future)).unwrap();
+        assert_eq!(api_key.expires_at, Some(future));
+    }
+
+    #[test]
+    fn test_api_key_new_without_expires_at() {
+        let user_id = Uuid::new_v4();
+        let (api_key, _) = ApiKey::new(user_id, Urn::user(user_id), None, None, None).unwrap();
+        assert!(api_key.expires_at.is_none());
+    }
+
+    #[test]
     fn test_api_key_secure_hashing_and_verification() {
         let user_id = Uuid::new_v4();
         let owner = Urn::user(user_id);
 
         // Create API key with secure hashing
-        let api_key = ApiKey::new(user_id, owner.clone(), None, None).unwrap();
+        let (api_key, raw_key) = ApiKey::new(user_id, owner.clone(), None, None, None).unwrap();
 
         // The hash should be in salt:hash format with hex encoding
         assert!(api_key.key_hash.contains(':'));
@@ -993,8 +1033,10 @@ mod tests {
         // The hash should be 64 characters (SHA-256 = 32 bytes = 64 hex chars)
         assert_eq!(parts[1].len(), 64);
 
-        // NOTE: Since we can't access the original key from the creation,
-        // we'll test the verification logic with a known key
+        // Verify raw key works
+        assert!(api_key.verify_key(&raw_key));
+
+        // Additional tests with manually constructed keys
         let test_key = "sk_live_test123456789";
         let salt: [u8; 32] = [42; 32]; // Fixed salt for testing
         let test_hash = ApiKey::hash_key(test_key, &salt);

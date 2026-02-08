@@ -187,6 +187,27 @@ impl MembershipRepository {
         Ok(count.count.unwrap_or(0))
     }
 
+    /// Find teams where user is the sole owner (INV-T2 pre-check for account deletion)
+    pub async fn find_teams_where_sole_owner(&self, user_id: Uuid) -> Result<Vec<Uuid>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT m.team_id
+            FROM memberships m
+            WHERE m.user_id = $1 AND m.role = 'owner'
+              AND (
+                SELECT COUNT(*)
+                FROM memberships m2
+                WHERE m2.team_id = m.team_id AND m2.role = 'owner'
+              ) = 1
+            "#,
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|r| r.team_id).collect())
+    }
+
     /// Count owners in team
     pub async fn count_owners(&self, team_id: Uuid) -> Result<i64> {
         let count = sqlx::query!(

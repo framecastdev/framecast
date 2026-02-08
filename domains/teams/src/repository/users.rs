@@ -149,6 +149,19 @@ impl UserRepository {
         Ok(updated)
     }
 
+    /// Delete user by ID
+    pub async fn delete(&self, id: Uuid) -> Result<()> {
+        let result = sqlx::query!("DELETE FROM users WHERE id = $1", id)
+            .execute(&self.pool)
+            .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound.into());
+        }
+
+        Ok(())
+    }
+
     /// Upgrade user tier
     pub async fn upgrade_tier(&self, user_id: Uuid, new_tier: UserTier) -> Result<Option<User>> {
         let now = chrono::Utc::now();
