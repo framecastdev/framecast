@@ -321,6 +321,12 @@ ci-migrate:
     @echo "Running migrations (CI mode)..."
     sqlx migrate run
 
+# Regenerate sqlx offline cache in CI (requires DATABASE_URL and migrations applied)
+ci-sqlx-prepare:
+    @echo "Regenerating sqlx offline query data (CI)..."
+    cargo sqlx prepare --workspace
+    @echo "sqlx offline data regenerated in .sqlx/"
+
 # Setup LocalStack S3 buckets for CI (reads AWS_ENDPOINT_URL, defaults to localhost)
 ci-setup-localstack:
     #!/usr/bin/env bash
