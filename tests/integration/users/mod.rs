@@ -9,20 +9,14 @@
 use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use framecast_teams::{routes, UserTier};
+use framecast_teams::UserTier;
 
 use crate::common::{assertions, TestApp, UserFixture};
-
-/// Create test router with all routes
-async fn create_test_router(app: &TestApp) -> Router {
-    routes().with_state(app.state.clone())
-}
 
 mod test_get_profile {
     use super::*;
@@ -31,7 +25,7 @@ mod test_get_profile {
     async fn test_get_profile_with_valid_auth() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -72,7 +66,7 @@ mod test_get_profile {
     #[tokio::test]
     async fn test_get_profile_without_auth() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -99,7 +93,7 @@ mod test_get_profile {
     #[tokio::test]
     async fn test_get_profile_with_invalid_token() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -126,7 +120,7 @@ mod test_get_profile {
     async fn test_get_profile_creator_user() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -165,7 +159,7 @@ mod test_update_profile {
     async fn test_update_profile_valid_data() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let update_data = json!({
             "name": "Updated Name",
@@ -212,7 +206,7 @@ mod test_update_profile {
     async fn test_update_profile_validation_errors() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Test empty name
         let invalid_data = json!({
@@ -254,7 +248,7 @@ mod test_update_profile {
     async fn test_update_profile_invalid_url() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let invalid_data = json!({
             "name": "Valid Name",
@@ -283,7 +277,7 @@ mod test_update_profile {
     async fn test_update_profile_name_too_long() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let invalid_data = json!({
             "name": "x".repeat(101), // Too long
@@ -312,7 +306,7 @@ mod test_update_profile {
     async fn test_update_profile_malformed_json() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::PATCH)
@@ -336,7 +330,7 @@ mod test_update_profile {
     async fn test_update_profile_partial_update() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Update only name, leave avatar_url unchanged
         let update_data = json!({
@@ -378,7 +372,7 @@ mod test_upgrade_tier {
     async fn test_upgrade_starter_to_creator() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         assert_eq!(user_fixture.user.tier, UserTier::Starter);
         assert!(user_fixture.user.upgraded_at.is_none());
@@ -426,7 +420,7 @@ mod test_upgrade_tier {
     async fn test_upgrade_already_creator() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         assert_eq!(user_fixture.user.tier, UserTier::Creator);
 
@@ -464,7 +458,7 @@ mod test_upgrade_tier {
     async fn test_upgrade_invalid_tier() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -491,7 +485,7 @@ mod test_upgrade_tier {
     async fn test_upgrade_missing_tier_field() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -516,7 +510,7 @@ mod test_upgrade_tier {
     async fn test_downgrade_prevention() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Attempt to downgrade from creator to starter
         let request = Request::builder()
@@ -541,7 +535,7 @@ mod test_upgrade_tier {
     #[tokio::test]
     async fn test_upgrade_without_authentication() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -566,7 +560,7 @@ mod test_user_invariants_in_endpoints {
         // Test that user operations don't violate credit invariants
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Get current profile to check credits
         let request = Request::builder()
@@ -598,7 +592,7 @@ mod test_user_invariants_in_endpoints {
         // Test that upgrading to creator properly sets upgraded_at (INV-U1)
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -637,7 +631,7 @@ mod test_error_response_consistency {
     #[tokio::test]
     async fn test_consistent_error_format_across_endpoints() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Test that all endpoints return consistent error format
         let endpoints_and_methods = vec![
@@ -681,7 +675,7 @@ mod test_error_response_consistency {
     async fn test_validation_error_details() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Test validation error includes helpful details
         let invalid_data = json!({
@@ -724,7 +718,7 @@ mod test_profile_edge_cases {
     async fn test_update_profile_unicode_name() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let update_data = json!({
             "name": "José Hernández-López 日本語"
@@ -759,7 +753,7 @@ mod test_profile_edge_cases {
     async fn test_update_profile_name_at_max_length() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // UpdateProfileRequest validates name max 100 chars
         let long_name = "A".repeat(100);
@@ -794,7 +788,7 @@ mod test_profile_edge_cases {
     async fn test_update_profile_null_avatar_clears() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // First set an avatar
         let set_avatar = json!({
@@ -853,7 +847,7 @@ mod test_profile_edge_cases {
     async fn test_update_profile_empty_body_noop() {
         let app = TestApp::new().await.unwrap();
         let user_fixture = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Get original profile
         let get_request = Request::builder()
@@ -914,7 +908,7 @@ mod test_delete_account {
     async fn test_delete_account_success() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -955,7 +949,7 @@ mod test_delete_account {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -998,7 +992,7 @@ mod test_delete_account {
         .await
         .unwrap();
 
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -1025,7 +1019,7 @@ mod test_delete_account {
     #[tokio::test]
     async fn test_delete_account_without_auth() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -1043,7 +1037,7 @@ mod test_delete_account {
     async fn test_delete_account_starter_user() {
         let app = TestApp::new().await.unwrap();
         let starter = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)

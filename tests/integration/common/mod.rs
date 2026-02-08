@@ -13,6 +13,7 @@ use std::sync::{Arc, Once};
 
 use anyhow::Result;
 use axum::http::{header::AUTHORIZATION, HeaderMap, HeaderValue};
+use axum::Router;
 use chrono::Utc;
 use framecast_email::{EmailConfig, EmailServiceFactory};
 use framecast_teams::*;
@@ -54,14 +55,12 @@ impl TestConfig {
 }
 
 /// Test application state with database connection
-#[allow(dead_code)]
 pub struct TestApp {
     pub state: TeamsState,
     pub config: TestConfig,
     pub pool: PgPool,
 }
 
-#[allow(dead_code)]
 impl TestApp {
     /// Create a new test application with fresh database connection
     pub async fn new() -> Result<Self> {
@@ -203,17 +202,20 @@ impl TestApp {
             .await?;
         Ok(())
     }
+
+    /// Create test router with all routes wired to this app's state
+    pub fn test_router(&self) -> Router {
+        routes().with_state(self.state.clone())
+    }
 }
 
 /// User fixture for testing different user tiers
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct UserFixture {
     pub user: User,
     pub jwt_token: String,
 }
 
-#[allow(dead_code)]
 impl UserFixture {
     /// Create a starter user fixture
     pub async fn starter(app: &TestApp) -> Result<Self> {
@@ -288,10 +290,7 @@ pub fn create_test_jwt(user: &User, secret: &str) -> Result<String> {
 }
 
 /// Common test assertions
-#[allow(dead_code)]
 pub mod assertions {
-    use super::*;
-
     /// Assert that a URN is valid and optionally of a specific type
     pub fn assert_valid_urn(urn: &str, expected_type: Option<&str>) {
         let parts: Vec<&str> = urn.split(':').collect();
@@ -311,13 +310,6 @@ pub mod assertions {
         }
     }
 
-    /// Assert that a user tier is valid
-    pub fn assert_user_tier_valid(tier: &UserTier) {
-        match tier {
-            UserTier::Starter | UserTier::Creator => (),
-        }
-    }
-
     /// Assert that credits are non-negative (business invariant)
     pub fn assert_credits_non_negative(credits: i32) {
         assert!(credits >= 0, "Credits cannot be negative: {}", credits);
@@ -331,19 +323,6 @@ pub mod assertions {
             diff.num_seconds() < 60,
             "Timestamp should be recent, but was {} seconds ago",
             diff.num_seconds()
-        );
-    }
-
-    /// Assert that first timestamp is before second timestamp
-    pub fn assert_timestamp_progression(
-        first: &chrono::DateTime<chrono::Utc>,
-        second: &chrono::DateTime<chrono::Utc>,
-    ) {
-        assert!(
-            first <= second,
-            "First timestamp {:?} should be before second timestamp {:?}",
-            first,
-            second
         );
     }
 }

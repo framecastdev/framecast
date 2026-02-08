@@ -10,20 +10,12 @@
 use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use framecast_teams::routes;
-
 use crate::common::{TestApp, UserFixture};
-
-/// Create test router with all routes
-async fn create_test_router(app: &TestApp) -> Router {
-    routes().with_state(app.state.clone())
-}
 
 mod test_create_api_key {
     use super::*;
@@ -32,7 +24,7 @@ mod test_create_api_key {
     async fn test_create_api_key_success() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -84,7 +76,7 @@ mod test_create_api_key {
     async fn test_create_api_key_default_scopes() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Omit scopes — should default to ["*"] for creator
         let request = Request::builder()
@@ -112,7 +104,7 @@ mod test_create_api_key {
     async fn test_create_api_key_starter_default_scopes_blocked() {
         let app = TestApp::new().await.unwrap();
         let starter = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Starter user omits scopes — defaults to ["*"] which is NOT in STARTER_ALLOWED_SCOPES
         let request = Request::builder()
@@ -135,7 +127,7 @@ mod test_create_api_key {
     async fn test_create_api_key_starter_allowed_scopes() {
         let app = TestApp::new().await.unwrap();
         let starter = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Starter user with allowed scopes should succeed
         let request = Request::builder()
@@ -158,7 +150,7 @@ mod test_create_api_key {
     async fn test_create_api_key_starter_restricted_scope_blocked() {
         let app = TestApp::new().await.unwrap();
         let starter = UserFixture::starter(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // team:admin is not in STARTER_ALLOWED_SCOPES
         let request = Request::builder()
@@ -181,7 +173,7 @@ mod test_create_api_key {
     async fn test_create_api_key_invalid_scope() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -203,7 +195,7 @@ mod test_create_api_key {
     async fn test_create_api_key_name_too_long() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -222,7 +214,7 @@ mod test_create_api_key {
     #[tokio::test]
     async fn test_create_api_key_without_auth() {
         let app = TestApp::new().await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::POST)
@@ -245,7 +237,7 @@ mod test_list_api_keys {
     async fn test_list_api_keys_empty() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -270,7 +262,7 @@ mod test_list_api_keys {
     async fn test_list_api_keys_returns_own_keys() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create a key first
         let create_request = Request::builder()
@@ -316,7 +308,7 @@ mod test_list_api_keys {
         let app = TestApp::new().await.unwrap();
         let creator1 = UserFixture::creator(&app).await.unwrap();
         let creator2 = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Creator 1 creates a key
         let create_request = Request::builder()
@@ -360,7 +352,7 @@ mod test_get_api_key {
     async fn test_get_api_key_success() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create a key
         let create_request = Request::builder()
@@ -407,7 +399,7 @@ mod test_get_api_key {
     async fn test_get_api_key_not_found() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::GET)
@@ -427,7 +419,7 @@ mod test_get_api_key {
         let app = TestApp::new().await.unwrap();
         let creator1 = UserFixture::creator(&app).await.unwrap();
         let creator2 = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Creator 1 creates a key
         let create_request = Request::builder()
@@ -469,7 +461,7 @@ mod test_update_api_key {
     async fn test_update_api_key_name() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create a key
         let create_request = Request::builder()
@@ -514,7 +506,7 @@ mod test_update_api_key {
     async fn test_update_api_key_empty_name_rejected() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create a key
         let create_request = Request::builder()
@@ -554,7 +546,7 @@ mod test_update_api_key {
         let app = TestApp::new().await.unwrap();
         let creator1 = UserFixture::creator(&app).await.unwrap();
         let creator2 = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Creator 1 creates a key
         let create_request = Request::builder()
@@ -597,7 +589,7 @@ mod test_revoke_api_key {
     async fn test_revoke_api_key_success() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create a key
         let create_request = Request::builder()
@@ -652,7 +644,7 @@ mod test_revoke_api_key {
     async fn test_revoke_already_revoked_key() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create and revoke a key
         let create_request = Request::builder()
@@ -700,7 +692,7 @@ mod test_revoke_api_key {
         let app = TestApp::new().await.unwrap();
         let creator1 = UserFixture::creator(&app).await.unwrap();
         let creator2 = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Creator 1 creates a key
         let create_request = Request::builder()
@@ -738,7 +730,7 @@ mod test_revoke_api_key {
     async fn test_revoke_nonexistent_key() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         let request = Request::builder()
             .method(Method::DELETE)
@@ -757,7 +749,7 @@ mod test_revoke_api_key {
     async fn test_update_revoked_key_blocked() {
         let app = TestApp::new().await.unwrap();
         let creator = UserFixture::creator(&app).await.unwrap();
-        let router = create_test_router(&app).await;
+        let router = app.test_router();
 
         // Create and revoke a key
         let create_request = Request::builder()
