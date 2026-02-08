@@ -1,6 +1,8 @@
--- Migration: 002_job_sequence_functions.sql
--- Description: Add sequence generation and job constraint functions
--- Depends on: 001_initial_schema.sql
+-- Migration: 002_functions.sql
+-- Description: Add sequence generation, job constraints, status transitions,
+--              project status automation, retention policies, URN validation,
+--              API key constraints, and utility functions
+-- Depends on: 001_schema.sql
 
 -- ============================================================================
 -- SEQUENCE FUNCTIONS FOR JOB EVENTS
@@ -336,7 +338,7 @@ BEGIN
         (SELECT COUNT(*) FROM projects WHERE team_id = team_uuid)::BIGINT,
         (SELECT COUNT(*) FROM jobs WHERE owner LIKE 'framecast:team:' || team_uuid::text || '%'
          AND status IN ('queued', 'processing'))::BIGINT,
-        (SELECT COALESCE(SUM(net_credits), 0) FROM usage
+        (SELECT COALESCE(SUM(credits_used - credits_refunded), 0) FROM usage
          WHERE owner LIKE 'framecast:team:' || team_uuid::text || '%')::BIGINT;
 END;
 $$ LANGUAGE plpgsql;
@@ -368,7 +370,3 @@ IS 'Get current job status distribution for monitoring';
 COMMENT ON FUNCTION get_team_stats(
     UUID
 ) IS 'Get team statistics for dashboard display';
-
--- ============================================================================
--- END OF MIGRATION
--- ============================================================================
