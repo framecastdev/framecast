@@ -213,6 +213,10 @@ Transitions:
   δ(pending, decline) = declined
   δ(pending, expire) = expired     [automatic when expires_at reached]
   δ(pending, revoke) = revoked
+
+Notes:
+  - resend_invitation does NOT change state; invitation remains pending
+  - It re-sends the email notification and extends expires_at by 7 days
 ```
 
 ## 6.5 WebhookDelivery.status State Machine

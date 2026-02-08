@@ -1,6 +1,6 @@
 //! Transactional free functions for Teams domain (Zero2Prod pattern)
 
-use crate::domain::entities::{Membership, MembershipRole, UserTier};
+use crate::domain::entities::{Membership, MembershipRole, Team, UserTier};
 use framecast_common::RepositoryError;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -75,4 +75,31 @@ pub async fn mark_invitation_accepted_tx(
         return Err(RepositoryError::NotFound);
     }
     Ok(())
+}
+
+/// Create a team within an existing transaction.
+///
+/// Uses runtime `query_as` to avoid SQLX offline cache requirements.
+pub async fn create_team_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    team: &Team,
+) -> std::result::Result<Team, sqlx::Error> {
+    let created: Team = sqlx::query_as(
+        r#"
+        INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at
+        "#,
+    )
+    .bind(team.id)
+    .bind(&team.name)
+    .bind(&team.slug)
+    .bind(team.credits)
+    .bind(team.ephemeral_storage_bytes)
+    .bind(&team.settings)
+    .bind(team.created_at)
+    .bind(team.updated_at)
+    .fetch_one(&mut **transaction)
+    .await?;
+    Ok(created)
 }

@@ -2,7 +2,7 @@
 
 use crate::domain::entities::{Invitation, InvitationRole};
 use crate::domain::state::InvitationState;
-use framecast_common::Result;
+use framecast_common::{RepositoryError, Result};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -109,7 +109,7 @@ impl InvitationRepository {
 
     /// Mark invitation as accepted
     pub async fn mark_accepted(&self, invitation_id: Uuid) -> Result<()> {
-        sqlx::query!(
+        let result = sqlx::query!(
             r#"
             UPDATE invitations
             SET accepted_at = NOW()
@@ -120,12 +120,15 @@ impl InvitationRepository {
         .execute(&self.pool)
         .await?;
 
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound.into());
+        }
         Ok(())
     }
 
     /// Decline invitation (invitee-initiated)
     pub async fn decline(&self, invitation_id: Uuid) -> Result<()> {
-        sqlx::query!(
+        let result = sqlx::query!(
             r#"
             UPDATE invitations
             SET declined_at = NOW()
@@ -136,12 +139,15 @@ impl InvitationRepository {
         .execute(&self.pool)
         .await?;
 
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound.into());
+        }
         Ok(())
     }
 
     /// Revoke invitation (admin-initiated)
     pub async fn revoke(&self, invitation_id: Uuid) -> Result<()> {
-        sqlx::query!(
+        let result = sqlx::query!(
             r#"
             UPDATE invitations
             SET revoked_at = NOW()
@@ -152,6 +158,9 @@ impl InvitationRepository {
         .execute(&self.pool)
         .await?;
 
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound.into());
+        }
         Ok(())
     }
 
@@ -281,8 +290,9 @@ impl InvitationRepository {
             "#,
             invitation_id
         )
-        .fetch_one(&self.pool)
-        .await?;
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(RepositoryError::NotFound)?;
 
         Ok(updated)
     }
