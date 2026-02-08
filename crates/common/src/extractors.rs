@@ -15,14 +15,13 @@ use crate::Error;
 /// Replaces `Json<T>` + manual `.validate()` calls in handlers.
 /// Requires `T: DeserializeOwned + Validate`.
 ///
-/// Deserialization failures preserve axum's native `JsonRejection` (422).
-/// Validation failures return `Error::Validation` (400).
+/// All input errors (deserialization + validation) return 400.
 #[derive(Debug)]
 pub struct ValidatedJson<T>(pub T);
 
-/// Rejection type for `ValidatedJson` that preserves the original status codes:
-/// - JSON deserialization errors → 422 (from axum's `JsonRejection`)
-/// - Validation errors → 400 (from `Error::Validation`)
+/// Rejection type for `ValidatedJson`:
+/// - JSON deserialization errors → 400 (via `Error::Validation`)
+/// - Validation errors → 400 (via `Error::Validation`)
 #[derive(Debug)]
 pub enum ValidatedJsonRejection {
     Json(JsonRejection),
@@ -32,7 +31,7 @@ pub enum ValidatedJsonRejection {
 impl IntoResponse for ValidatedJsonRejection {
     fn into_response(self) -> Response {
         match self {
-            ValidatedJsonRejection::Json(e) => e.into_response(),
+            ValidatedJsonRejection::Json(e) => Error::Validation(e.body_text()).into_response(),
             ValidatedJsonRejection::Validation(e) => e.into_response(),
         }
     }
@@ -92,19 +91,19 @@ mod tests {
         let req = json_request("not json");
         let result = ValidatedJson::<TestPayload>::from_request(req, &()).await;
         let err = result.unwrap_err();
-        // Malformed JSON triggers axum's JsonSyntaxError → 400
+        // Malformed JSON → 400
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
     async fn test_validated_json_wrong_type() {
-        // Valid JSON but wrong structure triggers axum's JsonDataError → 422
+        // Valid JSON but wrong structure → 400
         let req = json_request(r#"{"name": 123}"#);
         let result = ValidatedJson::<TestPayload>::from_request(req, &()).await;
         let err = result.unwrap_err();
         let response = err.into_response();
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
