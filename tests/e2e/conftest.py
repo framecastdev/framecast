@@ -177,7 +177,53 @@ async def seed_users(test_config: E2EConfig):
         yield SeededUsers(owner=owner, invitee=invitee)
 
         # Cleanup: TRUNCATE bypasses FK constraints and INV-T2 trigger
-        await conn.execute("TRUNCATE invitations, memberships, teams, users CASCADE")
+        await conn.execute(
+            "TRUNCATE message_artifacts, messages, artifacts, conversations, "
+            "api_keys, invitations, memberships, teams, users CASCADE"
+        )
+    finally:
+        await conn.close()
+
+
+# System asset seeding for E2E tests
+@pytest.fixture
+async def seed_system_assets(test_config: E2EConfig):
+    """Seed system assets into the database for E2E tests."""
+    database_url = os.environ.get("DATABASE_URL", test_config.database_url)
+    conn = await asyncpg.connect(database_url)
+    try:
+        assets = [
+            ("asset_sfx_whoosh_01", "sfx", "Whoosh 01", "audio/mpeg", 2048),
+            ("asset_ambient_rain_01", "ambient", "Rain 01", "audio/mpeg", 4096),
+            ("asset_music_chill_01", "music", "Chill 01", "audio/mpeg", 8192),
+            (
+                "asset_transition_fade_01",
+                "transition",
+                "Fade 01",
+                "video/mp4",
+                16384,
+            ),
+        ]
+        for asset_id, category, name, content_type, size_bytes in assets:
+            await conn.execute(
+                """
+                INSERT INTO system_assets
+                    (id, category, name, description, s3_key, content_type,
+                     size_bytes, tags, created_at)
+                VALUES ($1, $2::system_asset_category, $3, $4, $5, $6, $7, $8, NOW())
+                ON CONFLICT (id) DO NOTHING
+                """,
+                asset_id,
+                category,
+                name,
+                f"Test {name}",
+                f"system-assets/{category}/{asset_id}",
+                content_type,
+                size_bytes,
+                ["test"],
+            )
+        yield assets
+        await conn.execute("TRUNCATE system_assets CASCADE")
     finally:
         await conn.close()
 
@@ -223,6 +269,39 @@ class TestDataFactory:
             "settings": {"default_resolution": "1920x1080", "webhook_url": fake.url()},
         }
 
+    @staticmethod
+    def conversation_data(
+        model: str = "test-model",
+        title: str | None = None,
+        system_prompt: str | None = None,
+    ) -> dict[str, Any]:
+        """Generate valid conversation creation data."""
+        data: dict[str, Any] = {"model": model}
+        if title is not None:
+            data["title"] = title
+        if system_prompt is not None:
+            data["system_prompt"] = system_prompt
+        return data
+
+    @staticmethod
+    def storyboard_data(
+        spec: dict[str, Any] | None = None,
+        owner: str | None = None,
+        project_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Generate valid storyboard creation data."""
+        data: dict[str, Any] = {"spec": spec if spec is not None else {"scenes": []}}
+        if owner is not None:
+            data["owner"] = owner
+        if project_id is not None:
+            data["project_id"] = project_id
+        return data
+
+    @staticmethod
+    def message_data(content: str = "Hello, how are you?") -> dict[str, Any]:
+        """Generate valid message send data."""
+        return {"content": content}
+
 
 @pytest.fixture
 def test_data_factory() -> TestDataFactory:
@@ -247,6 +326,57 @@ def assert_credits_non_negative(credits: int) -> None:
     assert credits >= 0, f"Credits cannot be negative: {credits}"
 
 
+# Helper functions for multi-step E2E flows
+async def create_conversation(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    model: str = "test-model",
+    title: str | None = None,
+    system_prompt: str | None = None,
+) -> dict[str, Any]:
+    """Create a conversation and return the response JSON."""
+    data = TestDataFactory.conversation_data(model, title, system_prompt)
+    resp = await client.post("/v1/conversations", json=data, headers=headers)
+    assert resp.status_code == 201, (
+        f"create_conversation failed: {resp.status_code} {resp.text}"
+    )
+    return resp.json()
+
+
+async def send_message(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    conversation_id: str,
+    content: str = "Hello",
+) -> dict[str, Any]:
+    """Send a message and return the response JSON (user_message + assistant_message)."""
+    resp = await client.post(
+        f"/v1/conversations/{conversation_id}/messages",
+        json=TestDataFactory.message_data(content),
+        headers=headers,
+    )
+    assert resp.status_code == 200, (
+        f"send_message failed: {resp.status_code} {resp.text}"
+    )
+    return resp.json()
+
+
+async def create_storyboard(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    spec: dict[str, Any] | None = None,
+    owner: str | None = None,
+    project_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a storyboard artifact and return the response JSON."""
+    data = TestDataFactory.storyboard_data(spec, owner, project_id)
+    resp = await client.post("/v1/artifacts/storyboards", json=data, headers=headers)
+    assert resp.status_code == 201, (
+        f"create_storyboard failed: {resp.status_code} {resp.text}"
+    )
+    return resp.json()
+
+
 # Export commonly used fixtures and utilities
 __all__ = [
     "E2EConfig",
@@ -256,7 +386,11 @@ __all__ = [
     "http_client",
     "localstack_email_client",
     "seed_users",
+    "seed_system_assets",
     "test_data_factory",
     "TestDataFactory",
     "assert_credits_non_negative",
+    "create_conversation",
+    "send_message",
+    "create_storyboard",
 ]

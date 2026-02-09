@@ -40,6 +40,11 @@ markers = [
     "security: security validation tests",
     "invitation: invitation workflow tests",
     "error_handling: error handling and edge case tests",
+    "artifacts: artifact CRUD tests",
+    "system_assets: system asset catalog tests",
+    "conversations: conversation lifecycle tests",
+    "messages: message send/list tests",
+    "cross_domain: cross-domain interaction tests",
 ]
 
 [tool.coverage.run]

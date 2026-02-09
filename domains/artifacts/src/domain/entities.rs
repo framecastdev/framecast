@@ -373,7 +373,7 @@ pub struct SystemAsset {
     pub s3_key: String,
     pub content_type: String,
     pub size_bytes: i64,
-    pub tags: Json<Vec<String>>,
+    pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -422,7 +422,7 @@ impl SystemAsset {
             s3_key,
             content_type,
             size_bytes,
-            tags: Json(tags),
+            tags,
             created_at: Utc::now(),
         })
     }
@@ -867,7 +867,7 @@ mod tests {
 
         assert_eq!(asset.id, "asset_sfx_whoosh_01");
         assert_eq!(asset.name, "whoosh_01");
-        assert_eq!(asset.tags.0, vec!["wind", "whoosh"]);
+        assert_eq!(asset.tags, vec!["wind", "whoosh"]);
     }
 
     #[test]
@@ -911,7 +911,7 @@ mod tests {
             s3_key: "key".to_string(),
             content_type: "audio/wav".to_string(),
             size_bytes: 1024,
-            tags: Json(vec![]),
+            tags: vec![],
             created_at: Utc::now(),
         };
         assert!(asset.validate().is_err());
@@ -928,7 +928,7 @@ mod tests {
             s3_key: "key".to_string(),
             content_type: "audio/wav".to_string(),
             size_bytes: 1024,
-            tags: Json(vec![]),
+            tags: vec![],
             created_at: Utc::now(),
         };
         assert!(valid_asset.validate().is_ok());
@@ -951,7 +951,7 @@ mod tests {
             s3_key: "key".to_string(),
             content_type: "audio/wav".to_string(),
             size_bytes: 1024,
-            tags: Json(vec![]),
+            tags: vec![],
             created_at: Utc::now(),
         };
         assert!(base.validate().is_ok());

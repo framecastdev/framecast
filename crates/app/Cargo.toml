@@ -21,7 +21,10 @@ path = "src/bin/local.rs"
 # Domain crates
 framecast-auth.workspace = true
 framecast-teams.workspace = true
+framecast-artifacts.workspace = true
+framecast-conversations.workspace = true
 framecast-email.workspace = true
+framecast-llm.workspace = true
 
 # Core dependencies
 tokio.workspace = true

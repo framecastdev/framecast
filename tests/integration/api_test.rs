@@ -1,12 +1,16 @@
 //! API endpoint integration tests
 //!
-//! Tests for all teams-domain API endpoints: users, teams, memberships, api_keys, auth, invariants.
+//! Tests for all domain API endpoints: teams, artifacts, conversations, messages.
 
 mod api_keys;
+mod artifacts;
 mod auth;
 #[allow(dead_code)]
 mod common;
+mod conversations;
 mod invariants;
 mod memberships;
+mod messages;
+mod system_assets;
 mod teams;
 mod users;
