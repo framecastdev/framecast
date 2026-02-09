@@ -1109,7 +1109,7 @@ Operation: estimate_spec(spec: JSONB, user_id: UUID, owner?: URN) → EstimateRe
 
 ## 8.13 Endpoint Mapping Table
 
-### Implemented Endpoints (40 total)
+### Implemented Endpoints (42 total)
 
 #### Infrastructure (2 endpoints)
 
@@ -1148,34 +1148,36 @@ Operation: estimate_spec(spec: JSONB, user_id: UUID, owner?: URN) → EstimateRe
 | 26 | DELETE | `/v1/auth/keys/:id` | AuthUser | `api_keys::revoke_api_key` |
 | 27 | GET | `/v1/auth/whoami` | AnyAuth | `auth::whoami` |
 
-#### Artifacts Domain — `framecast-artifacts` (6 endpoints)
+#### Artifacts Domain — `framecast-artifacts` (8 endpoints)
 
 | # | Method | Path | Auth | Handler |
 |---|--------|------|------|---------|
 | 28 | GET | `/v1/artifacts` | AnyAuth | `artifacts::list_artifacts` |
 | 29 | GET | `/v1/artifacts/:id` | AnyAuth | `artifacts::get_artifact` |
 | 30 | POST | `/v1/artifacts/storyboards` | AnyAuth | `artifacts::create_storyboard` |
-| 31 | DELETE | `/v1/artifacts/:id` | AnyAuth | `artifacts::delete_artifact` |
-| 32 | GET | `/v1/system-assets` | AnyAuth | `system_assets::list_system_assets` |
-| 33 | GET | `/v1/system-assets/:id` | AnyAuth | `system_assets::get_system_asset` |
+| 31 | POST | `/v1/artifacts/characters` | AnyAuth | `artifacts::create_character` |
+| 32 | POST | `/v1/artifacts/:id/render` | AnyAuth | `artifacts::render_artifact` |
+| 33 | DELETE | `/v1/artifacts/:id` | AnyAuth | `artifacts::delete_artifact` |
+| 34 | GET | `/v1/system-assets` | AnyAuth | `system_assets::list_system_assets` |
+| 35 | GET | `/v1/system-assets/:id` | AnyAuth | `system_assets::get_system_asset` |
 
 #### Conversations Domain — `framecast-conversations` (7 endpoints)
 
 | # | Method | Path | Auth | Handler |
 |---|--------|------|------|---------|
-| 34 | GET | `/v1/conversations` | AnyAuth | `conversations::list_conversations` |
-| 35 | POST | `/v1/conversations` | AnyAuth | `conversations::create_conversation` |
-| 36 | GET | `/v1/conversations/:id` | AnyAuth | `conversations::get_conversation` |
-| 37 | PATCH | `/v1/conversations/:id` | AnyAuth | `conversations::update_conversation` |
-| 38 | DELETE | `/v1/conversations/:id` | AnyAuth | `conversations::delete_conversation` |
-| 39 | POST | `/v1/conversations/:id/messages` | AnyAuth | `messages::send_message` |
-| 40 | GET | `/v1/conversations/:id/messages` | AnyAuth | `messages::list_messages` |
+| 36 | GET | `/v1/conversations` | AnyAuth | `conversations::list_conversations` |
+| 37 | POST | `/v1/conversations` | AnyAuth | `conversations::create_conversation` |
+| 38 | GET | `/v1/conversations/:id` | AnyAuth | `conversations::get_conversation` |
+| 39 | PATCH | `/v1/conversations/:id` | AnyAuth | `conversations::update_conversation` |
+| 40 | DELETE | `/v1/conversations/:id` | AnyAuth | `conversations::delete_conversation` |
+| 41 | POST | `/v1/conversations/:id/messages` | AnyAuth | `messages::send_message` |
+| 42 | GET | `/v1/conversations/:id/messages` | AnyAuth | `messages::list_messages` |
 
 #### Auth Extractor Summary
 
 | Extractor | Accepts | Count | Domains |
 |-----------|---------|-------|---------|
-| `AnyAuth` | JWT or API key | 13 | Artifacts (4), System Assets (2), Conversations (5), Messages (2), Auth (1) |
+| `AnyAuth` | JWT or API key | 15 | Artifacts (6), System Assets (2), Conversations (5), Messages (2), Auth (1) |
 | `AuthUser` | JWT only | 11 | Users (4), Invitation accept/decline (2), API Keys (5) |
 | `CreatorUser` | JWT + tier=creator | 14 | Teams (5), Memberships (3), Invitations management (4), Leave (1), List members (1) |
 | None | Public | 2 | Infrastructure (`/`, `/health`) |
@@ -1408,7 +1410,7 @@ Operation: list_artifacts(user_id: UUID, filters: ArtifactFilters?) → Page<Art
   ArtifactFilters:
     owner?: URN
     project_id?: UUID
-    kind?: {storyboard | image | audio | video}
+    kind?: {storyboard | character | image | audio | video}
     source?: {upload | conversation | job}
     status?: {pending | ready | failed}
     limit?: Integer (1-100, default 20)
@@ -1459,6 +1461,57 @@ Operation: create_storyboard(user_id: UUID, params: CreateStoryboardParams) → 
     - Storyboard artifacts are created with status = 'ready' immediately
     - Spec is NOT validated against rendering rules (use validate_spec separately)
     - If project_id is set, owner must match project's team (INV-X6)
+
+Operation: create_character(user_id: UUID, params: CreateCharacterParams) → Artifact
+  Pre:  ∃ u ∈ User : u.id = user_id
+        ∧ valid_json(params.spec)
+        ∧ params.spec.prompt IS NOT NULL ∧ LENGTH(TRIM(params.spec.prompt)) > 0
+        ∧ (params.owner IS NULL ∨ user_can_use_owner_urn(user_id, params.owner))
+        ∧ (params.project_id IS NULL ∨ (
+            ∃ p ∈ Project : p.id = params.project_id
+            ∧ ∃ m ∈ Membership : m.team_id = p.team_id ∧ m.user_id = user_id
+                ∧ m.role ∈ {owner, admin, member}
+          ))
+  Post: Artifact created with:
+          id = uuid()
+          owner = params.owner ?? 'framecast:user:' || user_id
+          created_by = user_id
+          project_id = params.project_id
+          kind = 'character'
+          status = 'ready'
+          source = params.source ?? 'upload'
+          spec = params.spec
+          conversation_id = params.conversation_id
+
+  CreateCharacterParams:
+    spec: JSONB! (must contain non-empty "prompt" string; optional "name" string)
+    owner?: URN
+    project_id?: UUID
+    source?: {upload | conversation}
+    conversation_id?: UUID (required if source = 'conversation')
+
+  Notes:
+    - Character artifacts are created with status = 'ready' immediately (spec-based, no file upload)
+    - spec must contain a "prompt" field with a non-empty string (INV-ART-CHAR)
+    - If project_id is set, owner must match project's team (INV-X6)
+
+Operation: render_artifact(artifact_id: UUID, user_id: UUID) → Artifact
+  Pre:  ∃ a ∈ Artifact : a.id = artifact_id
+        ∧ user_can_access_owner(user_id, a.owner)
+        ∧ a.kind = 'character'
+  Post: New Artifact created with:
+          id = uuid()
+          owner = a.owner
+          created_by = user_id
+          kind = 'image'
+          status = 'pending'
+          source = 'job'
+
+  Notes:
+    - Only character artifacts can be rendered (other kinds → 400)
+    - Creates a new image artifact in 'pending' status
+    - Returns 201 with the new image artifact
+    - Actual rendering is deferred to a background pipeline (stub for now)
 
 Operation: create_upload_url(user_id: UUID, params: UploadParams) → {artifact: Artifact, upload_url: String}
   Pre:  ∃ u ∈ User : u.id = user_id
