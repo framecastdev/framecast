@@ -139,7 +139,7 @@ pub async fn get_api_key(
     let key = state
         .repos
         .api_keys
-        .find(key_id)
+        .get_by_id(key_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to get API key: {}", e)))?
         .ok_or_else(|| Error::NotFound("API key not found".to_string()))?;
@@ -224,7 +224,7 @@ pub async fn update_api_key(
     let existing = state
         .repos
         .api_keys
-        .find(key_id)
+        .get_by_id(key_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to find API key: {}", e)))?
         .ok_or_else(|| Error::NotFound("API key not found".to_string()))?;
@@ -255,7 +255,7 @@ pub async fn revoke_api_key(
     let existing = state
         .repos
         .api_keys
-        .find(key_id)
+        .get_by_id(key_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to find API key: {}", e)))?
         .ok_or_else(|| Error::NotFound("API key not found".to_string()))?;

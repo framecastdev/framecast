@@ -97,8 +97,8 @@ impl InvitationRepository {
         Ok(())
     }
 
-    /// Find all invitations for a team, optionally filtered by derived state
-    pub async fn find_by_team(
+    /// List all invitations for a team, optionally filtered by derived state
+    pub async fn list_by_team(
         &self,
         team_id: Uuid,
         state_filter: Option<InvitationState>,

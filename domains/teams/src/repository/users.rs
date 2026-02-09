@@ -15,8 +15,8 @@ impl UserRepository {
         Self { pool }
     }
 
-    /// Find user by ID
-    pub async fn find(&self, id: Uuid) -> Result<Option<User>> {
+    /// Get user by ID
+    pub async fn get_by_id(&self, id: Uuid) -> Result<Option<User>> {
         let user = sqlx::query_as!(
             User,
             r#"

@@ -72,7 +72,7 @@ pub async fn get_profile(
     let user = state
         .repos
         .users
-        .find(auth_context.user.id)
+        .get_by_id(auth_context.user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to load user: {}", e)))?
         .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
