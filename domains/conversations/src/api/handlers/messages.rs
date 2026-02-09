@@ -87,12 +87,9 @@ pub async fn send_message(
         ));
     }
 
-    // Get next sequence number
-    let user_seq = state.repos.messages.next_sequence(conversation_id).await?;
-
-    // Create user message
+    // Create user message (sequence is assigned atomically by the DB)
     let user_msg =
-        crate::domain::entities::Message::new_user(conversation_id, req.content.clone(), user_seq)?;
+        crate::domain::entities::Message::new_user(conversation_id, req.content.clone(), 1)?;
 
     let created_user_msg = state.repos.messages.create(&user_msg).await?;
 
@@ -122,18 +119,18 @@ pub async fn send_message(
     };
 
     // Call LLM
-    let llm_response = state
-        .llm
-        .complete(llm_request)
-        .await
-        .map_err(|e| Error::Internal(format!("LLM error: {}", e)))?;
+    let llm_response = state.llm.complete(llm_request).await.map_err(|e| match e {
+        framecast_llm::LlmError::RateLimit => {
+            Error::RateLimit("LLM rate limit exceeded".to_string())
+        }
+        other => Error::Internal(format!("LLM error: {}", other)),
+    })?;
 
-    // Create assistant message
-    let assistant_seq = user_seq + 1;
+    // Create assistant message (sequence is assigned atomically by the DB)
     let assistant_msg = crate::domain::entities::Message::new_assistant(
         conversation_id,
         llm_response.content,
-        assistant_seq,
+        1, // placeholder — DB computes actual sequence atomically
         llm_response.model,
         llm_response.input_tokens,
         llm_response.output_tokens,

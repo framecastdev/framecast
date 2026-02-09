@@ -74,17 +74,18 @@ impl From<crate::domain::entities::Artifact> for ArtifactResponse {
     }
 }
 
-/// List artifacts for the authenticated user
+/// List artifacts for the authenticated user (personal + team-owned)
 pub async fn list_artifacts(
     AnyAuth(ctx): AnyAuth,
     State(state): State<ArtifactsState>,
 ) -> Result<Json<Vec<ArtifactResponse>>> {
-    let owner = Urn::user(ctx.user.id);
-    let artifacts = state
-        .repos
-        .artifacts
-        .list_by_owner(&owner.to_string())
-        .await?;
+    // Collect all owner URNs the user can access: personal + each team
+    let mut owner_urns = vec![Urn::user(ctx.user.id).to_string()];
+    for membership in &ctx.memberships {
+        owner_urns.push(Urn::team(membership.team_id).to_string());
+    }
+
+    let artifacts = state.repos.artifacts.list_by_owners(&owner_urns).await?;
 
     let responses: Vec<ArtifactResponse> = artifacts.into_iter().map(Into::into).collect();
     Ok(Json(responses))
@@ -103,9 +104,12 @@ pub async fn get_artifact(
         .await?
         .ok_or_else(|| Error::NotFound("Artifact not found".to_string()))?;
 
-    // Authorization: check ownership
-    let user_urn = Urn::user(ctx.user.id).to_string();
-    if artifact.owner != user_urn {
+    // Authorization: check ownership (personal or team membership)
+    let owner_urn = artifact
+        .owner
+        .parse::<Urn>()
+        .map_err(|_| Error::Internal("Invalid owner URN on artifact".to_string()))?;
+    if !ctx.can_access_urn(&owner_urn) {
         return Err(Error::NotFound("Artifact not found".to_string()));
     }
 
@@ -119,9 +123,17 @@ pub async fn create_storyboard(
     ValidatedJson(req): ValidatedJson<CreateStoryboardRequest>,
 ) -> Result<(StatusCode, Json<ArtifactResponse>)> {
     let owner = match req.owner {
-        Some(ref urn_str) => urn_str
-            .parse::<Urn>()
-            .map_err(|_| Error::Validation("Invalid owner URN".to_string()))?,
+        Some(ref urn_str) => {
+            let urn = urn_str
+                .parse::<Urn>()
+                .map_err(|_| Error::Validation("Invalid owner URN".to_string()))?;
+            if !ctx.can_access_urn(&urn) {
+                return Err(Error::Authorization(
+                    "You do not have access to the specified owner".to_string(),
+                ));
+            }
+            urn
+        }
         None => Urn::user(ctx.user.id),
     };
 
@@ -163,9 +175,17 @@ pub async fn create_character(
     ValidatedJson(req): ValidatedJson<CreateCharacterRequest>,
 ) -> Result<(StatusCode, Json<ArtifactResponse>)> {
     let owner = match req.owner {
-        Some(ref urn_str) => urn_str
-            .parse::<Urn>()
-            .map_err(|_| Error::Validation("Invalid owner URN".to_string()))?,
+        Some(ref urn_str) => {
+            let urn = urn_str
+                .parse::<Urn>()
+                .map_err(|_| Error::Validation("Invalid owner URN".to_string()))?;
+            if !ctx.can_access_urn(&urn) {
+                return Err(Error::Authorization(
+                    "You do not have access to the specified owner".to_string(),
+                ));
+            }
+            urn
+        }
         None => Urn::user(ctx.user.id),
     };
 
@@ -197,9 +217,12 @@ pub async fn render_artifact(
         .await?
         .ok_or_else(|| Error::NotFound("Artifact not found".to_string()))?;
 
-    // Authorization: check ownership
-    let user_urn = Urn::user(ctx.user.id).to_string();
-    if artifact.owner != user_urn {
+    // Authorization: check ownership (personal or team membership)
+    let owner_urn = artifact
+        .owner
+        .parse::<Urn>()
+        .map_err(|_| Error::Internal("Invalid owner URN on artifact".to_string()))?;
+    if !ctx.can_access_urn(&owner_urn) {
         return Err(Error::NotFound("Artifact not found".to_string()));
     }
 
@@ -245,9 +268,12 @@ pub async fn delete_artifact(
         .await?
         .ok_or_else(|| Error::NotFound("Artifact not found".to_string()))?;
 
-    // Authorization: check ownership
-    let user_urn = Urn::user(ctx.user.id).to_string();
-    if artifact.owner != user_urn {
+    // Authorization: check ownership (personal or team membership)
+    let owner_urn = artifact
+        .owner
+        .parse::<Urn>()
+        .map_err(|_| Error::Internal("Invalid owner URN on artifact".to_string()))?;
+    if !ctx.can_access_urn(&owner_urn) {
         return Err(Error::NotFound("Artifact not found".to_string()));
     }
 

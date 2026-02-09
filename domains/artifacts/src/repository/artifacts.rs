@@ -56,6 +56,27 @@ impl ArtifactRepository {
         Ok(artifacts)
     }
 
+    /// List artifacts by multiple owner URNs (user + teams)
+    pub async fn list_by_owners(&self, owners: &[String]) -> Result<Vec<Artifact>> {
+        let artifacts = sqlx::query_as::<_, Artifact>(
+            r#"
+            SELECT id, owner, created_by, project_id,
+                   kind, status, source,
+                   filename, s3_key, content_type, size_bytes,
+                   spec, conversation_id, source_job_id,
+                   metadata, created_at, updated_at
+            FROM artifacts
+            WHERE owner = ANY($1)
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(owners)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(artifacts)
+    }
+
     /// List artifacts by project ID
     pub async fn list_by_project(&self, project_id: Uuid) -> Result<Vec<Artifact>> {
         let artifacts = sqlx::query_as::<_, Artifact>(
