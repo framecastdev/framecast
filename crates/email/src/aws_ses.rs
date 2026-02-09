@@ -163,6 +163,10 @@ impl EmailService for SesEmailService {
     fn default_from(&self) -> String {
         self.config.default_from.clone()
     }
+
+    fn app_base_url(&self) -> &str {
+        &self.config.app_base_url
+    }
 }
 
 #[cfg(test)]
@@ -178,6 +182,7 @@ mod tests {
             aws_endpoint_url: Some("http://localhost:4566".to_string()),
             default_from: "test@framecast.app".to_string(),
             enabled: true,
+            app_base_url: "https://framecast.app".to_string(),
         };
 
         // This will work with LocalStack but may fail with real AWS without credentials

@@ -49,6 +49,10 @@ impl EmailService for MockEmailService {
     fn default_from(&self) -> String {
         "invitations@framecast.app".to_string()
     }
+
+    fn app_base_url(&self) -> &str {
+        "https://framecast.app"
+    }
 }
 
 #[cfg(test)]
