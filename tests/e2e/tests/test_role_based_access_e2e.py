@@ -105,7 +105,7 @@ class TestRoleBasedAccessE2E:
             json={"email": "owner-invite@test.com", "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
 
         # List invitations
         resp = await http_client.get(
@@ -147,7 +147,7 @@ class TestRoleBasedAccessE2E:
             json={"email": "admin-test-invite@test.com", "role": "member"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
 
         # Delete FAIL
         resp = await http_client.delete(
@@ -608,7 +608,7 @@ class TestRoleBasedAccessE2E:
                 json={"email": "admin-a-invite@test.com", "role": "member"},
                 headers=invitee.auth_headers(),
             )
-            assert resp.status_code == 200
+            assert resp.status_code == 201
 
             # Viewer cannot invite in team B
             resp = await http_client.post(

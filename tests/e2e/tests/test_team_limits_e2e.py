@@ -223,7 +223,7 @@ class TestTeamLimitsE2E:
                 json={"email": f"invite-limit-{i}@test.com", "role": "member"},
                 headers=owner.auth_headers(),
             )
-            assert resp.status_code == 200, (
+            assert resp.status_code == 201, (
                 f"Invitation {i} failed: {resp.status_code} {resp.text}"
             )
 
@@ -262,7 +262,7 @@ class TestTeamLimitsE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         first_inv_id = resp.json()["id"]
 
         for i in range(49):
@@ -271,7 +271,7 @@ class TestTeamLimitsE2E:
                 json={"email": f"accepted-limit-{i}@test.com", "role": "member"},
                 headers=owner.auth_headers(),
             )
-            assert resp.status_code == 200
+            assert resp.status_code == 201
 
         # At limit — accept one
         resp = await http_client.post(
@@ -286,8 +286,8 @@ class TestTeamLimitsE2E:
             json={"email": "accepted-freed@test.com", "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200, (
-            f"Expected 200 after accepting freed slot, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, (
+            f"Expected 201 after accepting freed slot, got {resp.status_code} {resp.text}"
         )
 
     async def test_tl9_revoked_invitation_frees_pending_slot(
@@ -314,7 +314,7 @@ class TestTeamLimitsE2E:
                 json={"email": f"revoke-limit-{i}@test.com", "role": "member"},
                 headers=owner.auth_headers(),
             )
-            assert resp.status_code == 200
+            assert resp.status_code == 201
             invitation_ids.append(resp.json()["id"])
 
         # At limit — revoke one
@@ -330,8 +330,8 @@ class TestTeamLimitsE2E:
             json={"email": "revoke-freed@test.com", "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200, (
-            f"Expected 200 after revoking freed slot, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, (
+            f"Expected 201 after revoking freed slot, got {resp.status_code} {resp.text}"
         )
 
     async def test_tl10_slug_single_character_allowed(

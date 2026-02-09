@@ -57,7 +57,7 @@ class TestDataIntegrityE2E:
             json={"email": invitee.email, "role": "admin"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv_id = resp.json()["id"]
         resp = await http_client.post(
             f"/v1/invitations/{inv_id}/accept",
@@ -152,7 +152,7 @@ class TestDataIntegrityE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv_id = resp.json()["id"]
 
         resp = await http_client.post(
@@ -236,7 +236,7 @@ class TestDataIntegrityE2E:
             json={"email": "temporal@test.com", "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv = resp.json()
 
         if "expires_at" in inv and "created_at" in inv:
@@ -287,7 +287,7 @@ class TestDataIntegrityE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv_id = resp.json()["id"]
 
         # Delete team
