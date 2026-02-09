@@ -185,6 +185,7 @@ mod tests {
         assert_eq!(urn.as_str(), format!("framecast:user:{}", user_id));
         assert!(urn.is_user());
         assert!(!urn.is_team());
+        assert!(!urn.is_artifact());
 
         match urn.parse().unwrap() {
             UrnComponents::User { user_id: parsed_id } => assert_eq!(parsed_id, user_id),
@@ -200,6 +201,7 @@ mod tests {
         assert_eq!(urn.as_str(), format!("framecast:team:{}", team_id));
         assert!(urn.is_team());
         assert!(!urn.is_user());
+        assert!(!urn.is_artifact());
 
         match urn.parse().unwrap() {
             UrnComponents::Team { team_id: parsed_id } => assert_eq!(parsed_id, team_id),
