@@ -1109,95 +1109,125 @@ Operation: estimate_spec(spec: JSONB, user_id: UUID, owner?: URN) → EstimateRe
 
 ## 8.13 Endpoint Mapping Table
 
-| Operation | HTTP Method | Endpoint |
-|-----------|-------------|----------|
-| **User** | | |
-| get_profile | GET | /v1/account |
-| signup | POST | /v1/auth/signup |
-| update_profile | PATCH | /v1/account |
-| upgrade | POST | /v1/account/upgrade |
-| delete_user | DELETE | /v1/account |
-| **Team** | | |
-| list_teams | GET | /v1/teams |
-| get_team | GET | /v1/teams/:id |
-| create_team | POST | /v1/teams |
-| update_team | PATCH | /v1/teams/:id |
-| delete_team | DELETE | /v1/teams/:id |
-| **Membership** | | |
-| list_members | GET | /v1/teams/:id/members |
-| update_member_role | PATCH | /v1/teams/:id/members/:user_id |
-| remove_member | DELETE | /v1/teams/:id/members/:user_id |
-| leave_team | POST | /v1/teams/:id/leave |
-| **Invitation** | | |
-| list_invitations | GET | /v1/teams/:id/invitations |
-| create_invitation | POST | /v1/teams/:id/invitations |
-| revoke_invitation | DELETE | /v1/teams/:id/invitations/:id |
-| resend_invitation | POST | /v1/teams/:id/invitations/:id/resend |
-| accept_invitation | POST | /v1/invitations/:id/accept |
-| decline_invitation | POST | /v1/invitations/:id/decline |
-| **Project** | | |
-| list_projects | GET | /v1/teams/:id/projects |
-| get_project | GET | /v1/projects/:id |
-| create_project | POST | /v1/teams/:id/projects |
-| update_project | PATCH | /v1/projects/:id |
-| update_spec | PUT | /v1/projects/:id/spec |
-| delete_project | DELETE | /v1/projects/:id |
-| archive_project | POST | /v1/projects/:id/archive |
-| unarchive_project | POST | /v1/projects/:id/unarchive |
-| **Job** | | |
-| list_jobs | GET | /v1/jobs |
-| get_job | GET | /v1/jobs/:id |
-| create_ephemeral_job | POST | /v1/generate |
-| create_project_job | POST | /v1/projects/:id/render |
-| get_job_events | GET | /v1/jobs/:id/events |
-| cancel_job | POST | /v1/jobs/:id/cancel |
-| delete_job | DELETE | /v1/jobs/:id |
-| clone_job | POST | /v1/jobs/:id/clone |
-| **Estimation** | | |
-| validate_spec | POST | /v1/spec/validate |
-| estimate_spec | POST | /v1/spec/estimate |
-| **Asset** | | |
-| list_assets | GET | /v1/assets |
-| get_asset | GET | /v1/assets/:id |
-| create_upload_url | POST | /v1/assets/upload-url |
-| confirm_upload | POST | /v1/assets/:id/confirm |
-| delete_asset | DELETE | /v1/assets/:id |
-| **System Asset** | | |
-| list_system_assets | GET | /v1/system-assets |
-| get_system_asset | GET | /v1/system-assets/:id |
-| **Webhook** | | |
-| list_webhooks | GET | /v1/teams/:id/webhooks |
-| get_webhook | GET | /v1/webhooks/:id |
-| create_webhook | POST | /v1/teams/:id/webhooks |
-| update_webhook | PATCH | /v1/webhooks/:id |
-| delete_webhook | DELETE | /v1/webhooks/:id |
-| rotate_webhook_secret | POST | /v1/webhooks/:id/rotate-secret |
-| test_webhook | POST | /v1/webhooks/:id/test |
-| list_webhook_deliveries | GET | /v1/webhooks/:id/deliveries |
-| retry_webhook_delivery | POST | /v1/webhook-deliveries/:id/retry |
-| **API Key** | | |
-| list_api_keys | GET | /v1/auth/keys |
-| get_api_key | GET | /v1/auth/keys/:id |
-| create_api_key | POST | /v1/auth/keys |
-| update_api_key | PATCH | /v1/auth/keys/:id |
-| revoke_api_key | DELETE | /v1/auth/keys/:id |
-| **Conversation** | | |
-| list_conversations | GET | /v1/conversations |
-| get_conversation | GET | /v1/conversations/:id |
-| create_conversation | POST | /v1/conversations |
-| update_conversation | PATCH | /v1/conversations/:id |
-| delete_conversation | DELETE | /v1/conversations/:id |
-| send_message | POST | /v1/conversations/:id/messages |
-| list_messages | GET | /v1/conversations/:id/messages |
-| **Artifact** | | |
-| list_artifacts | GET | /v1/artifacts |
-| get_artifact | GET | /v1/artifacts/:id |
-| create_storyboard | POST | /v1/artifacts/storyboard |
-| create_upload_url | POST | /v1/artifacts/upload-url |
-| confirm_upload | POST | /v1/artifacts/:id/confirm |
-| delete_artifact | DELETE | /v1/artifacts/:id |
-| **Auth** | | |
-| whoami | GET | /v1/auth/whoami |
+### Implemented Endpoints (40 total)
+
+#### Infrastructure (2 endpoints)
+
+| # | Method | Path | Domain | Auth | Handler |
+|---|--------|------|--------|------|---------|
+| 1 | GET | `/` | — | None | root (version string) |
+| 2 | GET | `/health` | — | None | `health_check` |
+
+#### Teams Domain — `framecast-teams` (25 endpoints)
+
+| # | Method | Path | Auth | Handler |
+|---|--------|------|------|---------|
+| 3 | GET | `/v1/account` | AuthUser | `users::get_profile` |
+| 4 | PATCH | `/v1/account` | AuthUser | `users::update_profile` |
+| 5 | DELETE | `/v1/account` | AuthUser | `users::delete_account` |
+| 6 | POST | `/v1/account/upgrade` | AuthUser | `users::upgrade_tier` |
+| 7 | GET | `/v1/teams` | CreatorUser | `teams::list_teams` |
+| 8 | POST | `/v1/teams` | CreatorUser | `teams::create_team` |
+| 9 | GET | `/v1/teams/:id` | CreatorUser | `teams::get_team` |
+| 10 | PATCH | `/v1/teams/:id` | CreatorUser | `teams::update_team` |
+| 11 | DELETE | `/v1/teams/:id` | CreatorUser | `teams::delete_team` |
+| 12 | GET | `/v1/teams/:id/members` | CreatorUser | `memberships::list_members` |
+| 13 | PATCH | `/v1/teams/:id/members/:uid` | CreatorUser | `memberships::update_member_role` |
+| 14 | DELETE | `/v1/teams/:id/members/:uid` | CreatorUser | `memberships::remove_member` |
+| 15 | POST | `/v1/teams/:id/leave` | CreatorUser | `memberships::leave_team` |
+| 16 | GET | `/v1/teams/:id/invitations` | CreatorUser | `memberships::list_invitations` |
+| 17 | POST | `/v1/teams/:id/invitations` | CreatorUser | `memberships::invite_member` |
+| 18 | DELETE | `/v1/teams/:id/invitations/:iid` | CreatorUser | `memberships::revoke_invitation` |
+| 19 | POST | `/v1/teams/:id/invitations/:iid/resend` | CreatorUser | `memberships::resend_invitation` |
+| 20 | POST | `/v1/invitations/:id/accept` | AuthUser | `memberships::accept_invitation` |
+| 21 | POST | `/v1/invitations/:id/decline` | AuthUser | `memberships::decline_invitation` |
+| 22 | GET | `/v1/auth/keys` | AuthUser | `api_keys::list_api_keys` |
+| 23 | POST | `/v1/auth/keys` | AuthUser | `api_keys::create_api_key` |
+| 24 | GET | `/v1/auth/keys/:id` | AuthUser | `api_keys::get_api_key` |
+| 25 | PATCH | `/v1/auth/keys/:id` | AuthUser | `api_keys::update_api_key` |
+| 26 | DELETE | `/v1/auth/keys/:id` | AuthUser | `api_keys::revoke_api_key` |
+| 27 | GET | `/v1/auth/whoami` | AnyAuth | `auth::whoami` |
+
+#### Artifacts Domain — `framecast-artifacts` (6 endpoints)
+
+| # | Method | Path | Auth | Handler |
+|---|--------|------|------|---------|
+| 28 | GET | `/v1/artifacts` | AnyAuth | `artifacts::list_artifacts` |
+| 29 | GET | `/v1/artifacts/:id` | AnyAuth | `artifacts::get_artifact` |
+| 30 | POST | `/v1/artifacts/storyboards` | AnyAuth | `artifacts::create_storyboard` |
+| 31 | DELETE | `/v1/artifacts/:id` | AnyAuth | `artifacts::delete_artifact` |
+| 32 | GET | `/v1/system-assets` | AnyAuth | `system_assets::list_system_assets` |
+| 33 | GET | `/v1/system-assets/:id` | AnyAuth | `system_assets::get_system_asset` |
+
+#### Conversations Domain — `framecast-conversations` (7 endpoints)
+
+| # | Method | Path | Auth | Handler |
+|---|--------|------|------|---------|
+| 34 | GET | `/v1/conversations` | AnyAuth | `conversations::list_conversations` |
+| 35 | POST | `/v1/conversations` | AnyAuth | `conversations::create_conversation` |
+| 36 | GET | `/v1/conversations/:id` | AnyAuth | `conversations::get_conversation` |
+| 37 | PATCH | `/v1/conversations/:id` | AnyAuth | `conversations::update_conversation` |
+| 38 | DELETE | `/v1/conversations/:id` | AnyAuth | `conversations::delete_conversation` |
+| 39 | POST | `/v1/conversations/:id/messages` | AnyAuth | `messages::send_message` |
+| 40 | GET | `/v1/conversations/:id/messages` | AnyAuth | `messages::list_messages` |
+
+#### Auth Extractor Summary
+
+| Extractor | Accepts | Count | Domains |
+|-----------|---------|-------|---------|
+| `AnyAuth` | JWT or API key | 13 | Artifacts (4), System Assets (2), Conversations (5), Messages (2), Auth (1) |
+| `AuthUser` | JWT only | 11 | Users (4), Invitation accept/decline (2), API Keys (5) |
+| `CreatorUser` | JWT + tier=creator | 14 | Teams (5), Memberships (3), Invitations management (4), Leave (1), List members (1) |
+| None | Public | 2 | Infrastructure (`/`, `/health`) |
+
+---
+
+### Planned Endpoints (not yet implemented)
+
+The following endpoints are defined in the specification but not yet implemented.
+Their domain crates exist as stubs.
+
+| Operation | Method | Path | Domain | Auth (planned) |
+|-----------|--------|------|--------|----------------|
+| **Signup** | | | | |
+| signup | POST | `/v1/auth/signup` | Teams | — (Supabase Auth) |
+| **Project** | | | | |
+| list_projects | GET | `/v1/teams/:id/projects` | Projects | CreatorUser |
+| get_project | GET | `/v1/projects/:id` | Projects | CreatorUser |
+| create_project | POST | `/v1/teams/:id/projects` | Projects | CreatorUser |
+| update_project | PATCH | `/v1/projects/:id` | Projects | CreatorUser |
+| update_spec | PUT | `/v1/projects/:id/spec` | Projects | CreatorUser |
+| delete_project | DELETE | `/v1/projects/:id` | Projects | CreatorUser |
+| archive_project | POST | `/v1/projects/:id/archive` | Projects | CreatorUser |
+| unarchive_project | POST | `/v1/projects/:id/unarchive` | Projects | CreatorUser |
+| **Job** | | | | |
+| list_jobs | GET | `/v1/jobs` | Jobs | AnyAuth |
+| get_job | GET | `/v1/jobs/:id` | Jobs | AnyAuth |
+| create_ephemeral_job | POST | `/v1/generate` | Jobs | AnyAuth |
+| create_project_job | POST | `/v1/projects/:id/render` | Jobs | CreatorUser |
+| get_job_events | GET | `/v1/jobs/:id/events` | Jobs | AnyAuth |
+| cancel_job | POST | `/v1/jobs/:id/cancel` | Jobs | AnyAuth |
+| delete_job | DELETE | `/v1/jobs/:id` | Jobs | AnyAuth |
+| clone_job | POST | `/v1/jobs/:id/clone` | Jobs | AnyAuth |
+| **Estimation** | | | | |
+| validate_spec | POST | `/v1/spec/validate` | Jobs | AnyAuth |
+| estimate_spec | POST | `/v1/spec/estimate` | Jobs | AnyAuth |
+| **Asset** | | | | |
+| list_assets | GET | `/v1/assets` | Artifacts | AnyAuth |
+| get_asset | GET | `/v1/assets/:id` | Artifacts | AnyAuth |
+| create_upload_url | POST | `/v1/assets/upload-url` | Artifacts | AnyAuth |
+| confirm_upload | POST | `/v1/assets/:id/confirm` | Artifacts | AnyAuth |
+| delete_asset | DELETE | `/v1/assets/:id` | Artifacts | AnyAuth |
+| **Webhook** | | | | |
+| list_webhooks | GET | `/v1/teams/:id/webhooks` | Webhooks | CreatorUser |
+| get_webhook | GET | `/v1/webhooks/:id` | Webhooks | CreatorUser |
+| create_webhook | POST | `/v1/teams/:id/webhooks` | Webhooks | CreatorUser |
+| update_webhook | PATCH | `/v1/webhooks/:id` | Webhooks | CreatorUser |
+| delete_webhook | DELETE | `/v1/webhooks/:id` | Webhooks | CreatorUser |
+| rotate_webhook_secret | POST | `/v1/webhooks/:id/rotate-secret` | Webhooks | CreatorUser |
+| test_webhook | POST | `/v1/webhooks/:id/test` | Webhooks | CreatorUser |
+| list_webhook_deliveries | GET | `/v1/webhooks/:id/deliveries` | Webhooks | CreatorUser |
+| retry_webhook_delivery | POST | `/v1/webhook-deliveries/:id/retry` | Webhooks | CreatorUser |
 
 ---
 
@@ -1513,4 +1543,4 @@ Operation: delete_artifact(artifact_id: UUID, user_id: UUID) → void
 ---
 
 **Document Version: 0.0.1-SNAPSHOT
-**Last Updated**: 2025-01-30
+**Last Updated**: 2025-02-09
