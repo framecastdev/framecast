@@ -119,6 +119,22 @@ mod tests {
     }
 
     #[test]
+    fn test_error_conflict_status_code() {
+        assert_eq!(
+            Error::Conflict("test".to_string()).status_code(),
+            StatusCode::CONFLICT
+        );
+    }
+
+    #[test]
+    fn test_error_internal_status_code() {
+        assert_eq!(
+            Error::Internal("test".to_string()).status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
     fn test_error_codes() {
         assert_eq!(
             Error::Authentication("test".to_string()).error_code(),
@@ -127,6 +143,11 @@ mod tests {
         assert_eq!(
             Error::Validation("test".to_string()).error_code(),
             "VALIDATION_ERROR"
+        );
+        assert_eq!(Error::Conflict("test".to_string()).error_code(), "CONFLICT");
+        assert_eq!(
+            Error::Internal("test".to_string()).error_code(),
+            "INTERNAL_ERROR"
         );
     }
 }

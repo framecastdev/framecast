@@ -152,7 +152,7 @@ impl Artifact {
             created_by,
             project_id,
             kind: ArtifactKind::Storyboard,
-            status: ArtifactStatus::default(),
+            status: ArtifactStatus::Ready,
             source: ArtifactSource::Upload,
             filename: None,
             s3_key: None,
@@ -547,7 +547,7 @@ mod tests {
         assert_eq!(artifact.owner, owner.to_string());
         assert_eq!(artifact.created_by, created_by);
         assert_eq!(artifact.kind, ArtifactKind::Storyboard);
-        assert_eq!(artifact.status, ArtifactStatus::Pending);
+        assert_eq!(artifact.status, ArtifactStatus::Ready);
         assert_eq!(artifact.source, ArtifactSource::Upload);
         assert_eq!(artifact.spec, Some(spec));
         assert!(artifact.filename.is_none());
@@ -734,14 +734,27 @@ mod tests {
     }
 
     // ========================================================================
-    // Artifact — state transitions
+    // Artifact — state transitions (use media artifacts which start Pending)
     // ========================================================================
+
+    /// Helper: create a media artifact in Pending state for transition tests
+    fn pending_media_artifact() -> Artifact {
+        Artifact::new_media(
+            Urn::user(Uuid::new_v4()),
+            Uuid::new_v4(),
+            None,
+            ArtifactKind::Image,
+            "test.jpg".to_string(),
+            "uploads/test.jpg".to_string(),
+            "image/jpeg".to_string(),
+            1024,
+        )
+        .unwrap()
+    }
 
     #[test]
     fn test_mark_ready() {
-        let owner = Urn::user(Uuid::new_v4());
-        let mut artifact =
-            Artifact::new_storyboard(owner, Uuid::new_v4(), None, json!({})).unwrap();
+        let mut artifact = pending_media_artifact();
         assert_eq!(artifact.status, ArtifactStatus::Pending);
 
         artifact.mark_ready().unwrap();
@@ -750,9 +763,7 @@ mod tests {
 
     #[test]
     fn test_mark_failed() {
-        let owner = Urn::user(Uuid::new_v4());
-        let mut artifact =
-            Artifact::new_storyboard(owner, Uuid::new_v4(), None, json!({})).unwrap();
+        let mut artifact = pending_media_artifact();
 
         artifact.mark_failed().unwrap();
         assert_eq!(artifact.status, ArtifactStatus::Failed);
@@ -760,9 +771,7 @@ mod tests {
 
     #[test]
     fn test_retry_from_failed() {
-        let owner = Urn::user(Uuid::new_v4());
-        let mut artifact =
-            Artifact::new_storyboard(owner, Uuid::new_v4(), None, json!({})).unwrap();
+        let mut artifact = pending_media_artifact();
 
         artifact.mark_failed().unwrap();
         artifact.retry().unwrap();
@@ -771,18 +780,26 @@ mod tests {
 
     #[test]
     fn test_cannot_retry_from_ready() {
-        let owner = Urn::user(Uuid::new_v4());
-        let mut artifact =
-            Artifact::new_storyboard(owner, Uuid::new_v4(), None, json!({})).unwrap();
+        let mut artifact = pending_media_artifact();
 
         artifact.mark_ready().unwrap();
         assert!(artifact.retry().is_err());
     }
 
     #[test]
-    fn test_can_transition() {
+    fn test_storyboard_starts_ready_is_terminal() {
         let owner = Urn::user(Uuid::new_v4());
         let artifact = Artifact::new_storyboard(owner, Uuid::new_v4(), None, json!({})).unwrap();
+
+        assert_eq!(artifact.status, ArtifactStatus::Ready);
+        assert!(!artifact.can_transition(&ArtifactEvent::Complete));
+        assert!(!artifact.can_transition(&ArtifactEvent::Fail));
+        assert!(!artifact.can_transition(&ArtifactEvent::Retry));
+    }
+
+    #[test]
+    fn test_can_transition() {
+        let artifact = pending_media_artifact();
 
         assert!(artifact.can_transition(&ArtifactEvent::Complete));
         assert!(artifact.can_transition(&ArtifactEvent::Fail));
