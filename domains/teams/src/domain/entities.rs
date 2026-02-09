@@ -1992,4 +1992,26 @@ mod tests {
         };
         assert!(key99.validate().is_ok());
     }
+
+    // ========================================================================
+    // Mutant-killing tests: ApiKey::compute_hash_prefix
+    // ========================================================================
+
+    #[test]
+    fn test_api_key_compute_hash_prefix_deterministic_and_correct() {
+        let prefix1 = ApiKey::compute_hash_prefix("sk_live_test123");
+        let prefix2 = ApiKey::compute_hash_prefix("sk_live_test123");
+
+        // Same input produces same output
+        assert_eq!(prefix1, prefix2);
+
+        // Prefix is exactly 16 hex characters
+        assert_eq!(prefix1.len(), 16);
+        assert!(prefix1.chars().all(|c| c.is_ascii_hexdigit()));
+
+        // Different input produces different prefix
+        let prefix3 = ApiKey::compute_hash_prefix("sk_live_other456");
+        assert_ne!(prefix1, prefix3);
+        assert_eq!(prefix3.len(), 16);
+    }
 }
