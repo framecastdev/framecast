@@ -38,7 +38,7 @@ impl From<crate::domain::entities::SystemAsset> for SystemAssetResponse {
             s3_key: sa.s3_key,
             content_type: sa.content_type,
             size_bytes: sa.size_bytes,
-            tags: sa.tags.0,
+            tags: sa.tags,
             created_at: sa.created_at,
         }
     }
