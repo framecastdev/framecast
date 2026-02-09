@@ -58,8 +58,8 @@ impl TeamRepository {
         Ok(updated_team)
     }
 
-    /// Get teams for user with roles
-    pub async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<(Team, MembershipRole)>> {
+    /// List teams for user with roles
+    pub async fn list_by_user(&self, user_id: Uuid) -> Result<Vec<(Team, MembershipRole)>> {
         let rows = sqlx::query!(
             r#"
             SELECT t.id, t.name, t.slug, t.credits, t.ephemeral_storage_bytes,

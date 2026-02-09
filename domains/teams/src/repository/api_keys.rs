@@ -49,8 +49,8 @@ impl ApiKeyRepository {
         Self { pool }
     }
 
-    /// Find API key by ID
-    pub async fn find(&self, id: Uuid) -> Result<Option<AuthenticatedApiKey>> {
+    /// Get API key by ID
+    pub async fn get_by_id(&self, id: Uuid) -> Result<Option<AuthenticatedApiKey>> {
         let row = sqlx::query_as!(
             ApiKeyRow,
             r#"

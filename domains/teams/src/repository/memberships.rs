@@ -50,8 +50,8 @@ impl MembershipRepository {
         Ok(row)
     }
 
-    /// Get all memberships for a team with user details
-    pub async fn find_by_team(&self, team_id: Uuid) -> Result<Vec<MembershipWithUser>> {
+    /// List all memberships for a team with user details
+    pub async fn list_by_team(&self, team_id: Uuid) -> Result<Vec<MembershipWithUser>> {
         let memberships = sqlx::query_as!(
             MembershipWithUser,
             r#"

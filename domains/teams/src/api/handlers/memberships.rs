@@ -137,7 +137,7 @@ pub async fn list_members(
     let members = state
         .repos
         .memberships
-        .find_by_team(team_id)
+        .list_by_team(team_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to list members: {}", e)))?;
 
@@ -609,7 +609,7 @@ pub async fn list_invitations(
     let invitations = state
         .repos
         .invitations
-        .find_by_team(team_id, query.state)
+        .list_by_team(team_id, query.state)
         .await
         .map_err(|e| Error::Internal(format!("Failed to list invitations: {}", e)))?;
 
@@ -842,7 +842,7 @@ pub async fn remove_member(
     let target_user = state
         .repos
         .users
-        .find(member_user_id)
+        .get_by_id(member_user_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to get user: {}", e)))?
         .ok_or_else(|| Error::NotFound("User not found".to_string()))?;
@@ -1018,7 +1018,7 @@ pub async fn update_member_role(
     let target_user = state
         .repos
         .users
-        .find(member_user_id)
+        .get_by_id(member_user_id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to get user: {}", e)))?
         .ok_or_else(|| Error::Internal("User not found for membership".to_string()))?;

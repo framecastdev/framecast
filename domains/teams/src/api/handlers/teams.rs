@@ -113,7 +113,7 @@ pub async fn list_teams(
     let teams_with_roles = state
         .repos
         .teams
-        .find_by_user(user.id)
+        .list_by_user(user.id)
         .await
         .map_err(|e| Error::Internal(format!("Failed to list teams: {}", e)))?;
 
