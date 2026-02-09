@@ -55,7 +55,7 @@ class TestInvitationEmailE2E:
             json={"email": invitee_email, "role": role},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         invitation_id = resp.json()["id"]
 
         return team_id, invitation_id, actual_name
@@ -272,7 +272,7 @@ class TestInvitationEmailE2E:
             json={"email": invitee.email, "role": "admin"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
 
         # Wait for new email
         await asyncio.sleep(2)

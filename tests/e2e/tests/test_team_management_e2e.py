@@ -61,7 +61,7 @@ class TestTeamManagementE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200, f"Invite failed: {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, f"Invite failed: {resp.status_code} {resp.text}"
         invitation_id = resp.json()["id"]
 
         # Step 4: Invitee accepts invitation

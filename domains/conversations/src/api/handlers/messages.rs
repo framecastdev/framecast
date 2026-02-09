@@ -2,6 +2,7 @@
 
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     Json,
 };
 use chrono::{DateTime, Utc};
@@ -66,7 +67,7 @@ pub async fn send_message(
     State(state): State<ConversationsState>,
     Path(conversation_id): Path<Uuid>,
     ValidatedJson(req): ValidatedJson<SendMessageRequest>,
-) -> Result<Json<SendMessageResponse>> {
+) -> Result<(StatusCode, Json<SendMessageResponse>)> {
     // Verify conversation exists and belongs to user
     let conv = state
         .repos
@@ -147,10 +148,13 @@ pub async fn send_message(
         .update_message_stats(conversation_id, 2)
         .await?;
 
-    Ok(Json(SendMessageResponse {
-        user_message: created_user_msg.into(),
-        assistant_message: created_assistant_msg.into(),
-    }))
+    Ok((
+        StatusCode::CREATED,
+        Json(SendMessageResponse {
+            user_message: created_user_msg.into(),
+            assistant_message: created_assistant_msg.into(),
+        }),
+    ))
 }
 
 /// List messages for a conversation

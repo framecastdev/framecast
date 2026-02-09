@@ -59,7 +59,7 @@ mod test_invite_member {
 
         let response = router.oneshot(request).await.unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -254,7 +254,7 @@ mod test_invite_member {
             .unwrap();
 
         let response1 = router.clone().oneshot(request1).await.unwrap();
-        assert_eq!(response1.status(), StatusCode::OK);
+        assert_eq!(response1.status(), StatusCode::CREATED);
 
         let body1 = axum::body::to_bytes(response1.into_body(), usize::MAX)
             .await
@@ -280,7 +280,7 @@ mod test_invite_member {
             .unwrap();
 
         let response2 = router.oneshot(request2).await.unwrap();
-        assert_eq!(response2.status(), StatusCode::OK);
+        assert_eq!(response2.status(), StatusCode::CREATED);
 
         let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
             .await
@@ -334,7 +334,7 @@ mod test_invite_member {
                 .unwrap();
 
             let response = router.clone().oneshot(request).await.unwrap();
-            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.status(), StatusCode::CREATED);
         }
 
         // 51st invitation should fail
@@ -464,7 +464,7 @@ mod test_invite_member {
             .unwrap();
 
         let response1 = router.clone().oneshot(request1).await.unwrap();
-        assert_eq!(response1.status(), StatusCode::OK);
+        assert_eq!(response1.status(), StatusCode::CREATED);
 
         // Test: Admin cannot invite owner
         let invite_owner_data = json!({
@@ -1635,7 +1635,7 @@ mod test_invitation_lifecycle_with_email {
             .unwrap();
 
         let invite_response = router.clone().oneshot(invite_request).await.unwrap();
-        assert_eq!(invite_response.status(), StatusCode::OK);
+        assert_eq!(invite_response.status(), StatusCode::CREATED);
 
         let invite_body = axum::body::to_bytes(invite_response.into_body(), usize::MAX)
             .await
@@ -1955,7 +1955,7 @@ mod test_invitation_management {
                 .unwrap();
 
             let response = router.clone().oneshot(request).await.unwrap();
-            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.status(), StatusCode::CREATED);
         }
 
         // List invitations
@@ -2147,7 +2147,7 @@ mod test_invitation_management {
             .unwrap();
 
         let invite_response = router.clone().oneshot(invite_request).await.unwrap();
-        assert_eq!(invite_response.status(), StatusCode::OK);
+        assert_eq!(invite_response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(invite_response.into_body(), usize::MAX)
             .await
@@ -2505,7 +2505,7 @@ mod test_invitation_state_filter {
             .unwrap();
 
         let response = router.clone().oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         // List with state=pending should return the invitation
         let list_request = Request::builder()
@@ -2812,7 +2812,7 @@ mod test_membership_exotic_inputs {
 
         let response = router.oneshot(request).await.unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -2850,7 +2850,7 @@ mod test_membership_exotic_inputs {
         let response = router.oneshot(request).await.unwrap();
 
         // Should succeed — email addresses are case-insensitive per RFC
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -2922,7 +2922,7 @@ mod test_membership_exotic_inputs {
         let response = router.clone().oneshot(invite_request).await.unwrap();
         assert_eq!(
             response.status(),
-            StatusCode::OK,
+            StatusCode::CREATED,
             "Re-invite after leaving should succeed"
         );
 
@@ -3071,7 +3071,7 @@ mod test_membership_exotic_inputs {
             .unwrap();
 
         let response = router.clone().oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -3116,7 +3116,7 @@ mod test_membership_exotic_inputs {
         let response = router.oneshot(reinvite_request).await.unwrap();
         assert_eq!(
             response.status(),
-            StatusCode::OK,
+            StatusCode::CREATED,
             "Re-invite after decline should succeed"
         );
 

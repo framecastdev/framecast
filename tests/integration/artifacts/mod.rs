@@ -193,6 +193,49 @@ mod test_create_storyboard {
 
         app.cleanup().await.unwrap();
     }
+
+    #[tokio::test]
+    async fn test_create_storyboard_with_project_requires_team_owner() {
+        let app = ArtifactsTestApp::new().await.unwrap();
+        let user = app.create_test_user(UserTier::Starter).await.unwrap();
+        let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
+
+        // User-owned artifact with project_id should fail (INV-ART7)
+        let req = authed_request(
+            Method::POST,
+            "/v1/artifacts/storyboards",
+            &jwt,
+            Some(json!({
+                "spec": {"scenes": []},
+                "project_id": Uuid::new_v4().to_string()
+            })),
+        );
+
+        let resp = app.test_router().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_create_storyboard_missing_spec_returns_422() {
+        let app = ArtifactsTestApp::new().await.unwrap();
+        let user = app.create_test_user(UserTier::Starter).await.unwrap();
+        let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
+
+        // POST without spec field should fail with 422 (deserialization error)
+        let req = authed_request(
+            Method::POST,
+            "/v1/artifacts/storyboards",
+            &jwt,
+            Some(json!({})),
+        );
+
+        let resp = app.test_router().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        app.cleanup().await.unwrap();
+    }
 }
 
 // ART-I08 through ART-I16: List, Get, Delete artifact tests

@@ -272,7 +272,7 @@ pub async fn invite_member(
     State(state): State<TeamsState>,
     Path(team_id): Path<Uuid>,
     ValidatedJson(request): ValidatedJson<InviteMemberRequest>,
-) -> Result<Json<InvitationResponse>> {
+) -> Result<(StatusCode, Json<InvitationResponse>)> {
     let user = &auth_context.user;
 
     // INV-I7: Cannot invite yourself
@@ -407,7 +407,10 @@ pub async fn invite_member(
         .await
         .map_err(|e| Error::Internal(format!("Failed to send invitation email: {}", e)))?;
 
-    Ok(Json(InvitationResponse::from(created_invitation)))
+    Ok((
+        StatusCode::CREATED,
+        Json(InvitationResponse::from(created_invitation)),
+    ))
 }
 
 /// Accept a team invitation

@@ -479,7 +479,7 @@ class TestCrossDomainE2E:
             json={"content": "Hello via API key"},
             headers={"Authorization": f"Bearer {raw_key}"},
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
 
     @pytest.mark.skip(reason="Requires AnyAuth migration on system asset handlers")
     async def test_xd22_api_key_list_system_assets(

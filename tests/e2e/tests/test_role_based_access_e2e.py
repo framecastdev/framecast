@@ -48,7 +48,7 @@ class TestRoleBasedAccessE2E:
             json={"email": invitee.email, "role": role},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv_id = resp.json()["id"]
 
         resp = await http_client.post(
@@ -536,7 +536,7 @@ class TestRoleBasedAccessE2E:
             json={"email": owner.email, "role": "member"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv_id = resp.json()["id"]
 
         resp = await http_client.post(
@@ -594,7 +594,7 @@ class TestRoleBasedAccessE2E:
             headers=owner.auth_headers(),
         )
         # Might get 409 if already a member (invitee is creator and may have auto-team)
-        if resp.status_code == 200:
+        if resp.status_code == 201:
             inv_id = resp.json()["id"]
             resp = await http_client.post(
                 f"/v1/invitations/{inv_id}/accept",

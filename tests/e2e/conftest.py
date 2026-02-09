@@ -355,7 +355,7 @@ async def send_message(
         json=TestDataFactory.message_data(content),
         headers=headers,
     )
-    assert resp.status_code == 200, (
+    assert resp.status_code == 201, (
         f"send_message failed: {resp.status_code} {resp.text}"
     )
     return resp.json()
