@@ -51,6 +51,7 @@ impl AuthContext {
             Ok(UrnComponents::TeamUser { team_id, user_id }) => {
                 user_id == self.user.id && self.get_team_role(team_id).is_some()
             }
+            Ok(UrnComponents::Artifact { .. }) => false,
             Ok(UrnComponents::System { .. }) => false,
             Err(_) => false,
         }

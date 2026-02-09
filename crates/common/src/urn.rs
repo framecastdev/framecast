@@ -3,6 +3,7 @@
 //! Framecast uses URNs to identify and scope resources:
 //! - framecast:user:{user_id} - Personal resources
 //! - framecast:team:{team_id} - Team-shared resources
+//! - framecast:artifact:{artifact_id} - Artifact resources
 //! - framecast:{team_id}:{user_id} - Team-private resources
 //! - framecast:system:{category}:{name} - System assets
 
@@ -42,6 +43,11 @@ impl Urn {
         Urn(format!("framecast:{}:{}", team_id, user_id))
     }
 
+    /// Create an artifact URN
+    pub fn artifact(artifact_id: Uuid) -> Self {
+        Urn(format!("framecast:artifact:{}", artifact_id))
+    }
+
     /// Create a system asset URN
     pub fn system(category: &str, name: &str) -> Self {
         Urn(format!("framecast:system:{}:{}", category, name))
@@ -72,6 +78,13 @@ impl Urn {
                 let team_uuid = Uuid::parse_str(team_id)
                     .map_err(|_| Error::Validation("Invalid team UUID".to_string()))?;
                 Ok(UrnComponents::Team { team_id: team_uuid })
+            }
+            ["framecast", "artifact", artifact_id] => {
+                let artifact_uuid = Uuid::parse_str(artifact_id)
+                    .map_err(|_| Error::Validation("Invalid artifact UUID".to_string()))?;
+                Ok(UrnComponents::Artifact {
+                    artifact_id: artifact_uuid,
+                })
             }
             ["framecast", team_id, user_id] => {
                 let team_uuid = Uuid::parse_str(team_id)
@@ -118,6 +131,11 @@ impl Urn {
         matches!(self.parse(), Ok(UrnComponents::TeamUser { .. }))
     }
 
+    /// Check if this is an artifact URN
+    pub fn is_artifact(&self) -> bool {
+        matches!(self.parse(), Ok(UrnComponents::Artifact { .. }))
+    }
+
     /// Check if this is a system URN
     pub fn is_system(&self) -> bool {
         matches!(self.parse(), Ok(UrnComponents::System { .. }))
@@ -129,6 +147,7 @@ impl Urn {
 pub enum UrnComponents {
     User { user_id: Uuid },
     Team { team_id: Uuid },
+    Artifact { artifact_id: Uuid },
     TeamUser { team_id: Uuid, user_id: Uuid },
     System { category: String, name: String },
 }
@@ -166,6 +185,7 @@ mod tests {
         assert_eq!(urn.as_str(), format!("framecast:user:{}", user_id));
         assert!(urn.is_user());
         assert!(!urn.is_team());
+        assert!(!urn.is_artifact());
 
         match urn.parse().unwrap() {
             UrnComponents::User { user_id: parsed_id } => assert_eq!(parsed_id, user_id),
@@ -181,6 +201,7 @@ mod tests {
         assert_eq!(urn.as_str(), format!("framecast:team:{}", team_id));
         assert!(urn.is_team());
         assert!(!urn.is_user());
+        assert!(!urn.is_artifact());
 
         match urn.parse().unwrap() {
             UrnComponents::Team { team_id: parsed_id } => assert_eq!(parsed_id, team_id),
@@ -432,6 +453,93 @@ mod tests {
                 assert_eq!(name, long_name);
             }
             _ => panic!("Expected System component"),
+        }
+    }
+
+    // --- Artifact URN tests (URN-U1 through URN-U7) ---
+
+    #[test]
+    fn test_artifact_urn_creation() {
+        // URN-U1: Constructor produces correct format
+        let artifact_id = Uuid::new_v4();
+        let urn = Urn::artifact(artifact_id);
+        assert_eq!(urn.as_str(), format!("framecast:artifact:{}", artifact_id));
+    }
+
+    #[test]
+    fn test_artifact_urn_parse() {
+        // URN-U2: Parse extracts artifact_id correctly
+        let artifact_id = Uuid::new_v4();
+        let urn = Urn::artifact(artifact_id);
+
+        match urn.parse().unwrap() {
+            UrnComponents::Artifact {
+                artifact_id: parsed_id,
+            } => assert_eq!(parsed_id, artifact_id),
+            other => panic!("Expected Artifact component, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_artifact_urn_is_artifact() {
+        // URN-U3: is_artifact() returns true for artifact URN
+        let urn = Urn::artifact(Uuid::new_v4());
+        assert!(urn.is_artifact());
+    }
+
+    #[test]
+    fn test_artifact_urn_is_not_user() {
+        // URN-U4: is_user() returns false for artifact URN
+        let urn = Urn::artifact(Uuid::new_v4());
+        assert!(!urn.is_user());
+        assert!(!urn.is_team());
+        assert!(!urn.is_team_user());
+        assert!(!urn.is_system());
+    }
+
+    #[test]
+    fn test_artifact_urn_roundtrip() {
+        // URN-U5: Display + FromStr consistency
+        let artifact_id = Uuid::new_v4();
+        let urn = Urn::artifact(artifact_id);
+        let displayed = urn.to_string();
+        let parsed: Urn = displayed.parse().unwrap();
+        assert_eq!(parsed, urn);
+        assert!(parsed.is_artifact());
+    }
+
+    #[test]
+    fn test_artifact_urn_invalid_uuid() {
+        // URN-U6: Rejects non-UUID artifact ID
+        let result = Urn::new("framecast:artifact:not-a-uuid");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("Invalid artifact UUID"),
+            "Expected 'Invalid artifact UUID', got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_artifact_urn_does_not_match_team_user_fallback() {
+        // URN-U7: "artifact" is NOT parsed as a team_id in the fallback arm
+        let artifact_id = Uuid::new_v4();
+        let urn_str = format!("framecast:artifact:{}", artifact_id);
+        let urn = Urn::new(&urn_str).unwrap();
+
+        // Must be Artifact, not TeamUser
+        assert!(urn.is_artifact());
+        assert!(!urn.is_team_user());
+
+        match urn.parse().unwrap() {
+            UrnComponents::Artifact {
+                artifact_id: parsed_id,
+            } => assert_eq!(parsed_id, artifact_id),
+            other => panic!(
+                "Expected Artifact component (not TeamUser fallback), got {:?}",
+                other
+            ),
         }
     }
 }
