@@ -183,6 +183,7 @@ impl LlmService for AnthropicService {
             stop_reason: api_response
                 .stop_reason
                 .unwrap_or_else(|| "end_turn".to_string()),
+            artifacts: Vec::new(),
         })
     }
 

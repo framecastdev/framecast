@@ -24,6 +24,7 @@ pub enum ArtifactKind {
     Image,
     Audio,
     Video,
+    Character,
 }
 
 impl std::fmt::Display for ArtifactKind {
@@ -33,6 +34,7 @@ impl std::fmt::Display for ArtifactKind {
             ArtifactKind::Image => write!(f, "image"),
             ArtifactKind::Audio => write!(f, "audio"),
             ArtifactKind::Video => write!(f, "video"),
+            ArtifactKind::Character => write!(f, "character"),
         }
     }
 }
@@ -49,7 +51,7 @@ impl ArtifactKind {
             ArtifactKind::Image => &["image/jpeg", "image/png", "image/webp"],
             ArtifactKind::Audio => &["audio/mpeg", "audio/wav", "audio/ogg"],
             ArtifactKind::Video => &["video/mp4"],
-            ArtifactKind::Storyboard => &[],
+            ArtifactKind::Storyboard | ArtifactKind::Character => &[],
         }
     }
 }
@@ -169,6 +171,49 @@ impl Artifact {
         Ok(artifact)
     }
 
+    /// Create a new character artifact
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_character(
+        owner: Urn,
+        created_by: Uuid,
+        project_id: Option<Uuid>,
+        spec: serde_json::Value,
+        source: ArtifactSource,
+        conversation_id: Option<Uuid>,
+    ) -> Result<Self> {
+        // INV-ART-CHAR: Character spec must contain non-empty "prompt"
+        match spec.get("prompt").and_then(|v| v.as_str()) {
+            Some(prompt) if !prompt.trim().is_empty() => {}
+            _ => {
+                return Err(Error::Validation(
+                    "Character artifacts require spec with non-empty \"prompt\"".to_string(),
+                ));
+            }
+        }
+
+        let artifact = Self {
+            id: Uuid::new_v4(),
+            owner: owner.to_string(),
+            created_by,
+            project_id,
+            kind: ArtifactKind::Character,
+            status: ArtifactStatus::Ready,
+            source,
+            filename: None,
+            s3_key: None,
+            content_type: None,
+            size_bytes: None,
+            spec: Some(spec),
+            conversation_id,
+            source_job_id: None,
+            metadata: Json(serde_json::Value::Object(serde_json::Map::new())),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        artifact.validate()?;
+        Ok(artifact)
+    }
+
     /// Create a new media artifact (image, audio, video)
     #[allow(clippy::too_many_arguments)]
     pub fn new_media(
@@ -183,7 +228,7 @@ impl Artifact {
     ) -> Result<Self> {
         if !kind.is_media() {
             return Err(Error::Validation(
-                "Use new_storyboard() for storyboard artifacts".to_string(),
+                "Use new_storyboard() or new_character() for non-media artifacts".to_string(),
             ));
         }
 
@@ -286,11 +331,31 @@ impl Artifact {
             }
         }
 
-        // INV-ART2: Storyboard artifacts require spec
-        if self.kind == ArtifactKind::Storyboard && self.spec.is_none() {
-            return Err(Error::Validation(
-                "Storyboard artifacts require a spec".to_string(),
-            ));
+        // INV-ART2: Storyboard and character artifacts require spec
+        if matches!(
+            self.kind,
+            ArtifactKind::Storyboard | ArtifactKind::Character
+        ) && self.spec.is_none()
+        {
+            return Err(Error::Validation(format!(
+                "{} artifacts require a spec",
+                self.kind
+            )));
+        }
+
+        // INV-ART-CHAR: Character spec must contain non-empty "prompt"
+        if self.kind == ArtifactKind::Character {
+            if let Some(ref spec) = self.spec {
+                match spec.get("prompt").and_then(|v| v.as_str()) {
+                    Some(prompt) if !prompt.trim().is_empty() => {}
+                    _ => {
+                        return Err(Error::Validation(
+                            "Character artifacts require spec with non-empty \"prompt\""
+                                .to_string(),
+                        ));
+                    }
+                }
+            }
         }
 
         // INV-ART4: size_bytes constraints
@@ -462,6 +527,7 @@ mod tests {
         assert!(ArtifactKind::Image.is_media());
         assert!(ArtifactKind::Audio.is_media());
         assert!(ArtifactKind::Video.is_media());
+        assert!(!ArtifactKind::Character.is_media());
     }
 
     #[test]
@@ -476,6 +542,7 @@ mod tests {
         assert!(ArtifactKind::Video
             .allowed_content_types()
             .contains(&"video/mp4"));
+        assert!(ArtifactKind::Character.allowed_content_types().is_empty());
     }
 
     #[test]
@@ -484,6 +551,7 @@ mod tests {
         assert_eq!(ArtifactKind::Image.to_string(), "image");
         assert_eq!(ArtifactKind::Audio.to_string(), "audio");
         assert_eq!(ArtifactKind::Video.to_string(), "video");
+        assert_eq!(ArtifactKind::Character.to_string(), "character");
     }
 
     // ========================================================================
@@ -862,6 +930,131 @@ mod tests {
             Artifact::new_storyboard(owner.clone(), Uuid::new_v4(), None, json!({})).unwrap();
 
         assert_eq!(artifact.owner_urn().unwrap(), owner);
+    }
+
+    // ========================================================================
+    // Artifact — character creation
+    // ========================================================================
+
+    #[test]
+    fn test_character_creation() {
+        let owner = Urn::user(Uuid::new_v4());
+        let created_by = Uuid::new_v4();
+        let spec = json!({"prompt": "A brave warrior", "name": "Warrior"});
+
+        let artifact = Artifact::new_character(
+            owner.clone(),
+            created_by,
+            None,
+            spec.clone(),
+            ArtifactSource::Upload,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(artifact.owner, owner.to_string());
+        assert_eq!(artifact.created_by, created_by);
+        assert_eq!(artifact.kind, ArtifactKind::Character);
+        assert_eq!(artifact.status, ArtifactStatus::Ready);
+        assert_eq!(artifact.source, ArtifactSource::Upload);
+        assert_eq!(artifact.spec, Some(spec));
+        assert!(artifact.filename.is_none());
+        assert!(artifact.s3_key.is_none());
+    }
+
+    #[test]
+    fn test_character_missing_prompt_rejected() {
+        let owner = Urn::user(Uuid::new_v4());
+        let result = Artifact::new_character(
+            owner,
+            Uuid::new_v4(),
+            None,
+            json!({"name": "Test"}),
+            ArtifactSource::Upload,
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("prompt"));
+    }
+
+    #[test]
+    fn test_character_empty_prompt_rejected() {
+        let owner = Urn::user(Uuid::new_v4());
+        let result = Artifact::new_character(
+            owner,
+            Uuid::new_v4(),
+            None,
+            json!({"prompt": ""}),
+            ArtifactSource::Upload,
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("prompt"));
+    }
+
+    #[test]
+    fn test_character_whitespace_prompt_rejected() {
+        let owner = Urn::user(Uuid::new_v4());
+        let result = Artifact::new_character(
+            owner,
+            Uuid::new_v4(),
+            None,
+            json!({"prompt": "   "}),
+            ArtifactSource::Upload,
+            None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_character_with_conversation_source() {
+        let owner = Urn::user(Uuid::new_v4());
+        let conv_id = Uuid::new_v4();
+        let artifact = Artifact::new_character(
+            owner,
+            Uuid::new_v4(),
+            None,
+            json!({"prompt": "A hero"}),
+            ArtifactSource::Conversation,
+            Some(conv_id),
+        )
+        .unwrap();
+
+        assert_eq!(artifact.source, ArtifactSource::Conversation);
+        assert_eq!(artifact.conversation_id, Some(conv_id));
+    }
+
+    #[test]
+    fn test_character_conversation_source_without_id_rejected() {
+        let owner = Urn::user(Uuid::new_v4());
+        let result = Artifact::new_character(
+            owner,
+            Uuid::new_v4(),
+            None,
+            json!({"prompt": "A hero"}),
+            ArtifactSource::Conversation,
+            None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_character_starts_ready_is_terminal() {
+        let owner = Urn::user(Uuid::new_v4());
+        let artifact = Artifact::new_character(
+            owner,
+            Uuid::new_v4(),
+            None,
+            json!({"prompt": "Test"}),
+            ArtifactSource::Upload,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(artifact.status, ArtifactStatus::Ready);
+        assert!(!artifact.can_transition(&ArtifactEvent::Complete));
+        assert!(!artifact.can_transition(&ArtifactEvent::Fail));
+        assert!(!artifact.can_transition(&ArtifactEvent::Retry));
     }
 
     // ========================================================================
