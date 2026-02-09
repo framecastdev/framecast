@@ -32,7 +32,7 @@ async fn seed_system_asset(
     .bind(format!("system-assets/{}/{}", category, id))
     .bind("audio/mpeg")
     .bind(1024_i64)
-    .bind(serde_json::json!(["test"]))
+    .bind(&["test"] as &[&str])
     .execute(pool)
     .await?;
     Ok(())

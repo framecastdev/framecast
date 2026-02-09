@@ -571,13 +571,15 @@ mod test_conversation_constraints {
         .await
         .unwrap();
 
-        // Create artifact referencing this conversation
+        // Create artifact referencing this conversation (source=upload allows
+        // conversation_id to become NULL via ON DELETE SET NULL without violating
+        // the source_conversation_consistency constraint)
         let artifact_id = Uuid::new_v4();
         sqlx::query(
             r#"
             INSERT INTO artifacts (id, owner, created_by, kind, status, source,
                 spec, conversation_id, created_at, updated_at)
-            VALUES ($1, $2, $3, 'storyboard', 'pending', 'conversation', '{}', $4, NOW(), NOW())
+            VALUES ($1, $2, $3, 'storyboard', 'pending', 'upload', '{}', $4, NOW(), NOW())
             "#,
         )
         .bind(artifact_id)
