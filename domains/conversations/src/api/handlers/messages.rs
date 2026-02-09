@@ -7,7 +7,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use framecast_auth::AnyAuth;
-use framecast_common::{Error, Result, ValidatedJson};
+use framecast_common::{Error, Result, Urn, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -141,6 +141,64 @@ pub async fn send_message(
 
     let created_assistant_msg = state.repos.messages.create(&assistant_msg).await?;
 
+    // Create artifacts from LLM response (if any)
+    let mut assistant_response: MessageResponse = created_assistant_msg.into();
+    if !llm_response.artifacts.is_empty() {
+        let pool = state.repos.pool();
+        let mut tx = pool
+            .begin()
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to begin transaction: {}", e)))?;
+
+        let user_urn = Urn::user(ctx.user.id);
+        let mut artifact_refs = Vec::new();
+
+        for llm_artifact in &llm_response.artifacts {
+            if llm_artifact.kind == "character" {
+                let artifact = framecast_artifacts::Artifact::new_character(
+                    user_urn.clone(),
+                    ctx.user.id,
+                    None,
+                    llm_artifact.spec.clone(),
+                    framecast_artifacts::ArtifactSource::Conversation,
+                    Some(conversation_id),
+                )?;
+
+                let created_artifact =
+                    framecast_artifacts::create_artifact_tx(&mut tx, &artifact).await?;
+
+                // Insert into message_artifacts join table
+                sqlx::query(
+                    "INSERT INTO message_artifacts (message_id, artifact_id) VALUES ($1, $2)",
+                )
+                .bind(assistant_response.id)
+                .bind(created_artifact.id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| Error::Internal(format!("Failed to link message artifact: {}", e)))?;
+
+                artifact_refs.push(serde_json::json!({
+                    "id": created_artifact.id,
+                    "kind": created_artifact.kind.to_string(),
+                }));
+            }
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| Error::Internal(format!("Failed to commit transaction: {}", e)))?;
+
+        if !artifact_refs.is_empty() {
+            let artifacts_json = serde_json::Value::Array(artifact_refs);
+            state
+                .repos
+                .messages
+                .update_artifacts(assistant_response.id, artifacts_json.clone())
+                .await?;
+            assistant_response.artifacts = Some(artifacts_json);
+        }
+    }
+
     // Update conversation stats (2 new messages)
     state
         .repos
@@ -152,7 +210,7 @@ pub async fn send_message(
         StatusCode::CREATED,
         Json(SendMessageResponse {
             user_message: created_user_msg.into(),
-            assistant_message: created_assistant_msg.into(),
+            assistant_message: assistant_response,
         }),
     ))
 }

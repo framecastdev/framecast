@@ -136,6 +136,102 @@ pub async fn create_storyboard(
     Ok((StatusCode::CREATED, Json(created.into())))
 }
 
+/// Request for creating a character artifact
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateCharacterRequest {
+    /// Character spec (must contain non-empty "prompt")
+    pub spec: serde_json::Value,
+
+    /// Artifact source (defaults to Upload)
+    #[serde(default)]
+    pub source: Option<ArtifactSource>,
+
+    /// Optional conversation ID (required if source=conversation)
+    pub conversation_id: Option<Uuid>,
+
+    /// Optional project ID (must be team-owned)
+    pub project_id: Option<Uuid>,
+
+    /// Owner URN (defaults to user URN)
+    pub owner: Option<String>,
+}
+
+/// Create a character artifact
+pub async fn create_character(
+    AnyAuth(ctx): AnyAuth,
+    State(state): State<ArtifactsState>,
+    ValidatedJson(req): ValidatedJson<CreateCharacterRequest>,
+) -> Result<(StatusCode, Json<ArtifactResponse>)> {
+    let owner = match req.owner {
+        Some(ref urn_str) => urn_str
+            .parse::<Urn>()
+            .map_err(|_| Error::Validation("Invalid owner URN".to_string()))?,
+        None => Urn::user(ctx.user.id),
+    };
+
+    let source = req.source.unwrap_or(ArtifactSource::Upload);
+
+    let artifact = crate::domain::entities::Artifact::new_character(
+        owner,
+        ctx.user.id,
+        req.project_id,
+        req.spec,
+        source,
+        req.conversation_id,
+    )?;
+
+    let created = state.repos.artifacts.create(&artifact).await?;
+    Ok((StatusCode::CREATED, Json(created.into())))
+}
+
+/// Render an artifact (currently only characters → creates a pending image artifact)
+pub async fn render_artifact(
+    AnyAuth(ctx): AnyAuth,
+    State(state): State<ArtifactsState>,
+    Path(id): Path<Uuid>,
+) -> Result<(StatusCode, Json<ArtifactResponse>)> {
+    let artifact = state
+        .repos
+        .artifacts
+        .find(id)
+        .await?
+        .ok_or_else(|| Error::NotFound("Artifact not found".to_string()))?;
+
+    // Authorization: check ownership
+    let user_urn = Urn::user(ctx.user.id).to_string();
+    if artifact.owner != user_urn {
+        return Err(Error::NotFound("Artifact not found".to_string()));
+    }
+
+    // Only character artifacts can be rendered
+    if artifact.kind != ArtifactKind::Character {
+        return Err(Error::Validation(format!(
+            "Only character artifacts can be rendered, got '{}'",
+            artifact.kind
+        )));
+    }
+
+    // Create a new pending image artifact from the character
+    let owner_urn = artifact
+        .owner
+        .parse::<Urn>()
+        .map_err(|_| Error::Internal("Invalid owner URN on artifact".to_string()))?;
+
+    let image_artifact = crate::domain::entities::Artifact::new_media(
+        owner_urn,
+        ctx.user.id,
+        artifact.project_id,
+        ArtifactKind::Image,
+        format!("render-{}.png", artifact.id),
+        format!("renders/{}/{}.png", ctx.user.id, Uuid::new_v4()),
+        "image/png".to_string(),
+        1, // placeholder size — will be updated when rendering completes
+    )?;
+
+    let created = state.repos.artifacts.create(&image_artifact).await?;
+    Ok((StatusCode::CREATED, Json(created.into())))
+}
+
 /// Delete an artifact
 pub async fn delete_artifact(
     AnyAuth(ctx): AnyAuth,

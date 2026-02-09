@@ -298,6 +298,24 @@ class TestDataFactory:
         return data
 
     @staticmethod
+    def character_data(
+        spec: dict[str, Any] | None = None,
+        owner: str | None = None,
+        project_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Generate valid character creation data."""
+        data: dict[str, Any] = {
+            "spec": spec
+            if spec is not None
+            else {"prompt": "A brave warrior", "name": "Test Character"}
+        }
+        if owner is not None:
+            data["owner"] = owner
+        if project_id is not None:
+            data["project_id"] = project_id
+        return data
+
+    @staticmethod
     def message_data(content: str = "Hello, how are you?") -> dict[str, Any]:
         """Generate valid message send data."""
         return {"content": content}
@@ -377,6 +395,22 @@ async def create_storyboard(
     return resp.json()
 
 
+async def create_character(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    spec: dict[str, Any] | None = None,
+    owner: str | None = None,
+    project_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a character artifact and return the response JSON."""
+    data = TestDataFactory.character_data(spec, owner, project_id)
+    resp = await client.post("/v1/artifacts/characters", json=data, headers=headers)
+    assert resp.status_code == 201, (
+        f"create_character failed: {resp.status_code} {resp.text}"
+    )
+    return resp.json()
+
+
 # Export commonly used fixtures and utilities
 __all__ = [
     "E2EConfig",
@@ -393,4 +427,5 @@ __all__ = [
     "create_conversation",
     "send_message",
     "create_storyboard",
+    "create_character",
 ]

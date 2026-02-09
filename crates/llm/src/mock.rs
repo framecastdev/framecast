@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::{CompletionRequest, CompletionResponse, LlmError, LlmService};
+use crate::{CompletionRequest, CompletionResponse, LlmArtifact, LlmError, LlmService};
 
 /// Mock LLM service for testing
 #[derive(Debug, Clone)]
@@ -51,12 +51,26 @@ impl LlmService for MockLlmService {
             .sum::<i32>();
         let output_tokens = content.len() as i32 / 4;
 
+        // Detect "character" keyword in last message (case-insensitive) to generate artifacts
+        let artifacts = if last_message.to_lowercase().contains("character") {
+            vec![LlmArtifact {
+                kind: "character".to_string(),
+                spec: serde_json::json!({
+                    "prompt": format!("A character based on: {}", last_message),
+                    "name": "Generated Character"
+                }),
+            }]
+        } else {
+            Vec::new()
+        };
+
         Ok(CompletionResponse {
             content,
             model,
             input_tokens,
             output_tokens,
             stop_reason: "end_turn".to_string(),
+            artifacts,
         })
     }
 
@@ -71,6 +85,8 @@ impl LlmService for MockLlmService {
 pub enum MockBehavior {
     /// Always return this fixed content
     FixedResponse(String),
+    /// Always return this fixed content with artifacts
+    FixedResponseWithArtifacts(String, Vec<LlmArtifact>),
     /// Rotate through a sequence of responses
     ResponseSequence(Vec<String>),
     /// Simulate an LLM error
@@ -197,7 +213,22 @@ impl LlmService for ConfigurableMockLlmService {
                 input_tokens: 10,
                 output_tokens: content.len() as i32 / 4,
                 stop_reason: "end_turn".to_string(),
+                artifacts: Vec::new(),
             }),
+            MockBehavior::FixedResponseWithArtifacts(content, artifacts) => {
+                Ok(CompletionResponse {
+                    content: content.clone(),
+                    model: if request.model.is_empty() {
+                        "mock-model".to_string()
+                    } else {
+                        request.model
+                    },
+                    input_tokens: 10,
+                    output_tokens: content.len() as i32 / 4,
+                    stop_reason: "end_turn".to_string(),
+                    artifacts,
+                })
+            }
             MockBehavior::ResponseSequence(responses) => {
                 let idx = (current_count - 1) % responses.len();
                 let content = responses[idx].clone();
@@ -211,6 +242,7 @@ impl LlmService for ConfigurableMockLlmService {
                     input_tokens: 10,
                     output_tokens: content.len() as i32 / 4,
                     stop_reason: "end_turn".to_string(),
+                    artifacts: Vec::new(),
                 })
             }
             MockBehavior::Error(kind) => match kind {
@@ -243,6 +275,7 @@ impl LlmService for ConfigurableMockLlmService {
                     input_tokens,
                     output_tokens,
                     stop_reason: "end_turn".to_string(),
+                    artifacts: Vec::new(),
                 })
             }
         }

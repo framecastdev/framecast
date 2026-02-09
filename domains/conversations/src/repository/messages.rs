@@ -65,6 +65,20 @@ impl MessageRepository {
         Ok(created)
     }
 
+    /// Update the artifacts JSONB field on a message
+    pub async fn update_artifacts(
+        &self,
+        message_id: Uuid,
+        artifacts: serde_json::Value,
+    ) -> Result<()> {
+        sqlx::query("UPDATE messages SET artifacts = $2 WHERE id = $1")
+            .bind(message_id)
+            .bind(artifacts)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Get the next sequence number for a conversation
     pub async fn next_sequence(&self, conversation_id: Uuid) -> Result<i32> {
         let row = sqlx::query_scalar::<_, Option<i32>>(

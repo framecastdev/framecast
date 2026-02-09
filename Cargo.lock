@@ -1273,6 +1273,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "framecast-artifacts",
  "framecast-auth",
  "framecast-common",
  "framecast-llm",

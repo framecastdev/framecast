@@ -17,6 +17,14 @@ fn artifact_routes() -> Router<ArtifactsState> {
             "/v1/artifacts/storyboards",
             axum::routing::post(artifacts::create_storyboard),
         )
+        .route(
+            "/v1/artifacts/characters",
+            axum::routing::post(artifacts::create_character),
+        )
+        .route(
+            "/v1/artifacts/{id}/render",
+            axum::routing::post(artifacts::render_artifact),
+        )
 }
 
 /// Create system asset routes

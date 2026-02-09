@@ -12,6 +12,7 @@ description = "Conversations domain: LLM chat threads, messages"
 [dependencies]
 # Shared crates
 framecast-auth.workspace = true
+framecast-artifacts.workspace = true
 framecast-common.workspace = true
 framecast-llm.workspace = true
 
