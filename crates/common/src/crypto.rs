@@ -43,6 +43,17 @@ pub fn verify_key_hash(candidate_key: &str, stored_hash: &str) -> bool {
     result == 0
 }
 
+/// Compute a deterministic lookup prefix from a raw API key.
+///
+/// Uses unsalted SHA-256 (first 16 hex chars) for fast DB lookup.
+/// This is separate from the salted hash used for verification.
+pub fn compute_hash_prefix(raw_key: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(raw_key.as_bytes());
+    let hash = hasher.finalize();
+    hex::encode(hash).chars().take(16).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,5 +112,23 @@ mod tests {
 
         assert!(verify_key_hash(key, &stored));
         assert!(!verify_key_hash("notempty", &stored));
+    }
+
+    #[test]
+    fn test_compute_hash_prefix_deterministic_and_correct() {
+        let prefix1 = compute_hash_prefix("sk_live_test123");
+        let prefix2 = compute_hash_prefix("sk_live_test123");
+
+        // Same input produces same output
+        assert_eq!(prefix1, prefix2);
+
+        // Prefix is exactly 16 hex characters
+        assert_eq!(prefix1.len(), 16);
+        assert!(prefix1.chars().all(|c| c.is_ascii_hexdigit()));
+
+        // Different input produces different prefix
+        let prefix3 = compute_hash_prefix("sk_live_other456");
+        assert_ne!(prefix1, prefix3);
+        assert_eq!(prefix3.len(), 16);
     }
 }
