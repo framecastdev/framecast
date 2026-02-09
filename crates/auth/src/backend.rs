@@ -152,14 +152,21 @@ impl AuthBackend {
 
         for row in rows {
             if verify_key_hash(candidate_key, &row.key_hash) {
-                // Update last_used_at
-                let _ = sqlx::query("UPDATE api_keys SET last_used_at = NOW() WHERE id = $1")
-                    .bind(row.id)
-                    .execute(&self.pool)
-                    .await;
+                // Update last_used_at (best-effort — don't fail auth on touch error)
+                if let Err(e) =
+                    sqlx::query("UPDATE api_keys SET last_used_at = NOW() WHERE id = $1")
+                        .bind(row.id)
+                        .execute(&self.pool)
+                        .await
+                {
+                    tracing::warn!(error = %e, api_key_id = %row.id, "Failed to update api_key last_used_at");
+                }
 
                 let scopes: Vec<String> =
-                    serde_json::from_value(row.scopes).unwrap_or_else(|_| vec![]);
+                    serde_json::from_value(row.scopes).unwrap_or_else(|e| {
+                        tracing::warn!(error = %e, api_key_id = %row.id, "Failed to deserialize api_key scopes, defaulting to empty");
+                        vec![]
+                    });
 
                 return Ok(Some(AuthApiKey {
                     id: row.id,

@@ -73,6 +73,26 @@ impl AuthRole {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_auth_role_permissions() {
+        assert!(AuthRole::Owner.can_admin());
+        assert!(AuthRole::Owner.is_owner());
+
+        assert!(AuthRole::Admin.can_admin());
+        assert!(!AuthRole::Admin.is_owner());
+
+        assert!(!AuthRole::Member.can_admin());
+        assert!(!AuthRole::Member.is_owner());
+
+        assert!(!AuthRole::Viewer.can_admin());
+        assert!(!AuthRole::Viewer.is_owner());
+    }
+}
+
 /// Authenticated API key — excludes sensitive `key_hash` field.
 #[derive(Debug, Clone)]
 pub struct AuthApiKey {

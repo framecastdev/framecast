@@ -86,3 +86,38 @@ impl IntoResponse for AuthError {
         (status, body).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_auth_error_status_codes() {
+        let cases: Vec<(AuthError, StatusCode)> = vec![
+            (AuthError::MissingAuthorization, StatusCode::UNAUTHORIZED),
+            (
+                AuthError::InvalidAuthorizationFormat,
+                StatusCode::UNAUTHORIZED,
+            ),
+            (AuthError::InvalidToken, StatusCode::UNAUTHORIZED),
+            (AuthError::InvalidApiKey, StatusCode::UNAUTHORIZED),
+            (AuthError::UserNotFound, StatusCode::UNAUTHORIZED),
+            (AuthError::UserLoadError, StatusCode::INTERNAL_SERVER_ERROR),
+            (
+                AuthError::MembershipsLoadError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+            (
+                AuthError::AuthenticationFailed,
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+            (AuthError::InvalidUserId, StatusCode::UNAUTHORIZED),
+            (AuthError::InsufficientTier, StatusCode::FORBIDDEN),
+        ];
+
+        for (error, expected_status) in cases {
+            let response = error.into_response();
+            assert_eq!(response.status(), expected_status);
+        }
+    }
+}
