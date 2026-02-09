@@ -32,6 +32,10 @@ axum.workspace = true
 # Database
 sqlx.workspace = true
 
+# Cryptography
+sha2 = "0.10"
+hex = "0.4"
+
 [dev-dependencies]
 tokio.workspace = true
 tokio-test.workspace = true

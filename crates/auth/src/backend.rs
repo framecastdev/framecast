@@ -4,7 +4,7 @@
 //! Uses runtime `sqlx::query_as` (not macros) consistent with the
 //! existing CQRS cross-domain read pattern.
 
-use sha2::{Digest, Sha256};
+use framecast_common::verify_key_hash;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -123,8 +123,8 @@ impl AuthBackend {
 
     /// Authenticate an API key by raw key string.
     ///
-    /// Replicates the SHA-256 + salt constant-time comparison from teams'
-    /// `ApiKey::verify_key()` — the raw key material logic only.
+    /// Uses `framecast_common::verify_key_hash` for SHA-256 + salt
+    /// constant-time comparison.
     pub(crate) async fn authenticate_api_key(
         &self,
         candidate_key: &str,
@@ -229,42 +229,4 @@ impl AuthBackend {
 
         Ok(AuthContext::new(user, memberships, Some(authenticated_key)))
     }
-}
-
-/// Verify an API key against stored hash using constant-time comparison.
-///
-/// Replicates `ApiKey::verify_key()` from the teams domain.
-fn verify_key_hash(candidate_key: &str, stored_hash: &str) -> bool {
-    // Parse stored hash: salt:hash
-    let parts: Vec<&str> = stored_hash.split(':').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-
-    let salt = match hex::decode(parts[0]) {
-        Ok(salt) => salt,
-        Err(_) => return false,
-    };
-
-    let hash = match hex::decode(parts[1]) {
-        Ok(hash) => hash,
-        Err(_) => return false,
-    };
-
-    // Compute hash of candidate key with stored salt
-    let mut hasher = Sha256::new();
-    hasher.update(candidate_key.as_bytes());
-    hasher.update(&salt);
-    let candidate_hash = hasher.finalize();
-
-    // Constant-time comparison to prevent timing attacks
-    if hash.len() != candidate_hash.len() {
-        return false;
-    }
-
-    let mut result = 0u8;
-    for (a, b) in hash.iter().zip(candidate_hash.iter()) {
-        result |= a ^ b;
-    }
-    result == 0
 }

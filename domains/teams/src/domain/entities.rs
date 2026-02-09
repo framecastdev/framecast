@@ -720,38 +720,7 @@ impl ApiKey {
 
     /// Verify an API key against stored hash using constant-time comparison
     pub fn verify_key(&self, candidate_key: &str) -> bool {
-        // Parse stored hash: salt:hash
-        let parts: Vec<&str> = self.key_hash.split(':').collect();
-        if parts.len() != 2 {
-            return false;
-        }
-
-        let stored_salt = match hex::decode(parts[0]) {
-            Ok(salt) => salt,
-            Err(_) => return false,
-        };
-
-        let stored_hash = match hex::decode(parts[1]) {
-            Ok(hash) => hash,
-            Err(_) => return false,
-        };
-
-        // Compute hash of candidate key with stored salt
-        let mut hasher = Sha256::new();
-        hasher.update(candidate_key.as_bytes());
-        hasher.update(&stored_salt);
-        let candidate_hash = hasher.finalize();
-
-        // Constant-time comparison to prevent timing attacks
-        if stored_hash.len() != candidate_hash.len() {
-            return false;
-        }
-
-        let mut result = 0u8;
-        for (a, b) in stored_hash.iter().zip(candidate_hash.iter()) {
-            result |= a ^ b;
-        }
-        result == 0
+        framecast_common::verify_key_hash(candidate_key, &self.key_hash)
     }
 }
 
