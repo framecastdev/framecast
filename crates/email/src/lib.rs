@@ -96,6 +96,8 @@ pub struct EmailConfig {
     pub default_from: String,
     /// Enable email sending (can disable for testing)
     pub enabled: bool,
+    /// Base URL for the application (used in invitation links)
+    pub app_base_url: String,
 }
 
 impl EmailConfig {
@@ -116,12 +118,16 @@ impl EmailConfig {
             .parse()
             .unwrap_or(true);
 
+        let app_base_url =
+            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://framecast.app".to_string());
+
         Ok(Self {
             provider,
             aws_region,
             aws_endpoint_url,
             default_from,
             enabled,
+            app_base_url,
         })
     }
 }
@@ -135,6 +141,9 @@ pub trait EmailService: Send + Sync {
     /// Return the default "from" address for outgoing emails
     fn default_from(&self) -> String;
 
+    /// Return the application base URL for building links
+    fn app_base_url(&self) -> &str;
+
     /// Send team invitation email
     async fn send_team_invitation(
         &self,
@@ -146,8 +155,10 @@ pub trait EmailService: Send + Sync {
         role: &str,
     ) -> Result<EmailReceipt, EmailError> {
         let invitation_url = format!(
-            "https://framecast.app/teams/{}/invitations/{}/accept",
-            team_id, invitation_id
+            "{}/teams/{}/invitations/{}/accept",
+            self.app_base_url(),
+            team_id,
+            invitation_id
         );
 
         let subject = format!("Invitation to join team: {}", team_name);
