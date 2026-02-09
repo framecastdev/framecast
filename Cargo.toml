@@ -10,6 +10,7 @@ members = [
     "domains/jobs",
     "domains/webhooks",
     "domains/artifacts",
+    "domains/conversations",
     "tests/integration",
 ]
 resolver = "2"
@@ -97,6 +98,7 @@ framecast-projects = { path = "domains/projects" }
 framecast-jobs = { path = "domains/jobs" }
 framecast-webhooks = { path = "domains/webhooks" }
 framecast-artifacts = { path = "domains/artifacts" }
+framecast-conversations = { path = "domains/conversations" }
 
 # === Additional Dependencies ===
 rust_decimal = { version = "1.0", features = ["serde"] }
