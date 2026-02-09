@@ -220,7 +220,7 @@ async def seed_system_assets(test_config: E2EConfig):
                 f"system-assets/{category}/{asset_id}",
                 content_type,
                 size_bytes,
-                '["test"]',
+                ["test"],
             )
         yield assets
         await conn.execute("TRUNCATE system_assets CASCADE")
@@ -290,7 +290,7 @@ class TestDataFactory:
         project_id: str | None = None,
     ) -> dict[str, Any]:
         """Generate valid storyboard creation data."""
-        data: dict[str, Any] = {"spec": spec or {"scenes": []}}
+        data: dict[str, Any] = {"spec": spec if spec is not None else {"scenes": []}}
         if owner is not None:
             data["owner"] = owner
         if project_id is not None:
