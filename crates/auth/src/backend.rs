@@ -4,7 +4,7 @@
 //! Uses runtime `sqlx::query_as` (not macros) consistent with the
 //! existing CQRS cross-domain read pattern.
 
-use framecast_common::verify_key_hash;
+use framecast_common::{compute_hash_prefix, verify_key_hash};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -123,8 +123,9 @@ impl AuthBackend {
 
     /// Authenticate an API key by raw key string.
     ///
-    /// Uses `framecast_common::verify_key_hash` for SHA-256 + salt
-    /// constant-time comparison.
+    /// Uses `key_hash_prefix` for fast O(1) lookup when available (new keys).
+    /// Falls back to checking keys with NULL prefix (pre-migration keys).
+    /// Full salted hash verification via `framecast_common::verify_key_hash`.
     pub(crate) async fn authenticate_api_key(
         &self,
         candidate_key: &str,
@@ -133,6 +134,9 @@ impl AuthBackend {
             return Ok(None);
         }
 
+        // Compute deterministic lookup prefix from candidate key
+        let candidate_prefix = compute_hash_prefix(candidate_key);
+
         let rows: Vec<ApiKeyRow> = sqlx::query_as(
             r#"
             SELECT id, user_id, owner, name, key_prefix, key_hash,
@@ -140,9 +144,11 @@ impl AuthBackend {
             FROM api_keys
             WHERE key_prefix = $1 AND revoked_at IS NULL
               AND (expires_at IS NULL OR expires_at > NOW())
+              AND (key_hash_prefix = $2 OR key_hash_prefix IS NULL)
             "#,
         )
         .bind("sk_live_")
+        .bind(&candidate_prefix)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {

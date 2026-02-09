@@ -588,6 +588,7 @@ pub struct ApiKey {
     pub name: String,
     pub key_prefix: String,
     pub key_hash: String,
+    pub key_hash_prefix: Option<String>,
     pub scopes: Json<Vec<String>>,
     pub last_used_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
@@ -604,6 +605,7 @@ impl std::fmt::Debug for ApiKey {
             .field("name", &self.name)
             .field("key_prefix", &self.key_prefix)
             .field("key_hash", &"[REDACTED]")
+            .field("key_hash_prefix", &self.key_hash_prefix)
             .field("scopes", &self.scopes)
             .field("last_used_at", &self.last_used_at)
             .field("expires_at", &self.expires_at)
@@ -644,6 +646,7 @@ impl ApiKey {
         // SECURITY: Use SHA-256 with random salt for production-grade hashing
         let salt: [u8; 32] = rand::thread_rng().gen();
         let key_hash = Self::hash_key(&full_key, &salt);
+        let key_hash_prefix = Some(Self::compute_hash_prefix(&full_key));
 
         let api_key = ApiKey {
             id: Uuid::new_v4(),
@@ -652,6 +655,7 @@ impl ApiKey {
             name,
             key_prefix,
             key_hash,
+            key_hash_prefix,
             scopes: Json(scopes),
             last_used_at: None,
             expires_at,
@@ -705,6 +709,13 @@ impl ApiKey {
         let _urn = self.owner_urn()?;
 
         Ok(())
+    }
+
+    /// Compute a deterministic lookup prefix from the raw key.
+    ///
+    /// Delegates to `framecast_common::compute_hash_prefix`.
+    pub(crate) fn compute_hash_prefix(raw_key: &str) -> String {
+        framecast_common::compute_hash_prefix(raw_key)
     }
 
     /// Hash an API key with salt using SHA-256 (production-grade cryptography)
@@ -1115,6 +1126,7 @@ mod tests {
             name: "Test".to_string(),
             key_prefix: "sk_live_".to_string(),
             key_hash: test_hash,
+            key_hash_prefix: Some(ApiKey::compute_hash_prefix(test_key)),
             scopes: sqlx::types::Json(vec!["*".to_string()]),
             last_used_at: None,
             expires_at: None,
@@ -1906,6 +1918,7 @@ mod tests {
             name: "Test".to_string(),
             key_prefix: "sk_live_".to_string(),
             key_hash: "abcd:ef01".to_string(),
+            key_hash_prefix: None,
             scopes: Json(vec!["*".to_string()]),
             last_used_at: None,
             expires_at: Some(now - chrono::Duration::seconds(10)),
@@ -1935,6 +1948,7 @@ mod tests {
             name: "a".repeat(101),
             key_prefix: "sk_live_".to_string(),
             key_hash: "abcd:ef01".to_string(),
+            key_hash_prefix: None,
             scopes: Json(vec!["*".to_string()]),
             last_used_at: None,
             expires_at: None,
@@ -1957,6 +1971,7 @@ mod tests {
             name: "a".repeat(100),
             key_prefix: "sk_live_".to_string(),
             key_hash: "abcd:ef01".to_string(),
+            key_hash_prefix: None,
             scopes: Json(vec!["*".to_string()]),
             last_used_at: None,
             expires_at: None,
@@ -1976,5 +1991,27 @@ mod tests {
             ..key100.clone()
         };
         assert!(key99.validate().is_ok());
+    }
+
+    // ========================================================================
+    // Mutant-killing tests: ApiKey::compute_hash_prefix
+    // ========================================================================
+
+    #[test]
+    fn test_api_key_compute_hash_prefix_deterministic_and_correct() {
+        let prefix1 = ApiKey::compute_hash_prefix("sk_live_test123");
+        let prefix2 = ApiKey::compute_hash_prefix("sk_live_test123");
+
+        // Same input produces same output
+        assert_eq!(prefix1, prefix2);
+
+        // Prefix is exactly 16 hex characters
+        assert_eq!(prefix1.len(), 16);
+        assert!(prefix1.chars().all(|c| c.is_ascii_hexdigit()));
+
+        // Different input produces different prefix
+        let prefix3 = ApiKey::compute_hash_prefix("sk_live_other456");
+        assert_ne!(prefix1, prefix3);
+        assert_eq!(prefix3.len(), 16);
     }
 }
