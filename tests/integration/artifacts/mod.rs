@@ -223,7 +223,7 @@ mod test_create_storyboard {
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        // POST without spec field should fail with 422 (deserialization error)
+        // POST without spec field should fail with 400 (missing required field)
         let req = authed_request(
             Method::POST,
             "/v1/artifacts/storyboards",
@@ -232,7 +232,7 @@ mod test_create_storyboard {
         );
 
         let resp = app.test_router().oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
