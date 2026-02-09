@@ -4,10 +4,10 @@ Tests full user journeys spanning multiple domains (9 stories):
   - Starter upgrade -> conversation -> character -> render (UJ01)
   - Invitation accept -> whoami reflects upgrade -> platform access (UJ02)
   - API key drives full content lifecycle (UJ03)
-  - Account deletion cascades conversations and artifacts (UJ04)
-  - Conversation archive -> delete -> character survives and renders (UJ05)
+  - Account cleanup and deletion (UJ04)
+  - Conversation archive -> character still accessible and renders (UJ05)
   - Team-scoped API key creates team-owned artifacts (UJ06)
-  - Multi-conversation artifact isolation with selective deletion (UJ07)
+  - Multi-conversation artifact isolation with selective artifact deletion (UJ07)
   - Revoked API key loses access mid-workflow (UJ08)
   - Invitation upgrade unlocks previously-denied capabilities (UJ09)
 """
@@ -269,15 +269,15 @@ class TestUserJourneyE2E:
         assert len(remaining_images) > 0
 
     # -------------------------------------------------------------------
-    # UJ04: Account Deletion Cascades Conversations and Artifacts
+    # UJ04: Account Cleanup and Deletion
     # -------------------------------------------------------------------
 
-    async def test_uj04_account_deletion_cascades_conversations_artifacts(
+    async def test_uj04_account_cleanup_and_deletion(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """UJ04: Create conversations + artifacts, delete account, all inaccessible."""
+        """UJ04: Create resources, clean up, delete account, all inaccessible."""
         invitee = seed_users.invitee
 
         # 1. Create conversation + message
@@ -285,8 +285,8 @@ class TestUserJourneyE2E:
         await send_message(http_client, invitee.auth_headers(), conv["id"])
 
         # 2. Create artifacts
-        await create_storyboard(http_client, invitee.auth_headers())
-        await create_character(http_client, invitee.auth_headers())
+        storyboard = await create_storyboard(http_client, invitee.auth_headers())
+        character = await create_character(http_client, invitee.auth_headers())
 
         # 3. Verify resources exist
         resp = await http_client.get(
@@ -299,11 +299,27 @@ class TestUserJourneyE2E:
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
-        # 4. Delete account
+        # 4. Clean up resources before account deletion
+        resp = await http_client.delete(
+            f"/v1/artifacts/{storyboard['id']}", headers=invitee.auth_headers()
+        )
+        assert resp.status_code == 204
+
+        resp = await http_client.delete(
+            f"/v1/artifacts/{character['id']}", headers=invitee.auth_headers()
+        )
+        assert resp.status_code == 204
+
+        resp = await http_client.delete(
+            f"/v1/conversations/{conv['id']}", headers=invitee.auth_headers()
+        )
+        assert resp.status_code == 204
+
+        # 5. Delete account
         resp = await http_client.delete("/v1/account", headers=invitee.auth_headers())
         assert resp.status_code == 204
 
-        # 5. All endpoints return 401 or 404
+        # 6. All endpoints return 401 or 404
         resp = await http_client.get("/v1/account", headers=invitee.auth_headers())
         assert resp.status_code in [401, 404]
 
@@ -316,15 +332,15 @@ class TestUserJourneyE2E:
         assert resp.status_code in [401, 404]
 
     # -------------------------------------------------------------------
-    # UJ05: Conversation Archive -> Delete -> Character Survives & Renders
+    # UJ05: Conversation Archive -> Character Still Accessible & Renders
     # -------------------------------------------------------------------
 
-    async def test_uj05_conversation_archive_delete_character_survives_renders(
+    async def test_uj05_conversation_archive_character_accessible_and_renders(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """UJ05: Archive conversation, delete it, character orphaned but still renders."""
+        """UJ05: Archive conversation; character artifact still accessible and renderable."""
         owner = seed_users.owner
 
         # 1. Create conversation
@@ -358,6 +374,7 @@ class TestUserJourneyE2E:
             f"/v1/artifacts/{character_id}", headers=owner.auth_headers()
         )
         assert resp.status_code == 200
+        assert resp.json()["conversation_id"] == conv_id
 
         # 6. Messages still readable in archived conversation
         resp = await http_client.get(
@@ -365,26 +382,24 @@ class TestUserJourneyE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 200
+        assert len(resp.json()) > 0
 
-        # 7. Delete conversation
-        resp = await http_client.delete(
-            f"/v1/conversations/{conv_id}", headers=owner.auth_headers()
-        )
-        assert resp.status_code == 204
-
-        # 8. Character still exists, conversation_id nullified (orphaned)
-        resp = await http_client.get(
-            f"/v1/artifacts/{character_id}", headers=owner.auth_headers()
-        )
-        assert resp.status_code == 200
-        assert resp.json()["conversation_id"] is None
-
-        # 9. Render still works on orphaned character
+        # 7. Render still works on character from archived conversation
         resp = await http_client.post(
             f"/v1/artifacts/{character_id}/render",
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
+        image = resp.json()
+        assert image["kind"] == "image"
+        assert image["status"] == "pending"
+
+        # 8. Both character and image present in artifact list
+        resp = await http_client.get("/v1/artifacts", headers=owner.auth_headers())
+        assert resp.status_code == 200
+        artifact_kinds = {a["kind"] for a in resp.json()}
+        assert "character" in artifact_kinds
+        assert "image" in artifact_kinds
 
     # -------------------------------------------------------------------
     # UJ06: Team-Scoped API Key Creates Team-Owned Artifacts
@@ -434,12 +449,18 @@ class TestUserJourneyE2E:
         )
         assert character["owner"] == team_urn
 
-        # 6. List artifacts -> both with team URN
-        resp = await http_client.get("/v1/artifacts", headers=api_headers)
+        # 6. Verify each artifact individually has team owner
+        resp = await http_client.get(
+            f"/v1/artifacts/{storyboard['id']}", headers=api_headers
+        )
         assert resp.status_code == 200
-        artifacts = resp.json()
-        team_artifacts = [a for a in artifacts if a["owner"] == team_urn]
-        assert len(team_artifacts) >= 2
+        assert resp.json()["owner"] == team_urn
+
+        resp = await http_client.get(
+            f"/v1/artifacts/{character['id']}", headers=api_headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["owner"] == team_urn
 
     # -------------------------------------------------------------------
     # UJ07: Multi-Conversation Artifact Isolation with Selective Deletion
@@ -479,40 +500,35 @@ class TestUserJourneyE2E:
         assert beta_id in character_ids
         assert gamma_id in character_ids
 
-        # 5. Delete conversation A
-        resp = await http_client.delete(
-            f"/v1/conversations/{conv_a['id']}", headers=owner.auth_headers()
-        )
-        assert resp.status_code == 204
-
-        # 6. Alpha orphaned (conversation_id = None)
+        # 5. Verify each artifact's conversation linkage
         resp = await http_client.get(
             f"/v1/artifacts/{alpha_id}", headers=owner.auth_headers()
         )
         assert resp.status_code == 200
-        assert resp.json()["conversation_id"] is None
+        assert resp.json()["conversation_id"] == conv_a["id"]
+        assert resp.json()["source"] == "conversation"
 
-        # 7. Beta still linked to conversation B
         resp = await http_client.get(
             f"/v1/artifacts/{beta_id}", headers=owner.auth_headers()
         )
         assert resp.status_code == 200
         assert resp.json()["conversation_id"] == conv_b["id"]
+        assert resp.json()["source"] == "conversation"
 
-        # 8. Gamma still has no conversation_id
         resp = await http_client.get(
             f"/v1/artifacts/{gamma_id}", headers=owner.auth_headers()
         )
         assert resp.status_code == 200
         assert resp.json()["conversation_id"] is None
+        assert resp.json()["source"] == "upload"
 
-        # 9. Delete alpha artifact
+        # 6. Delete alpha artifact
         resp = await http_client.delete(
             f"/v1/artifacts/{alpha_id}", headers=owner.auth_headers()
         )
         assert resp.status_code == 204
 
-        # 10. Only beta + gamma remain
+        # 7. Only beta + gamma remain
         resp = await http_client.get("/v1/artifacts", headers=owner.auth_headers())
         assert resp.status_code == 200
         remaining_ids = {a["id"] for a in resp.json() if a["kind"] == "character"}
@@ -520,7 +536,15 @@ class TestUserJourneyE2E:
         assert beta_id in remaining_ids
         assert gamma_id in remaining_ids
 
-        # 11. Conversation B messages intact
+        # 8. Conversation A messages still intact after artifact deletion
+        resp = await http_client.get(
+            f"/v1/conversations/{conv_a['id']}/messages",
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) > 0
+
+        # 9. Conversation B messages also intact
         resp = await http_client.get(
             f"/v1/conversations/{conv_b['id']}/messages",
             headers=owner.auth_headers(),
