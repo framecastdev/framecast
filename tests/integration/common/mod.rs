@@ -197,9 +197,12 @@ impl TestApp {
         // Use TRUNCATE CASCADE to bypass foreign key constraints and triggers
         // This is test-only cleanup, so we can bypass the INV-T1 constraint
         // Using runtime query to avoid sqlx offline mode issues in tests
-        sqlx::query("TRUNCATE TABLE api_keys, invitations, memberships, teams, users CASCADE")
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "TRUNCATE TABLE message_artifacts, messages, artifacts, conversations, \
+             api_keys, invitations, memberships, teams, users CASCADE",
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -370,6 +373,150 @@ mod tests {
     fn test_credit_assertions_rejects_negative() {
         assertions::assert_credits_non_negative(-1);
     }
+}
+
+/// Test application for the Artifacts domain
+pub struct ArtifactsTestApp {
+    pub state: framecast_artifacts::ArtifactsState,
+    pub config: TestConfig,
+    pub pool: PgPool,
+}
+
+impl ArtifactsTestApp {
+    pub async fn new() -> Result<Self> {
+        let config = TestConfig::from_env();
+        let pool = sqlx::PgPool::connect(&config.database_url).await?;
+        sqlx::migrate!("../../migrations").run(&pool).await?;
+
+        let repos = framecast_artifacts::ArtifactsRepositories::new(pool.clone());
+        let auth_config = AuthConfig {
+            jwt_secret: config.jwt_secret.clone(),
+            issuer: Some("framecast-test".to_string()),
+            audience: Some("authenticated".to_string()),
+        };
+        let auth_backend = AuthBackend::new(pool.clone(), auth_config);
+
+        let state = framecast_artifacts::ArtifactsState {
+            repos,
+            auth: auth_backend,
+        };
+
+        Ok(Self {
+            state,
+            config,
+            pool,
+        })
+    }
+
+    pub async fn create_test_user(&self, tier: UserTier) -> Result<User> {
+        create_test_user_in_db(&self.pool, tier).await
+    }
+
+    pub async fn cleanup(&self) -> Result<()> {
+        cleanup_all(&self.pool).await
+    }
+
+    pub fn test_router(&self) -> Router {
+        framecast_artifacts::routes().with_state(self.state.clone())
+    }
+}
+
+/// Test application for the Conversations domain
+pub struct ConversationsTestApp {
+    pub state: framecast_conversations::ConversationsState,
+    pub llm: Arc<framecast_llm::mock::ConfigurableMockLlmService>,
+    pub config: TestConfig,
+    pub pool: PgPool,
+}
+
+impl ConversationsTestApp {
+    pub async fn new() -> Result<Self> {
+        let config = TestConfig::from_env();
+        let pool = sqlx::PgPool::connect(&config.database_url).await?;
+        sqlx::migrate!("../../migrations").run(&pool).await?;
+
+        let repos = framecast_conversations::ConversationsRepositories::new(pool.clone());
+        let auth_config = AuthConfig {
+            jwt_secret: config.jwt_secret.clone(),
+            issuer: Some("framecast-test".to_string()),
+            audience: Some("authenticated".to_string()),
+        };
+        let auth_backend = AuthBackend::new(pool.clone(), auth_config);
+
+        let mock_llm = Arc::new(framecast_llm::mock::ConfigurableMockLlmService::new());
+
+        let state = framecast_conversations::ConversationsState {
+            repos,
+            auth: auth_backend,
+            llm: mock_llm.clone(),
+        };
+
+        Ok(Self {
+            state,
+            llm: mock_llm,
+            config,
+            pool,
+        })
+    }
+
+    pub async fn create_test_user(&self, tier: UserTier) -> Result<User> {
+        create_test_user_in_db(&self.pool, tier).await
+    }
+
+    pub async fn cleanup(&self) -> Result<()> {
+        cleanup_all(&self.pool).await
+    }
+
+    pub fn test_router(&self) -> Router {
+        framecast_conversations::routes().with_state(self.state.clone())
+    }
+}
+
+/// Shared helper: insert a test user into the database
+async fn create_test_user_in_db(pool: &PgPool, tier: UserTier) -> Result<User> {
+    let user_id = Uuid::new_v4();
+    let email = format!("test_{}@framecast.test", user_id.simple());
+    let name = Some(format!("Test User {}", &user_id.to_string()[0..8]));
+
+    let mut user = User::new(user_id, email, name)?;
+    user.tier = tier;
+
+    if tier == UserTier::Creator {
+        user.upgraded_at = Some(Utc::now());
+    }
+
+    let user_tier = user.tier;
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (id, email, name, tier, credits, ephemeral_storage_bytes, upgraded_at, created_at, updated_at)
+        VALUES ($1, $2, $3, $4::user_tier, $5, $6, $7, $8, $9)
+        "#,
+    )
+    .bind(user.id)
+    .bind(&user.email)
+    .bind(&user.name)
+    .bind(user_tier.to_string())
+    .bind(user.credits)
+    .bind(user.ephemeral_storage_bytes)
+    .bind(user.upgraded_at)
+    .bind(user.created_at)
+    .bind(user.updated_at)
+    .execute(pool)
+    .await?;
+
+    Ok(user)
+}
+
+/// Shared helper: truncate all tables
+async fn cleanup_all(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        "TRUNCATE TABLE message_artifacts, messages, artifacts, conversations, \
+         api_keys, invitations, memberships, teams, users CASCADE",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub mod email_mock;
