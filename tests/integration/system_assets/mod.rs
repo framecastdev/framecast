@@ -214,9 +214,9 @@ mod test_system_assets {
         let assets: Vec<Value> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(assets.len(), 2);
-        // ambient comes before sfx
-        assert_eq!(assets[0]["category"], "ambient");
-        assert_eq!(assets[1]["category"], "sfx");
+        // PostgreSQL enums sort by definition order: sfx, ambient, music, transition
+        assert_eq!(assets[0]["category"], "sfx");
+        assert_eq!(assets[1]["category"], "ambient");
 
         app.cleanup().await.unwrap();
     }
