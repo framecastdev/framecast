@@ -13,7 +13,7 @@ profile = "mutants"
 additional_cargo_test_args = ["--all-targets", "--", "--test-threads=2"]
 
 # Only mutate pure domain logic — no I/O (repository, API handlers, middleware)
-examine_globs = ["domains/*/src/domain/**/*.rs", "crates/common/src/**/*.rs", "crates/auth/src/context.rs"]
+examine_globs = ["domains/*/src/domain/**/*.rs", "crates/common/src/**/*.rs", "crates/auth/src/context.rs", "crates/auth/src/types.rs", "crates/auth/src/jwt.rs"]
 
 # Exclude patterns that generate noise without value
 exclude_re = [
