@@ -9,6 +9,7 @@ members = [
     "domains/projects",
     "domains/jobs",
     "domains/webhooks",
+    "domains/artifacts",
     "tests/integration",
 ]
 resolver = "2"
@@ -39,7 +40,8 @@ sqlx = { version = "0.8", features = [
     "chrono",
     "json",
     "macros",
-    "migrate"
+    "migrate",
+    "rust_decimal"
 ] }
 
 # === HTTP Client & Server ===
@@ -94,6 +96,10 @@ framecast-teams = { path = "domains/teams" }
 framecast-projects = { path = "domains/projects" }
 framecast-jobs = { path = "domains/jobs" }
 framecast-webhooks = { path = "domains/webhooks" }
+framecast-artifacts = { path = "domains/artifacts" }
+
+# === Additional Dependencies ===
+rust_decimal = { version = "1.0", features = ["serde"] }
 
 # Mutation testing profile — disables debug info for faster builds
 [profile.mutants]
