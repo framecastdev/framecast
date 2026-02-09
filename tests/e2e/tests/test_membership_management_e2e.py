@@ -52,7 +52,7 @@ class TestMembershipManagementE2E:
             json={"email": invitee.email, "role": role},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         invitation_id = resp.json()["id"]
 
         resp = await http_client.post(

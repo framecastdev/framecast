@@ -66,7 +66,7 @@ mod test_send_message {
             Some(json!({"content": "Hello"})),
         );
         let resp = app.test_router().oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.status(), StatusCode::CREATED);
 
         let body = parse_body(resp).await;
         assert!(body.get("user_message").is_some());

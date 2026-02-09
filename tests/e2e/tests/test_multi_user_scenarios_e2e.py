@@ -53,7 +53,7 @@ class TestMultiUserScenariosE2E:
             json={"email": invitee.email, "role": role},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv_id = resp.json()["id"]
 
         resp = await http_client.post(
@@ -293,7 +293,7 @@ class TestMultiUserScenariosE2E:
             json={"email": "test-access@test.com", "role": "member"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
 
         # Demote to viewer
         resp = await http_client.patch(
@@ -456,7 +456,7 @@ class TestMultiUserScenariosE2E:
             json={"email": invitee.email, "role": "admin"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv_id = resp.json()["id"]
         resp = await http_client.post(
             f"/v1/invitations/{inv_id}/accept",
@@ -470,7 +470,7 @@ class TestMultiUserScenariosE2E:
             json={"email": "demoted-test@test.com", "role": "member"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         pending_inv_id = resp.json()["id"]
 
         # Owner demotes admin to member
@@ -509,7 +509,7 @@ class TestMultiUserScenariosE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv_id = resp.json()["id"]
 
         # Delete team
@@ -608,7 +608,7 @@ class TestMultiUserScenariosE2E:
             json={"email": invitee.email, "role": "viewer"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         inv_id = resp.json()["id"]
         resp = await http_client.post(
             f"/v1/invitations/{inv_id}/accept",

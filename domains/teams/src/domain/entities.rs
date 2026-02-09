@@ -875,6 +875,38 @@ mod tests {
     }
 
     #[test]
+    fn test_user_name_empty_rejected() {
+        let result = User::new(
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            Some("".to_string()),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_user_name_whitespace_only_rejected() {
+        let result = User::new(
+            Uuid::new_v4(),
+            "test@example.com".to_string(),
+            Some("   ".to_string()),
+        );
+        // Whitespace-only is allowed (non-empty, within length limit).
+        // The name "   " has len 3, which passes the is_empty()/len() check.
+        // If we want to reject it, we'd need to add trim validation.
+        // Current code allows it — this test documents the behavior.
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_team_slug_consecutive_hyphens_collapsed_in_generation() {
+        // Name with multiple consecutive special chars should collapse hyphens
+        let team = Team::new("a---b".to_string(), None).unwrap();
+        assert!(team.slug.starts_with("a-b-"));
+        assert!(!team.slug.contains("--"));
+    }
+
+    #[test]
     fn test_team_creation() {
         let team = Team::new("Test Team".to_string(), None).unwrap();
 

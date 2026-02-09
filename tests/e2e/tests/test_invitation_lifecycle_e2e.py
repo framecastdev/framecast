@@ -56,7 +56,7 @@ class TestInvitationLifecycleE2E:
             json={"email": email, "role": role},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200, f"Invite failed: {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, f"Invite failed: {resp.status_code} {resp.text}"
         return resp.json()["id"]
 
     # -----------------------------------------------------------------------
@@ -574,8 +574,8 @@ class TestInvitationLifecycleE2E:
             json={"email": "admin-invited@test.com", "role": "member"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code == 200, (
-            f"Expected 200 for admin inviting, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, (
+            f"Expected 201 for admin inviting, got {resp.status_code} {resp.text}"
         )
 
     async def test_i20_admin_can_revoke(
@@ -858,8 +858,8 @@ class TestInvitationLifecycleE2E:
             json={"email": "random-future-user@unknown.com", "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200, (
-            f"Expected 200 for inviting non-existent user, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, (
+            f"Expected 201 for inviting non-existent user, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------
@@ -884,6 +884,6 @@ class TestInvitationLifecycleE2E:
             json={"email": f"parametrize-{role}@test.com", "role": role},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200, (
-            f"Expected 200 for role={role}, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, (
+            f"Expected 201 for role={role}, got {resp.status_code} {resp.text}"
         )

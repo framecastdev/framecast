@@ -1224,3 +1224,127 @@ mod test_delete_team {
         app.cleanup().await.unwrap();
     }
 }
+
+mod test_membership_operations {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_list_memberships_viewer_can_list() {
+        let app = TestApp::new().await.unwrap();
+        let (_, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a viewer member
+        let viewer_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"INSERT INTO memberships (id, team_id, user_id, role, created_at) VALUES ($1, $2, $3, $4::membership_role, $5)"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(viewer_fixture.user.id)
+        .bind("viewer")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = app.test_router();
+
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/teams/{}/members", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", viewer_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let members: Vec<Value> = serde_json::from_slice(&body).unwrap();
+        // Should see both owner and viewer
+        assert_eq!(members.len(), 2);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_remove_sole_owner_returns_error() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a regular member
+        let member_fixture = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"INSERT INTO memberships (id, team_id, user_id, role, created_at) VALUES ($1, $2, $3, $4::membership_role, $5)"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(member_fixture.user.id)
+        .bind("member")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = app.test_router();
+
+        // Owner tries to leave — they're the last owner but team has other members → INV-T2
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/leave", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_leave_team_creator_single_team_blocked() {
+        let app = TestApp::new().await.unwrap();
+        let (owner_fixture, team, _) = UserFixture::creator_with_team(&app).await.unwrap();
+
+        // Add a second owner so INV-T2 won't block first
+        let second_owner = UserFixture::creator(&app).await.unwrap();
+        sqlx::query(
+            r#"INSERT INTO memberships (id, team_id, user_id, role, created_at) VALUES ($1, $2, $3, $4::membership_role, $5)"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(team.id)
+        .bind(second_owner.user.id)
+        .bind("owner")
+        .bind(chrono::Utc::now())
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+        let router = app.test_router();
+
+        // Creator with only one team tries to leave → INV-U2 blocks it
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/teams/{}/leave", team.id))
+            .header(
+                "authorization",
+                format!("Bearer {}", owner_fixture.jwt_token),
+            )
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        app.cleanup().await.unwrap();
+    }
+}

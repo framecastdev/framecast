@@ -52,7 +52,7 @@ class TestInvitationWorkflowE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200, f"Invite failed: {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, f"Invite failed: {resp.status_code} {resp.text}"
         invitation = resp.json()
         assert invitation["state"] == "pending"
         assert invitation["email"] == invitee.email
@@ -110,7 +110,7 @@ class TestInvitationWorkflowE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         invitation_id = resp.json()["id"]
 
         # Invitee declines
@@ -144,7 +144,7 @@ class TestInvitationWorkflowE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         first_invitation_id = resp.json()["id"]
 
         # Second invitation to same email revokes old and creates new
@@ -153,7 +153,7 @@ class TestInvitationWorkflowE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         second_invitation_id = resp.json()["id"]
         assert second_invitation_id != first_invitation_id
 
@@ -208,7 +208,7 @@ class TestInvitationWorkflowE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         invitation_id = resp.json()["id"]
 
         # Owner revokes the invitation (DELETE, not POST)
@@ -251,7 +251,7 @@ class TestInvitationWorkflowE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         invitation_id = resp.json()["id"]
 
         # Invitee declines
@@ -267,7 +267,7 @@ class TestInvitationWorkflowE2E:
             json={"email": invitee.email, "role": "admin"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200, (
+        assert resp.status_code == 201, (
             f"Re-invite after decline should succeed: {resp.status_code} {resp.text}"
         )
         new_invitation_id = resp.json()["id"]
@@ -320,7 +320,7 @@ class TestInvitationWorkflowE2E:
             json={"email": invitee.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
 
         # Wait for and retrieve invitation emails for the invitee
         import asyncio

@@ -871,6 +871,140 @@ mod tests {
     }
 
     #[test]
+    fn test_system_asset_creation_ambient() {
+        let asset = SystemAsset::new(
+            SystemAssetCategory::Ambient,
+            "rain_01".to_string(),
+            "Ambient rain sounds".to_string(),
+            "system/ambient/rain_01.wav".to_string(),
+            "audio/wav".to_string(),
+            4096,
+            Some(rust_decimal::Decimal::new(300, 1)),
+            vec!["rain".to_string(), "nature".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(asset.id, "asset_ambient_rain_01");
+        assert_eq!(asset.category, SystemAssetCategory::Ambient);
+        assert_eq!(
+            asset.duration_seconds,
+            Some(rust_decimal::Decimal::new(300, 1))
+        );
+    }
+
+    #[test]
+    fn test_system_asset_creation_music() {
+        let asset = SystemAsset::new(
+            SystemAssetCategory::Music,
+            "chill_beat_01".to_string(),
+            "Chill beat background music".to_string(),
+            "system/music/chill_beat_01.mp3".to_string(),
+            "audio/mpeg".to_string(),
+            8192,
+            Some(rust_decimal::Decimal::new(1200, 1)),
+            vec!["chill".to_string(), "lofi".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(asset.id, "asset_music_chill_beat_01");
+        assert_eq!(asset.category, SystemAssetCategory::Music);
+    }
+
+    #[test]
+    fn test_system_asset_creation_transition() {
+        let asset = SystemAsset::new(
+            SystemAssetCategory::Transition,
+            "fade_01".to_string(),
+            "Smooth fade transition".to_string(),
+            "system/transition/fade_01.mp4".to_string(),
+            "video/mp4".to_string(),
+            16384,
+            Some(rust_decimal::Decimal::new(5, 1)),
+            vec!["fade".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(asset.id, "asset_transition_fade_01");
+        assert_eq!(asset.category, SystemAssetCategory::Transition);
+    }
+
+    #[test]
+    fn test_system_asset_duration_present() {
+        let asset = SystemAsset::new(
+            SystemAssetCategory::Sfx,
+            "beep_01".to_string(),
+            "Short beep".to_string(),
+            "system/sfx/beep_01.wav".to_string(),
+            "audio/wav".to_string(),
+            512,
+            Some(rust_decimal::Decimal::new(15, 1)),
+            vec![],
+        )
+        .unwrap();
+
+        assert_eq!(
+            asset.duration_seconds,
+            Some(rust_decimal::Decimal::new(15, 1))
+        );
+    }
+
+    #[test]
+    fn test_system_asset_duration_none() {
+        let asset = SystemAsset::new(
+            SystemAssetCategory::Sfx,
+            "click_01".to_string(),
+            "Click sound".to_string(),
+            "system/sfx/click_01.wav".to_string(),
+            "audio/wav".to_string(),
+            256,
+            None,
+            vec![],
+        )
+        .unwrap();
+
+        assert!(asset.duration_seconds.is_none());
+    }
+
+    #[test]
+    fn test_system_asset_empty_tags_valid() {
+        let asset = SystemAsset::new(
+            SystemAssetCategory::Sfx,
+            "pop_01".to_string(),
+            "Pop sound".to_string(),
+            "system/sfx/pop_01.wav".to_string(),
+            "audio/wav".to_string(),
+            128,
+            None,
+            vec![],
+        )
+        .unwrap();
+
+        assert!(asset.tags.is_empty());
+    }
+
+    #[test]
+    fn test_system_asset_tags_preserved() {
+        let tags = vec![
+            "wind".to_string(),
+            "whoosh".to_string(),
+            "nature".to_string(),
+        ];
+        let asset = SystemAsset::new(
+            SystemAssetCategory::Sfx,
+            "gust_01".to_string(),
+            "Wind gust".to_string(),
+            "system/sfx/gust_01.wav".to_string(),
+            "audio/wav".to_string(),
+            1024,
+            None,
+            tags.clone(),
+        )
+        .unwrap();
+
+        assert_eq!(asset.tags, tags);
+    }
+
+    #[test]
     fn test_system_asset_invalid_name() {
         let result = SystemAsset::new(
             SystemAssetCategory::Sfx,
