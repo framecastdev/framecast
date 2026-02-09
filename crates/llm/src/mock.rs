@@ -65,6 +65,7 @@ impl LlmService for MockLlmService {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 /// Configurable behavior for the mock LLM service
 #[derive(Debug, Clone)]
 pub enum MockBehavior {
@@ -78,6 +79,7 @@ pub enum MockBehavior {
     Echo,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 /// Error kinds that can be simulated by the configurable mock
 #[derive(Debug, Clone)]
 pub enum LlmErrorKind {
@@ -89,6 +91,7 @@ pub enum LlmErrorKind {
     Response(String),
 }
 
+#[cfg(any(test, feature = "test-support"))]
 /// A recorded LLM request for test assertions
 #[derive(Debug, Clone)]
 pub struct RecordedRequest {
@@ -98,6 +101,7 @@ pub struct RecordedRequest {
     pub max_tokens: Option<u32>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 /// Configurable mock LLM service with request recording
 ///
 /// Thread-safe via `Arc<Mutex<>>`, following the pattern of `MockEmailService`.
@@ -108,6 +112,7 @@ pub struct ConfigurableMockLlmService {
     call_count: Arc<Mutex<usize>>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl ConfigurableMockLlmService {
     /// Create with default echo behavior
     pub fn new() -> Self {
@@ -150,12 +155,14 @@ impl ConfigurableMockLlmService {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl Default for ConfigurableMockLlmService {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 #[async_trait::async_trait]
 impl LlmService for ConfigurableMockLlmService {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, LlmError> {

@@ -9,6 +9,9 @@ rust-version.workspace = true
 
 description = "LLM service: Anthropic Claude API integration"
 
+[features]
+test-support = []
+
 [dependencies]
 # Shared crates
 framecast-common.workspace = true

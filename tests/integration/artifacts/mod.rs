@@ -155,7 +155,7 @@ mod test_create_storyboard {
     }
 
     #[tokio::test]
-    async fn test_create_storyboard_sets_status_pending() {
+    async fn test_create_storyboard_sets_status_ready() {
         let app = ArtifactsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
@@ -169,7 +169,7 @@ mod test_create_storyboard {
 
         let resp = app.test_router().oneshot(req).await.unwrap();
         let body = parse_body(resp).await;
-        assert_eq!(body["status"], "pending");
+        assert_eq!(body["status"], "ready");
 
         app.cleanup().await.unwrap();
     }
@@ -541,25 +541,31 @@ mod test_artifact_repo {
     async fn test_repo_update_status_pending_to_ready() {
         let app = ArtifactsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
-        let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        // Create artifact
-        let req = authed_request(
-            Method::POST,
-            "/v1/artifacts/storyboards",
-            &jwt,
-            Some(json!({"spec": {}})),
-        );
-        let resp = app.test_router().oneshot(req).await.unwrap();
-        let body = parse_body(resp).await;
-        let id: Uuid = body["id"].as_str().unwrap().parse().unwrap();
+        // Insert a media artifact with pending status directly via SQL
+        let artifact_id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO artifacts (id, owner, created_by, kind, status, source,
+                filename, s3_key, content_type, size_bytes, created_at, updated_at)
+            VALUES ($1, $2, $3, 'image', 'pending', 'upload',
+                'test.jpg', $4, 'image/jpeg', 1024, NOW(), NOW())
+            "#,
+        )
+        .bind(artifact_id)
+        .bind(Urn::user(user.id).to_string())
+        .bind(user.id)
+        .bind(format!("uploads/{}.jpg", artifact_id))
+        .execute(&app.pool)
+        .await
+        .unwrap();
 
         // Update status via repo
         let updated = app
             .state
             .repos
             .artifacts
-            .update_status(id, framecast_artifacts::ArtifactStatus::Ready)
+            .update_status(artifact_id, framecast_artifacts::ArtifactStatus::Ready)
             .await
             .unwrap();
 
@@ -576,23 +582,30 @@ mod test_artifact_repo {
     async fn test_repo_update_status_pending_to_failed() {
         let app = ArtifactsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
-        let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let req = authed_request(
-            Method::POST,
-            "/v1/artifacts/storyboards",
-            &jwt,
-            Some(json!({"spec": {}})),
-        );
-        let resp = app.test_router().oneshot(req).await.unwrap();
-        let body = parse_body(resp).await;
-        let id: Uuid = body["id"].as_str().unwrap().parse().unwrap();
+        // Insert a media artifact with pending status directly via SQL
+        let artifact_id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO artifacts (id, owner, created_by, kind, status, source,
+                filename, s3_key, content_type, size_bytes, created_at, updated_at)
+            VALUES ($1, $2, $3, 'image', 'pending', 'upload',
+                'test.jpg', $4, 'image/jpeg', 1024, NOW(), NOW())
+            "#,
+        )
+        .bind(artifact_id)
+        .bind(Urn::user(user.id).to_string())
+        .bind(user.id)
+        .bind(format!("uploads/{}.jpg", artifact_id))
+        .execute(&app.pool)
+        .await
+        .unwrap();
 
         let updated = app
             .state
             .repos
             .artifacts
-            .update_status(id, framecast_artifacts::ArtifactStatus::Failed)
+            .update_status(artifact_id, framecast_artifacts::ArtifactStatus::Failed)
             .await
             .unwrap();
 

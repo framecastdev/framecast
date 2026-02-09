@@ -48,16 +48,16 @@ class TestArtifactCrudE2E:
         data = resp.json()
         assert data["kind"] == "storyboard"
 
-    async def test_ar02_created_storyboard_has_status_pending(
+    async def test_ar02_created_storyboard_has_status_ready(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """AR02: Created storyboard has status=pending."""
+        """AR02: Created storyboard has status=ready (spec 8.16)."""
         owner = seed_users.owner
 
         artifact = await create_storyboard(http_client, owner.auth_headers())
-        assert artifact["status"] == "pending"
+        assert artifact["status"] == "ready"
 
     async def test_ar03_created_storyboard_has_source_upload(
         self,

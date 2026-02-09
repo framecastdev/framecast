@@ -579,7 +579,7 @@ mod test_conversation_constraints {
             r#"
             INSERT INTO artifacts (id, owner, created_by, kind, status, source,
                 spec, conversation_id, created_at, updated_at)
-            VALUES ($1, $2, $3, 'storyboard', 'pending', 'upload', '{}', $4, NOW(), NOW())
+            VALUES ($1, $2, $3, 'storyboard', 'ready', 'upload', '{}', $4, NOW(), NOW())
             "#,
         )
         .bind(artifact_id)
@@ -738,6 +738,46 @@ mod test_conversation_constraints {
             .await;
 
         assert!(result.is_err());
+
+        app.cleanup().await.unwrap();
+    }
+}
+
+// CON-I23, CON-I24: Auth tests
+mod test_conversation_auth {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_create_conversation_without_auth_returns_401() {
+        let app = ConversationsTestApp::new().await.unwrap();
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/conversations")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_string(&json!({"model": "test"})).unwrap(),
+            ))
+            .unwrap();
+
+        let resp = app.test_router().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_list_conversations_without_auth_returns_401() {
+        let app = ConversationsTestApp::new().await.unwrap();
+
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/v1/conversations")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = app.test_router().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 
         app.cleanup().await.unwrap();
     }

@@ -276,3 +276,45 @@ mod test_list_messages {
         app.cleanup().await.unwrap();
     }
 }
+
+mod test_message_auth {
+    use super::*;
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn test_send_message_without_auth_returns_401() {
+        let app = ConversationsTestApp::new().await.unwrap();
+        let conv_id = Uuid::new_v4();
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/v1/conversations/{}/messages", conv_id))
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_string(&json!({"content": "Hello"})).unwrap(),
+            ))
+            .unwrap();
+
+        let resp = app.test_router().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        app.cleanup().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_list_messages_without_auth_returns_401() {
+        let app = ConversationsTestApp::new().await.unwrap();
+        let conv_id = Uuid::new_v4();
+
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/conversations/{}/messages", conv_id))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = app.test_router().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        app.cleanup().await.unwrap();
+    }
+}
