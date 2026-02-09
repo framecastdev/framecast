@@ -363,7 +363,6 @@ class TestCrossDomainE2E:
         data = resp.json()
         return data["api_key"]["id"], data["raw_key"]
 
-    @pytest.mark.skip(reason="Requires AnyAuth migration on artifact handlers")
     async def test_xd15_api_key_create_storyboard(
         self,
         http_client: httpx.AsyncClient,
@@ -380,7 +379,6 @@ class TestCrossDomainE2E:
         )
         assert resp.status_code == 201
 
-    @pytest.mark.skip(reason="Requires AnyAuth migration on artifact handlers")
     async def test_xd16_api_key_list_artifacts(
         self,
         http_client: httpx.AsyncClient,
@@ -396,7 +394,6 @@ class TestCrossDomainE2E:
         )
         assert resp.status_code == 200
 
-    @pytest.mark.skip(reason="Requires AnyAuth migration on artifact handlers")
     async def test_xd17_api_key_get_artifact(
         self,
         http_client: httpx.AsyncClient,
@@ -413,7 +410,6 @@ class TestCrossDomainE2E:
         )
         assert resp.status_code == 200
 
-    @pytest.mark.skip(reason="Requires AnyAuth migration on artifact handlers")
     async def test_xd18_api_key_delete_artifact(
         self,
         http_client: httpx.AsyncClient,
@@ -430,7 +426,6 @@ class TestCrossDomainE2E:
         )
         assert resp.status_code == 204
 
-    @pytest.mark.skip(reason="Requires AnyAuth migration on conversation handlers")
     async def test_xd19_api_key_create_conversation(
         self,
         http_client: httpx.AsyncClient,
@@ -447,7 +442,6 @@ class TestCrossDomainE2E:
         )
         assert resp.status_code == 201
 
-    @pytest.mark.skip(reason="Requires AnyAuth migration on conversation handlers")
     async def test_xd20_api_key_list_conversations(
         self,
         http_client: httpx.AsyncClient,
@@ -463,7 +457,6 @@ class TestCrossDomainE2E:
         )
         assert resp.status_code == 200
 
-    @pytest.mark.skip(reason="Requires AnyAuth migration on message handlers")
     async def test_xd21_api_key_send_message(
         self,
         http_client: httpx.AsyncClient,
@@ -481,7 +474,6 @@ class TestCrossDomainE2E:
         )
         assert resp.status_code == 201
 
-    @pytest.mark.skip(reason="Requires AnyAuth migration on system asset handlers")
     async def test_xd22_api_key_list_system_assets(
         self,
         http_client: httpx.AsyncClient,

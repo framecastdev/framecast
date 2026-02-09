@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use framecast_auth::AuthUser;
+use framecast_auth::AnyAuth;
 use framecast_common::{Error, Result, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -75,7 +75,7 @@ impl From<crate::domain::entities::Conversation> for ConversationResponse {
 
 /// Create a new conversation
 pub async fn create_conversation(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ConversationsState>,
     ValidatedJson(req): ValidatedJson<CreateConversationRequest>,
 ) -> Result<(StatusCode, Json<ConversationResponse>)> {
@@ -92,7 +92,7 @@ pub async fn create_conversation(
 
 /// List conversations for the authenticated user
 pub async fn list_conversations(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ConversationsState>,
     Query(query): Query<ListConversationsQuery>,
 ) -> Result<Json<Vec<ConversationResponse>>> {
@@ -108,7 +108,7 @@ pub async fn list_conversations(
 
 /// Get a single conversation by ID
 pub async fn get_conversation(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ConversationsState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ConversationResponse>> {
@@ -128,7 +128,7 @@ pub async fn get_conversation(
 
 /// Update a conversation (title, status)
 pub async fn update_conversation(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ConversationsState>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateConversationRequest>,
@@ -184,7 +184,7 @@ pub async fn update_conversation(
 
 /// Delete a conversation
 pub async fn delete_conversation(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ConversationsState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode> {

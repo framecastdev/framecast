@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use framecast_auth::AuthUser;
+use framecast_auth::AnyAuth;
 use framecast_common::{Error, Result, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -63,7 +63,7 @@ pub struct SendMessageResponse {
 
 /// Send a message to a conversation
 pub async fn send_message(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ConversationsState>,
     Path(conversation_id): Path<Uuid>,
     ValidatedJson(req): ValidatedJson<SendMessageRequest>,
@@ -159,7 +159,7 @@ pub async fn send_message(
 
 /// List messages for a conversation
 pub async fn list_messages(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ConversationsState>,
     Path(conversation_id): Path<Uuid>,
 ) -> Result<Json<Vec<MessageResponse>>> {

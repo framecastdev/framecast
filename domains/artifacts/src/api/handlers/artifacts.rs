@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use framecast_auth::AuthUser;
+use framecast_auth::AnyAuth;
 use framecast_common::{Error, Result, Urn, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -76,7 +76,7 @@ impl From<crate::domain::entities::Artifact> for ArtifactResponse {
 
 /// List artifacts for the authenticated user
 pub async fn list_artifacts(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ArtifactsState>,
 ) -> Result<Json<Vec<ArtifactResponse>>> {
     let owner = Urn::user(ctx.user.id);
@@ -92,7 +92,7 @@ pub async fn list_artifacts(
 
 /// Get a single artifact by ID
 pub async fn get_artifact(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ArtifactsState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ArtifactResponse>> {
@@ -114,7 +114,7 @@ pub async fn get_artifact(
 
 /// Create a storyboard artifact
 pub async fn create_storyboard(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ArtifactsState>,
     ValidatedJson(req): ValidatedJson<CreateStoryboardRequest>,
 ) -> Result<(StatusCode, Json<ArtifactResponse>)> {
@@ -138,7 +138,7 @@ pub async fn create_storyboard(
 
 /// Delete an artifact
 pub async fn delete_artifact(
-    AuthUser(ctx): AuthUser,
+    AnyAuth(ctx): AnyAuth,
     State(state): State<ArtifactsState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode> {
