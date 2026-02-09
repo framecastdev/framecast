@@ -10,7 +10,7 @@ pub async fn upgrade_user_tier_tx(
     transaction: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
     new_tier: UserTier,
-) -> std::result::Result<(), sqlx::Error> {
+) -> std::result::Result<(), RepositoryError> {
     let now = chrono::Utc::now();
     sqlx::query!(
         r#"
@@ -33,7 +33,7 @@ pub async fn upgrade_user_tier_tx(
 pub async fn create_membership_tx(
     transaction: &mut Transaction<'_, Postgres>,
     membership: &Membership,
-) -> std::result::Result<Membership, sqlx::Error> {
+) -> std::result::Result<Membership, RepositoryError> {
     let created = sqlx::query_as!(
         Membership,
         r#"
@@ -88,7 +88,7 @@ pub async fn mark_invitation_accepted_tx(
 pub async fn count_members_for_team_tx(
     transaction: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
-) -> std::result::Result<i64, sqlx::Error> {
+) -> std::result::Result<i64, RepositoryError> {
     let rows: Vec<(Uuid,)> =
         sqlx::query_as("SELECT id FROM memberships WHERE team_id = $1 FOR UPDATE")
             .bind(team_id)
@@ -104,7 +104,7 @@ pub async fn count_members_for_team_tx(
 pub async fn count_owners_for_team_tx(
     transaction: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
-) -> std::result::Result<i64, sqlx::Error> {
+) -> std::result::Result<i64, RepositoryError> {
     let row: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM memberships WHERE team_id = $1 AND role = 'owner'")
             .bind(team_id)
@@ -120,7 +120,7 @@ pub async fn get_membership_by_team_and_user_tx(
     transaction: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
     user_id: Uuid,
-) -> std::result::Result<Option<Membership>, sqlx::Error> {
+) -> std::result::Result<Option<Membership>, RepositoryError> {
     let row: Option<Membership> = sqlx::query_as(
         r#"
         SELECT id, team_id, user_id, role, created_at
@@ -157,7 +157,7 @@ pub async fn delete_membership_tx(
 pub async fn delete_team_tx(
     transaction: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
-) -> std::result::Result<(), sqlx::Error> {
+) -> std::result::Result<(), RepositoryError> {
     sqlx::query("DELETE FROM teams WHERE id = $1")
         .bind(team_id)
         .execute(&mut **transaction)
@@ -187,7 +187,7 @@ pub async fn revoke_invitation_tx(
 pub async fn create_invitation_tx(
     transaction: &mut Transaction<'_, Postgres>,
     invitation: &crate::Invitation,
-) -> std::result::Result<crate::Invitation, sqlx::Error> {
+) -> std::result::Result<crate::Invitation, RepositoryError> {
     let created: crate::Invitation = sqlx::query_as(
         r#"
         INSERT INTO invitations (id, team_id, invited_by, email, role, token, expires_at, accepted_at, declined_at, revoked_at, created_at)
@@ -219,7 +219,7 @@ pub async fn create_invitation_tx(
 pub async fn count_for_user_tx(
     transaction: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
-) -> std::result::Result<i64, sqlx::Error> {
+) -> std::result::Result<i64, RepositoryError> {
     let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM memberships WHERE user_id = $1")
         .bind(user_id)
         .fetch_one(&mut **transaction)
@@ -234,7 +234,7 @@ pub async fn count_for_user_tx(
 pub async fn count_pending_for_team_tx(
     transaction: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
-) -> std::result::Result<i64, sqlx::Error> {
+) -> std::result::Result<i64, RepositoryError> {
     let row: (i64,) = sqlx::query_as(
         r#"
         SELECT COUNT(*)
@@ -261,7 +261,7 @@ pub async fn update_role_tx(
     team_id: Uuid,
     user_id: Uuid,
     new_role: MembershipRole,
-) -> std::result::Result<Membership, sqlx::Error> {
+) -> std::result::Result<Membership, RepositoryError> {
     let updated: Membership = sqlx::query_as(
         r#"
         UPDATE memberships
@@ -284,7 +284,7 @@ pub async fn update_role_tx(
 pub async fn count_owned_teams_tx(
     transaction: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
-) -> std::result::Result<i64, sqlx::Error> {
+) -> std::result::Result<i64, RepositoryError> {
     let row: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM memberships WHERE user_id = $1 AND role = 'owner'")
             .bind(user_id)
@@ -299,7 +299,7 @@ pub async fn count_owned_teams_tx(
 pub async fn count_active_jobs_for_team_tx(
     transaction: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
-) -> std::result::Result<i64, sqlx::Error> {
+) -> std::result::Result<i64, RepositoryError> {
     let row: (i64,) = sqlx::query_as(
         r#"
         SELECT COUNT(*)
@@ -321,7 +321,7 @@ pub async fn count_active_jobs_for_team_tx(
 pub async fn get_team_by_slug_tx(
     transaction: &mut Transaction<'_, Postgres>,
     slug: &str,
-) -> std::result::Result<Option<Team>, sqlx::Error> {
+) -> std::result::Result<Option<Team>, RepositoryError> {
     let row: Option<Team> = sqlx::query_as(
         r#"
         SELECT id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at
@@ -343,7 +343,7 @@ pub async fn get_team_by_slug_tx(
 pub async fn find_teams_where_sole_owner_tx(
     transaction: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
-) -> std::result::Result<Vec<Uuid>, sqlx::Error> {
+) -> std::result::Result<Vec<Uuid>, RepositoryError> {
     let rows: Vec<(Uuid,)> = sqlx::query_as(
         r#"
         SELECT m.team_id
@@ -384,7 +384,7 @@ pub async fn delete_user_tx(
 pub async fn create_team_tx(
     transaction: &mut Transaction<'_, Postgres>,
     team: &Team,
-) -> std::result::Result<Team, sqlx::Error> {
+) -> std::result::Result<Team, RepositoryError> {
     let created: Team = sqlx::query_as(
         r#"
         INSERT INTO teams (id, name, slug, credits, ephemeral_storage_bytes, settings, created_at, updated_at)
