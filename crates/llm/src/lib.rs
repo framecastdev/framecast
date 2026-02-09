@@ -1,0 +1,225 @@
+//! Framecast LLM Service
+//!
+//! Provides LLM functionality for conversation workflows with support for:
+//! - Anthropic Claude API integration for production
+//! - Mock LLM service for testing and development
+//! - Configurable model, system prompt, and max tokens
+
+pub mod anthropic;
+pub mod mock;
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum LlmError {
+    #[error("LLM configuration error: {0}")]
+    Configuration(String),
+
+    #[error("LLM request error: {0}")]
+    Request(String),
+
+    #[error("LLM response error: {0}")]
+    Response(String),
+
+    #[error("LLM rate limit exceeded")]
+    RateLimit,
+}
+
+/// Role in a conversation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LlmRole {
+    User,
+    Assistant,
+}
+
+/// A single message in a conversation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmMessage {
+    pub role: LlmRole,
+    pub content: String,
+}
+
+/// Request to the LLM
+#[derive(Debug, Clone)]
+pub struct CompletionRequest {
+    pub model: String,
+    pub system_prompt: Option<String>,
+    pub messages: Vec<LlmMessage>,
+    pub max_tokens: Option<u32>,
+}
+
+/// Response from the LLM
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompletionResponse {
+    pub content: String,
+    pub model: String,
+    pub input_tokens: i32,
+    pub output_tokens: i32,
+    pub stop_reason: String,
+}
+
+/// LLM service configuration
+#[derive(Clone)]
+pub struct LlmConfig {
+    /// LLM provider (anthropic, mock)
+    pub provider: String,
+    /// Anthropic API key
+    pub api_key: String,
+    /// Default model to use
+    pub default_model: String,
+    /// Default max tokens
+    pub max_tokens: u32,
+    /// Optional base URL override (for testing)
+    pub base_url: Option<String>,
+}
+
+impl std::fmt::Debug for LlmConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LlmConfig")
+            .field("provider", &self.provider)
+            .field("api_key", &"[REDACTED]")
+            .field("default_model", &self.default_model)
+            .field("max_tokens", &self.max_tokens)
+            .field("base_url", &self.base_url)
+            .finish()
+    }
+}
+
+impl LlmConfig {
+    /// Create LLM config from environment variables
+    pub fn from_env() -> Result<Self, LlmError> {
+        dotenvy::dotenv().ok();
+
+        let provider = std::env::var("LLM_PROVIDER").unwrap_or_else(|_| "mock".to_string());
+
+        let api_key = std::env::var("ANTHROPIC_API_KEY").unwrap_or_default();
+
+        let default_model = std::env::var("ANTHROPIC_MODEL")
+            .unwrap_or_else(|_| "claude-sonnet-4-20250514".to_string());
+
+        let max_tokens = std::env::var("LLM_MAX_TOKENS")
+            .unwrap_or_else(|_| "4096".to_string())
+            .parse()
+            .map_err(|e| LlmError::Configuration(format!("Invalid LLM_MAX_TOKENS: {}", e)))?;
+
+        let base_url = std::env::var("ANTHROPIC_BASE_URL").ok();
+
+        Ok(Self {
+            provider,
+            api_key,
+            default_model,
+            max_tokens,
+            base_url,
+        })
+    }
+}
+
+/// LLM service trait for different implementations
+#[async_trait::async_trait]
+pub trait LlmService: Send + Sync {
+    /// Send a completion request to the LLM
+    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, LlmError>;
+
+    /// Return the default model name
+    fn default_model(&self) -> &str;
+}
+
+/// LLM service factory
+pub struct LlmServiceFactory;
+
+impl LlmServiceFactory {
+    /// Create LLM service based on configuration
+    pub fn create(config: LlmConfig) -> Result<Box<dyn LlmService>, LlmError> {
+        match config.provider.as_str() {
+            "anthropic" | "claude" => {
+                tracing::info!("Creating Anthropic LLM service");
+                if config.api_key.is_empty() {
+                    return Err(LlmError::Configuration(
+                        "ANTHROPIC_API_KEY is required for Anthropic provider".to_string(),
+                    ));
+                }
+                Ok(Box::new(anthropic::AnthropicService::new(config)))
+            }
+            "mock" => {
+                tracing::info!("Creating mock LLM service");
+                Ok(Box::new(mock::MockLlmService::new()))
+            }
+            provider => Err(LlmError::Configuration(format!(
+                "Unknown LLM provider: {}. Supported providers: anthropic, mock",
+                provider
+            ))),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_llm_config_defaults() {
+        std::env::remove_var("LLM_PROVIDER");
+        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::remove_var("ANTHROPIC_MODEL");
+        std::env::remove_var("LLM_MAX_TOKENS");
+        std::env::remove_var("ANTHROPIC_BASE_URL");
+
+        let config = LlmConfig::from_env().unwrap();
+        assert_eq!(config.provider, "mock");
+        assert_eq!(config.default_model, "claude-sonnet-4-20250514");
+        assert_eq!(config.max_tokens, 4096);
+        assert!(config.base_url.is_none());
+    }
+
+    #[test]
+    fn test_llm_message_serialization() {
+        let msg = LlmMessage {
+            role: LlmRole::User,
+            content: "Hello".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"role\":\"user\""));
+        assert!(json.contains("\"content\":\"Hello\""));
+    }
+
+    #[test]
+    fn test_factory_unknown_provider() {
+        let config = LlmConfig {
+            provider: "unknown".to_string(),
+            api_key: String::new(),
+            default_model: "test".to_string(),
+            max_tokens: 1024,
+            base_url: None,
+        };
+        let result = LlmServiceFactory::create(config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_factory_anthropic_requires_api_key() {
+        let config = LlmConfig {
+            provider: "anthropic".to_string(),
+            api_key: String::new(),
+            default_model: "test".to_string(),
+            max_tokens: 1024,
+            base_url: None,
+        };
+        let result = LlmServiceFactory::create(config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_factory_mock_succeeds() {
+        let config = LlmConfig {
+            provider: "mock".to_string(),
+            api_key: String::new(),
+            default_model: "mock-model".to_string(),
+            max_tokens: 1024,
+            base_url: None,
+        };
+        let result = LlmServiceFactory::create(config);
+        assert!(result.is_ok());
+    }
+}
