@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use framecast_auth::AuthUser;
+use framecast_auth::AnyAuth;
 use framecast_common::{Error, Result};
 use serde::Serialize;
 
@@ -46,7 +46,7 @@ impl From<crate::domain::entities::SystemAsset> for SystemAssetResponse {
 
 /// List all system assets
 pub async fn list_system_assets(
-    AuthUser(_ctx): AuthUser,
+    AnyAuth(_ctx): AnyAuth,
     State(state): State<ArtifactsState>,
 ) -> Result<Json<Vec<SystemAssetResponse>>> {
     let assets = state.repos.system_assets.list().await?;
@@ -56,7 +56,7 @@ pub async fn list_system_assets(
 
 /// Get a single system asset by ID
 pub async fn get_system_asset(
-    AuthUser(_ctx): AuthUser,
+    AnyAuth(_ctx): AnyAuth,
     State(state): State<ArtifactsState>,
     Path(id): Path<String>,
 ) -> Result<Json<SystemAssetResponse>> {
