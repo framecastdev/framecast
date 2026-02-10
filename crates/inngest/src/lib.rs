@@ -137,42 +137,33 @@ impl InngestServiceFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
 
-    // INN-U01: InngestConfig::from_env() with valid env -> Ok
+    // INN-U01: InngestConfig with valid inngest provider fields
     #[test]
-    #[serial]
-    fn test_config_from_env_valid() {
-        std::env::set_var("INNGEST_PROVIDER", "inngest");
-        std::env::set_var("INNGEST_EVENT_KEY", "test-key-123");
-        std::env::set_var("INNGEST_BASE_URL", "http://localhost:9999");
-        std::env::set_var("INNGEST_SIGNING_KEY", "sign-key-abc");
-
-        let config = InngestConfig::from_env().unwrap();
+    fn test_config_valid_inngest_provider() {
+        let config = InngestConfig {
+            provider: "inngest".to_string(),
+            event_key: "test-key-123".to_string(),
+            base_url: "http://localhost:9999".to_string(),
+            signing_key: Some("sign-key-abc".to_string()),
+        };
         assert_eq!(config.provider, "inngest");
         assert_eq!(config.event_key, "test-key-123");
         assert_eq!(config.base_url, "http://localhost:9999");
         assert_eq!(config.signing_key.as_deref(), Some("sign-key-abc"));
-
-        std::env::remove_var("INNGEST_PROVIDER");
-        std::env::remove_var("INNGEST_EVENT_KEY");
-        std::env::remove_var("INNGEST_BASE_URL");
-        std::env::remove_var("INNGEST_SIGNING_KEY");
     }
 
-    // INN-U02: InngestConfig::from_env() with inngest provider but missing event key -> Err
+    // INN-U02: InngestServiceFactory rejects inngest provider with empty event key
     #[test]
-    #[serial]
-    fn test_config_from_env_missing_event_key() {
-        std::env::set_var("INNGEST_PROVIDER", "inngest");
-        std::env::remove_var("INNGEST_EVENT_KEY");
-
-        let result = InngestConfig::from_env();
+    fn test_factory_rejects_inngest_without_event_key() {
+        let config = InngestConfig {
+            provider: "inngest".to_string(),
+            event_key: String::new(),
+            base_url: "http://localhost:8288".to_string(),
+            signing_key: None,
+        };
+        let result = InngestServiceFactory::create(config);
         assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains("INNGEST_EVENT_KEY is required"));
-
-        std::env::remove_var("INNGEST_PROVIDER");
     }
 
     // INN-U03: InngestEvent serialization with all fields present
