@@ -402,6 +402,12 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+          # Fail CI if any mutants survived
+          if [ "$missed" -gt 0 ]; then
+            echo "::error::${missed} mutants survived — add tests to catch them"
+            exit 1
+          fi
+
       - name: Upload combined results
         if: always()
         uses: actions/upload-artifact@v6
