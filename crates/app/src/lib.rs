@@ -7,7 +7,10 @@ use framecast_artifacts::{ArtifactsRepositories, ArtifactsState};
 use framecast_auth::{AuthBackend, AuthConfig};
 use framecast_conversations::{ConversationsRepositories, ConversationsState};
 use framecast_email::{EmailConfig, EmailServiceFactory};
+use framecast_inngest::{InngestConfig, InngestServiceFactory};
+use framecast_jobs::{JobsRepositories, JobsState};
 use framecast_llm::{LlmConfig, LlmServiceFactory};
+use framecast_runpod::{RenderConfig, RenderServiceFactory};
 use framecast_teams::{TeamsRepositories, TeamsState};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -18,6 +21,7 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
     let teams_repos = TeamsRepositories::new(pool.clone());
     let artifacts_repos = ArtifactsRepositories::new(pool.clone());
     let conversations_repos = ConversationsRepositories::new(pool.clone());
+    let jobs_repos = JobsRepositories::new(pool.clone());
 
     // Create auth config from environment
     let auth_config = AuthConfig {
@@ -45,6 +49,38 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
     let llm_service = LlmServiceFactory::create(llm_config)
         .map_err(|e| anyhow::anyhow!("Failed to create LLM service: {}", e))?;
 
+    // Create Inngest service from environment
+    let inngest_config = InngestConfig::from_env()
+        .map_err(|e| anyhow::anyhow!("Failed to create Inngest config: {}", e))?;
+    let inngest_service = InngestServiceFactory::create(inngest_config)
+        .map_err(|e| anyhow::anyhow!("Failed to create Inngest service: {}", e))?;
+
+    // Create Render service from environment
+    let render_config = RenderConfig::from_env()
+        .map_err(|e| anyhow::anyhow!("Failed to create Render config: {}", e))?;
+
+    let callback_base_url = render_config.callback_base_url.clone();
+
+    // If provider is "mock", create MockRenderService directly to extract behavior+history.
+    // Otherwise use factory.
+    let (render_service_boxed, mock_render_behavior, mock_render_history) =
+        if render_config.provider == "mock" {
+            let mock = framecast_runpod::mock::MockRenderService::new(
+                render_config.callback_base_url.clone(),
+            );
+            let behavior = Some(mock.behavior().clone());
+            let history = Some(mock.history().clone());
+            (
+                Box::new(mock) as Box<dyn framecast_runpod::RenderService>,
+                behavior,
+                history,
+            )
+        } else {
+            let svc = RenderServiceFactory::create(render_config)
+                .map_err(|e| anyhow::anyhow!("Failed to create Render service: {}", e))?;
+            (svc, None, None)
+        };
+
     // Create Teams domain state
     let teams_state = TeamsState {
         repos: teams_repos,
@@ -56,6 +92,17 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
     let artifacts_state = ArtifactsState {
         repos: artifacts_repos,
         auth: auth_backend.clone(),
+    };
+
+    // Create Jobs domain state
+    let jobs_state = JobsState {
+        repos: jobs_repos,
+        auth: auth_backend.clone(),
+        inngest: Arc::from(inngest_service),
+        render: Arc::from(render_service_boxed),
+        callback_base_url,
+        mock_render_behavior,
+        mock_render_history,
     };
 
     // Create Conversations domain state
@@ -74,6 +121,7 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
         )
         .merge(framecast_teams::routes().with_state(teams_state))
         .merge(framecast_artifacts::routes().with_state(artifacts_state))
+        .merge(framecast_jobs::routes().with_state(jobs_state))
         .merge(framecast_conversations::routes().with_state(conversations_state));
 
     Ok(app)

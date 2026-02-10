@@ -12,12 +12,18 @@ description = "Jobs domain: jobs, job events, usage"
 [dependencies]
 # Shared crates
 framecast-common.workspace = true
+framecast-auth.workspace = true
+framecast-inngest.workspace = true
+framecast-runpod.workspace = true
 
 # Core dependencies
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+
+# HTTP framework
+axum.workspace = true
 
 # Database mapping
 sqlx.workspace = true
@@ -27,6 +33,12 @@ regex = "1.0"
 
 # Logging
 tracing.workspace = true
+
+# Async
+tokio.workspace = true
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-core = "0.3"
+async-stream = "0.3"
 
 [dev-dependencies]
 tokio.workspace = true
