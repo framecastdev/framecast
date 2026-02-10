@@ -41,6 +41,7 @@ markers = [
     "invitation: invitation workflow tests",
     "error_handling: error handling and edge case tests",
     "artifacts: artifact CRUD tests",
+    "character: character artifact flow tests",
     "system_assets: system asset catalog tests",
     "conversations: conversation lifecycle tests",
     "messages: message send/list tests",
