@@ -174,7 +174,7 @@ class TestCharacterFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CF08: POST /v1/artifacts/:id/render -> 201, kind=image, status=pending."""
+        """CF08: POST /v1/artifacts/:id/render -> 201, returns job + pending image artifact."""
         invitee = seed_users.invitee
 
         character = await create_character(http_client, invitee.auth_headers())
@@ -185,16 +185,22 @@ class TestCharacterFlowE2E:
             headers=invitee.auth_headers(),
         )
         assert resp.status_code == 201, f"render failed: {resp.status_code} {resp.text}"
-        image = resp.json()
-        assert image["kind"] == "image"
-        assert image["status"] == "pending"
+        result = resp.json()
+        # New response shape: {"job": {...}, "artifact": {...}}
+        assert "job" in result, (
+            f"Expected 'job' in render response, got keys: {list(result.keys())}"
+        )
+        assert "artifact" in result, "Expected 'artifact' in render response"
+        assert result["job"]["status"] == "queued"
+        assert result["artifact"]["kind"] == "image"
+        assert result["artifact"]["status"] == "pending"
 
-    async def test_cf09_render_non_character_rejected(
+    async def test_cf09_render_storyboard_creates_video(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CF09: Render storyboard -> 400/422."""
+        """CF09: Render storyboard -> 201, returns job + pending video artifact."""
         invitee = seed_users.invitee
 
         storyboard = await create_storyboard(http_client, invitee.auth_headers())
@@ -204,9 +210,13 @@ class TestCharacterFlowE2E:
             f"/v1/artifacts/{storyboard_id}/render",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for non-character render, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 201, (
+            f"Expected 201 for storyboard render, got {resp.status_code} {resp.text}"
         )
+        result = resp.json()
+        assert result["job"]["status"] == "queued"
+        assert result["artifact"]["kind"] == "video"
+        assert result["artifact"]["status"] == "pending"
 
     async def test_cf10_render_nonexistent_returns_404(
         self,

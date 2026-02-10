@@ -111,15 +111,15 @@ class TestUserJourneyE2E:
         assert artifact["source"] == "conversation"
         assert artifact["conversation_id"] == conv_id
 
-        # 7. Render character -> image artifact
+        # 7. Render character -> job + image artifact
         resp = await http_client.post(
             f"/v1/artifacts/{character_id}/render",
             headers=invitee.auth_headers(),
         )
         assert resp.status_code == 201
-        image = resp.json()
-        assert image["kind"] == "image"
-        assert image["status"] == "pending"
+        result = resp.json()
+        assert result["artifact"]["kind"] == "image"
+        assert result["artifact"]["status"] == "pending"
 
         # 8. List artifacts -> both character and image present
         resp = await http_client.get("/v1/artifacts", headers=invitee.auth_headers())
@@ -392,9 +392,9 @@ class TestUserJourneyE2E:
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
-        image = resp.json()
-        assert image["kind"] == "image"
-        assert image["status"] == "pending"
+        result = resp.json()
+        assert result["artifact"]["kind"] == "image"
+        assert result["artifact"]["status"] == "pending"
 
         # 8. Both character and image present in artifact list
         resp = await http_client.get("/v1/artifacts", headers=owner.auth_headers())
