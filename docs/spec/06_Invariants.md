@@ -4,7 +4,7 @@
 
 ---
 
-## 7.1 User Invariants
+## 6.1 User Invariants
 
 ```
 INV-U1: âˆ€ u âˆˆ User : u.tier = 'creator' â†” u.upgraded_at IS NOT NULL
@@ -28,7 +28,7 @@ INV-U6: âˆ€ u âˆˆ User : u.ephemeral_storage_bytes â‰¥ 0
         (Storage cannot be negative)
 ```
 
-## 7.2 Team Invariants
+## 6.2 Team Invariants
 
 ```
 INV-T1: âˆ€ t âˆˆ Team :
@@ -60,7 +60,7 @@ INV-T8: âˆ€ u âˆˆ User :                                                 
         (User cannot be member of more than MAX_TEAM_MEMBERSHIPS=50 teams)
 ```
 
-## 7.3 Membership Invariants
+## 6.3 Membership Invariants
 
 ```
 INV-M1: âˆ€ m âˆˆ Membership :
@@ -84,7 +84,7 @@ INV-M6: âˆ€ m âˆˆ Membership : m.team_id âˆˆ {t.id : t âˆˆ Team}
         (Membership team reference must exist)
 ```
 
-## 7.4 Invitation Invariants
+## 6.4 Invitation Invariants
 
 ```
 INV-I1: âˆ€ i âˆˆ Invitation :
@@ -119,7 +119,7 @@ INV-I9: âˆ€ i âˆˆ Invitation : i.created_at < i.expires_at
         (Expiration must be after creation)
 ```
 
-## 7.5 Job Invariants
+## 6.5 Job Invariants
 
 ```
 INV-J1: âˆ€ j âˆˆ Job : j.status âˆˆ {'queued', 'processing', 'completed', 'failed', 'canceled'}
@@ -169,7 +169,7 @@ INV-J13: âˆ€ j âˆˆ Job : j.triggered_by âˆˆ {u.id : u âˆˆ User}
         (Job triggered_by reference must exist)
 ```
 
-## 7.6 ApiKey Invariants
+## 6.6 ApiKey Invariants
 
 ```
 INV-A1: âˆ€ k âˆˆ ApiKey : k.user_id âˆˆ {u.id : u âˆˆ User}
@@ -198,7 +198,7 @@ INV-A7: âˆ€ k âˆˆ ApiKey :
         (Team/membership URN keys require creator tier)
 ```
 
-## 7.7 Project Invariants
+## 6.7 Project Invariants
 
 ```
 INV-P1: âˆ€ p âˆˆ Project : p.status âˆˆ {'draft', 'rendering', 'completed', 'archived'}
@@ -218,7 +218,7 @@ INV-P5: âˆ€ p âˆˆ Project : p.status = 'rendering' â†’
         (Rendering project has active job)
 ```
 
-## 7.8 AssetFile Invariants
+## 6.8 AssetFile Invariants
 
 ```
 INV-AF1: âˆ€ a âˆˆ AssetFile : a.status âˆˆ {'pending', 'ready', 'failed'}
@@ -244,7 +244,7 @@ INV-AF6: âˆ€ a1, a2 âˆˆ AssetFile : a1 â‰  a2 â†’ a1.s3_key â�
         (S3 keys are unique)
 ```
 
-## 7.9 Webhook Invariants
+## 6.9 Webhook Invariants
 
 ```
 INV-W1: âˆ€ w âˆˆ Webhook : w.team_id âˆˆ {t.id : t âˆˆ Team}
@@ -266,7 +266,7 @@ INV-W5: âˆ€ w âˆˆ Webhook : w.created_by âˆˆ {u.id : u âˆˆ User}
         (Webhook creator reference must exist)
 ```
 
-## 7.10 WebhookDelivery Invariants
+## 6.10 WebhookDelivery Invariants
 
 ```
 INV-WD1: âˆ€ d âˆˆ WebhookDelivery : d.status âˆˆ {'pending', 'retrying', 'delivered', 'failed'}
@@ -282,7 +282,7 @@ INV-WD4: âˆ€ d âˆˆ WebhookDelivery : d.status = 'delivered' â†’ d.de
         (Delivered webhooks have delivery timestamp)
 ```
 
-## 7.11 Usage Invariants
+## 6.11 Usage Invariants
 
 ```
 INV-US1: âˆ€ u âˆˆ Usage : u.period MATCHES '^\d{4}-(0[1-9]|1[0-2])$'
@@ -298,7 +298,7 @@ INV-US4: âˆ€ u1, u2 âˆˆ Usage : (u1.owner = u2.owner âˆ§ u1.period = u
         (Owner-period pair uniqueness)
 ```
 
-## 7.12 SystemAsset Invariants
+## 6.12 SystemAsset Invariants
 
 ```
 INV-SA1: âˆ€ a âˆˆ SystemAsset : a.category âˆˆ {'sfx', 'ambient', 'music', 'transition'}
@@ -311,7 +311,7 @@ INV-SA3: âˆ€ a1, a2 âˆˆ SystemAsset : a1 â‰  a2 â†’ a1.s3_key â
         (S3 keys are unique)
 ```
 
-## 7.16 Conversation Invariants
+## 6.16 Conversation Invariants
 
 ```
 INV-C1: ∀ c ∈ Conversation : c.status ∈ {'active', 'archived'}
@@ -335,13 +335,13 @@ INV-C6: ∀ c ∈ Conversation :
         (System prompt cannot exceed 10,000 characters)
 ```
 
-## 7.17 Artifact Invariants
+## 6.17 Artifact Invariants
 
 ```
 INV-ART1: ∀ a ∈ Artifact : a.status ∈ {'pending', 'ready', 'failed'}
           (Artifact status must be one of allowed values)
 
-INV-ART2: ∀ a ∈ Artifact : a.kind ∈ {'storyboard', 'image', 'audio', 'video'}
+INV-ART2: ∀ a ∈ Artifact : a.kind ∈ {'storyboard', 'image', 'audio', 'video', 'character'}
           (Artifact kind must be one of allowed values)
 
 INV-ART3: ∀ a ∈ Artifact : a.kind ∈ {'image', 'audio', 'video'} →
@@ -349,8 +349,8 @@ INV-ART3: ∀ a ∈ Artifact : a.kind ∈ {'image', 'audio', 'video'} →
            a.content_type IS NOT NULL ∧ a.size_bytes IS NOT NULL)
           (Media artifacts require filename, s3_key, content_type, and size_bytes)
 
-INV-ART4: ∀ a ∈ Artifact : a.kind = 'storyboard' → a.spec IS NOT NULL
-          (Storyboard artifacts require spec)
+INV-ART4: ∀ a ∈ Artifact : a.kind ∈ {'storyboard', 'character'} → a.spec IS NOT NULL
+          (Storyboard and character artifacts require spec)
 
 INV-ART5: ∀ a ∈ Artifact : a.size_bytes IS NOT NULL →
           (a.size_bytes > 0 ∧ a.size_bytes ≤ 50 * 1024 * 1024)
@@ -362,9 +362,14 @@ INV-ART6: ∀ a1, a2 ∈ Artifact : a1 ≠ a2 ∧ a1.s3_key IS NOT NULL →
 
 INV-ART7: ∀ a ∈ Artifact : a.created_by ∈ {u.id : u ∈ User}
           (Artifact creator reference must exist)
+
+INV-ART-CHAR: ∀ a ∈ Artifact : a.kind = 'character' →
+              (a.spec IS NOT NULL ∧ a.spec->'prompt' IS NOT NULL ∧
+               LENGTH(TRIM(a.spec->>'prompt')) > 0)
+              (Character artifacts require spec with non-empty "prompt")
 ```
 
-## 7.13 Cross-Entity Invariants
+## 6.13 Cross-Entity Invariants
 
 ```
 INV-X1: âˆ€ j âˆˆ Job :
@@ -408,7 +413,7 @@ INV-X8: âˆ€ a âˆˆ Artifact :
         (Job-sourced artifacts must reference a job)
 ```
 
-## 7.14 Temporal Invariants
+## 6.14 Temporal Invariants
 
 ```
 INV-TIME1: âˆ€ e âˆˆ {User, Team, Project, Job, AssetFile, Webhook, Conversation, Artifact} :
@@ -428,7 +433,7 @@ INV-TIME5: âˆ€ i âˆˆ Invitation : i.accepted_at IS NOT NULL â†’ i.cr
            (Acceptance is after creation)
 ```
 
-## 7.15 Cardinality Constraints
+## 6.15 Cardinality Constraints
 
 ```
 CARD-1: âˆ€ t âˆˆ Team : |{m âˆˆ Membership : m.team_id = t.id âˆ§ m.role = 'owner'}| â‰¥ 1

@@ -79,9 +79,6 @@ Test the full Lambda + API Gateway stack locally:
 # Build Lambda and deploy to LocalStack
 just deploy-local
 
-# Get the API endpoint
-just deploy-local-endpoint
-
 # Test health endpoint
 curl http://localhost:4566/restapis/<api-id>/dev/_user_request_/health
 ```
@@ -181,7 +178,6 @@ just infra-fmt            # Format .tf files
 just deploy-local         # Full deploy to LocalStack
 just deploy-local-lambda  # Update Lambda only
 just deploy-local-destroy # Tear down LocalStack resources
-just deploy-local-endpoint # Get API endpoint
 
 # AWS deployment
 just deploy-dev           # Deploy to dev

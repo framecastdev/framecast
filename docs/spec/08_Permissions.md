@@ -44,7 +44,8 @@
 | `GET /v1/conversations/:id/messages` | ✓ (own) | ✓ (own) |
 | `GET /v1/artifacts` | ✓ (own artifacts) | ✓ (accessible via owner URN) |
 | `GET /v1/artifacts/:id` | ✓ (own artifacts) | ✓ (accessible via owner URN) |
-| `POST /v1/artifacts/storyboard` | ✓ | ✓ |
+| `POST /v1/artifacts/storyboards` | ✓ | ✓ |
+| `POST /v1/artifacts/characters` | ✓ | ✓ |
 | `POST /v1/artifacts/upload-url` | ✓ | ✓ |
 | `POST /v1/artifacts/:id/confirm` | ✓ | ✓ |
 | `DELETE /v1/artifacts/:id` | ✓ (own artifacts) | ✓ (accessible via owner URN) |
@@ -133,8 +134,9 @@ Scope: artifacts:read
   Allows: GET /v1/artifacts, GET /v1/artifacts/:id
 
 Scope: artifacts:write
-  Allows: POST /v1/artifacts/storyboard, POST /v1/artifacts/upload-url,
-          POST /v1/artifacts/:id/confirm, DELETE /v1/artifacts/:id
+  Allows: POST /v1/artifacts/storyboards, POST /v1/artifacts/characters,
+          POST /v1/artifacts/upload-url, POST /v1/artifacts/:id/confirm,
+          DELETE /v1/artifacts/:id
 
 Scope: webhooks:read
   Allows: GET /v1/teams/:id/webhooks, GET /v1/webhooks/:id, GET /v1/webhooks/:id/deliveries
