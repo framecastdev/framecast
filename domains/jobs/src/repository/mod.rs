@@ -30,4 +30,9 @@ impl JobsRepositories {
     pub async fn begin(&self) -> std::result::Result<Transaction<'static, Postgres>, sqlx::Error> {
         self.pool.begin().await
     }
+
+    /// Get a reference to the underlying database pool (for CQRS cross-domain queries).
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
 }
