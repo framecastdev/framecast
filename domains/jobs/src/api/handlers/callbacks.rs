@@ -7,7 +7,9 @@ use uuid::Uuid;
 
 use crate::api::middleware::JobsState;
 use crate::domain::entities::{JobEventType, JobFailureType};
-use crate::repository::transactions::update_artifact_status_by_job;
+use crate::repository::transactions::{
+    create_job_event_tx, next_sequence_tx, update_artifact_status_by_job, update_job_tx,
+};
 
 use super::jobs::JobResponse;
 
@@ -38,19 +40,19 @@ pub async fn job_callback(
     match payload.event.as_str() {
         "started" => {
             job.start()?;
-            let updated = state.repos.jobs.update(&job).await?;
 
-            let next_seq = state.repos.job_events.next_sequence(job.id).await?;
-            state
-                .repos
-                .job_events
-                .create(
-                    job.id,
-                    next_seq,
-                    JobEventType::Started,
-                    serde_json::json!({}),
-                )
-                .await?;
+            let mut tx = state.repos.begin().await?;
+            let updated = update_job_tx(&mut tx, &job).await?;
+            let next_seq = next_sequence_tx(&mut tx, job.id).await?;
+            create_job_event_tx(
+                &mut tx,
+                job.id,
+                next_seq,
+                JobEventType::Started,
+                serde_json::json!({}),
+            )
+            .await?;
+            tx.commit().await?;
 
             Ok(Json(updated.into()))
         }
@@ -58,44 +60,41 @@ pub async fn job_callback(
             if let Some(percent) = payload.progress_percent {
                 job.update_progress(percent)?;
             }
-            let updated = state.repos.jobs.update(&job).await?;
 
-            let next_seq = state.repos.job_events.next_sequence(job.id).await?;
-            state
-                .repos
-                .job_events
-                .create(
-                    job.id,
-                    next_seq,
-                    JobEventType::Progress,
-                    serde_json::json!({
-                        "percent": payload.progress_percent
-                    }),
-                )
-                .await?;
+            let mut tx = state.repos.begin().await?;
+            let updated = update_job_tx(&mut tx, &job).await?;
+            let next_seq = next_sequence_tx(&mut tx, job.id).await?;
+            create_job_event_tx(
+                &mut tx,
+                job.id,
+                next_seq,
+                JobEventType::Progress,
+                serde_json::json!({
+                    "percent": payload.progress_percent
+                }),
+            )
+            .await?;
+            tx.commit().await?;
 
             Ok(Json(updated.into()))
         }
         "completed" => {
             let output = payload.output.unwrap_or_else(|| serde_json::json!({}));
             job.complete(output, payload.output_size_bytes)?;
-            let updated = state.repos.jobs.update(&job).await?;
 
-            let next_seq = state.repos.job_events.next_sequence(job.id).await?;
-            state
-                .repos
-                .job_events
-                .create(
-                    job.id,
-                    next_seq,
-                    JobEventType::Completed,
-                    serde_json::json!({}),
-                )
-                .await?;
-
-            // CQRS: update artifact status to "ready"
             let mut tx = state.repos.begin().await?;
-            update_artifact_status_by_job(&mut tx, job.id, "ready").await?;
+            let updated = update_job_tx(&mut tx, &job).await?;
+            let next_seq = next_sequence_tx(&mut tx, job.id).await?;
+            create_job_event_tx(
+                &mut tx,
+                job.id,
+                next_seq,
+                JobEventType::Completed,
+                serde_json::json!({}),
+            )
+            .await?;
+            update_artifact_status_by_job(&mut tx, job.id, "ready", payload.output_size_bytes)
+                .await?;
             tx.commit().await?;
 
             Ok(Json(updated.into()))
@@ -111,23 +110,19 @@ pub async fn job_callback(
                 _ => JobFailureType::System,
             };
             job.fail(error, failure_type)?;
-            let updated = state.repos.jobs.update(&job).await?;
 
-            let next_seq = state.repos.job_events.next_sequence(job.id).await?;
-            state
-                .repos
-                .job_events
-                .create(
-                    job.id,
-                    next_seq,
-                    JobEventType::Failed,
-                    serde_json::json!({}),
-                )
-                .await?;
-
-            // CQRS: update artifact status to "failed"
             let mut tx = state.repos.begin().await?;
-            update_artifact_status_by_job(&mut tx, job.id, "failed").await?;
+            let updated = update_job_tx(&mut tx, &job).await?;
+            let next_seq = next_sequence_tx(&mut tx, job.id).await?;
+            create_job_event_tx(
+                &mut tx,
+                job.id,
+                next_seq,
+                JobEventType::Failed,
+                serde_json::json!({}),
+            )
+            .await?;
+            update_artifact_status_by_job(&mut tx, job.id, "failed", None).await?;
             tx.commit().await?;
 
             Ok(Json(updated.into()))
