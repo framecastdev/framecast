@@ -5,7 +5,7 @@
 ```
 User 1 ─────────────────────────────── 0..* Membership
 User 1 ─────────────────────────────── 0..* ApiKey
-User 1 ─────────────────────────────── 0..* Job (triggered_by)
+User 1 ─────────────────────────────── 0..* Generation (triggered_by)
 User 1 ─────────────────────────────── 0..* Project (created_by)
 User 1 ─────────────────────────────── 0..* Invitation (invited_by)
 User 1 ─────────────────────────────── 0..* AssetFile (uploaded_by)
@@ -19,15 +19,15 @@ Team 1 ◆───────────────────────�
 Membership ────────────────────────── User (many-to-one)
 Membership ────────────────────────── Team (many-to-one)
 
-Project 1 ─────────────────────────── 0..* Job
+Project 1 ─────────────────────────── 0..* Generation
 Project 1 ◆────────────────────────── 0..* AssetFile
 Project 1 ◆────────────────────────── 0..* Artifact
 
 Conversation 1 ◆──────────────────── 0..* Message
 Conversation 1 ─────────────────────── 0..* Artifact (conversation_id)
 
-Job 1 ─────────────────────────────── 0..* Artifact (source_job_id)
-Job 1 ◆────────────────────────────── 0..* JobEvent
+Generation 1 ──────────────────────── 0..* Artifact (source_generation_id)
+Generation 1 ◆─────────────────────── 0..* GenerationEvent
 
 Webhook 1 ◆────────────────────────── 0..* WebhookDelivery
 ```
@@ -40,9 +40,9 @@ Webhook 1 ◆──────────────────────�
 | Team | has | Membership | 1:1..* | CASCADE on Team delete |
 | Team | owns | Project | 1:0..* | CASCADE |
 | User | creates | Project | 1:0..* | No cascade (audit) |
-| Project | has | Job | 1:0..* | SET NULL on delete |
-| User | triggers | Job | 1:0..* | No cascade |
-| Job | emits | JobEvent | 1:0..* | CASCADE |
+| Project | has | Generation | 1:0..* | SET NULL on delete |
+| User | triggers | Generation | 1:0..* | No cascade |
+| Generation | emits | GenerationEvent | 1:0..* | CASCADE |
 | Team | has | Webhook | 1:0..* | CASCADE |
 | Webhook | has | WebhookDelivery | 1:0..* | CASCADE |
 | User | has | ApiKey | 1:0..* | CASCADE |
@@ -53,7 +53,7 @@ Webhook 1 ◆──────────────────────�
 | User | creates | Artifact | 1:0..* | No cascade (audit) |
 | Project | has | Artifact | 1:0..* | CASCADE |
 | Conversation | produces | Artifact | 1:0..* | SET NULL on delete |
-| Job | outputs | Artifact | 1:0..* | SET NULL on delete |
+| Generation | outputs | Artifact | 1:0..* | SET NULL on delete |
 
 ---
 
@@ -94,7 +94,7 @@ Transitions:
   δ(creator, _) = creator  (absorbing state for tier)
 ```
 
-## 6.2 Job.status State Machine
+## 6.2 Generation.status State Machine
 
 ```
                     ┌─────────────────────────────┐
@@ -122,7 +122,7 @@ Transitions:
 **Formal Definition:**
 
 ```
-States(Job.status) = {queued, processing, completed, failed, canceled}
+States(Generation.status) = {queued, processing, completed, failed, canceled}
 Initial = queued
 Terminal = {completed, failed, canceled}
 
@@ -134,7 +134,7 @@ Transitions:
   δ(processing, cancel) = canceled
 
 Guards:
-  cancel: triggered_by = job.triggered_by ∨ user has admin/owner role on job's team
+  cancel: triggered_by = generation.triggered_by ∨ user has admin/owner role on generation's team
 ```
 
 ## 6.3 Project.status State Machine
@@ -144,13 +144,13 @@ Guards:
    [create]──►│  draft   │◄─────────────────────┐
               └────┬─────┘                      │
                    │                            │
-                   │ [render]                   │ [job.failed ∨ job.canceled]
+                   │ [render]                   │ [generation.failed ∨ generation.canceled]
                    ▼                            │
               ┌──────────┐                      │
               │rendering │──────────────────────┘
               └────┬─────┘
                    │
-                   │ [job.completed]
+                   │ [generation.completed]
                    ▼
               ┌──────────┐
               │completed │
@@ -180,9 +180,9 @@ Terminal = ∅
 
 Transitions:
   δ(draft, render) = rendering
-  δ(rendering, job_completed) = completed
-  δ(rendering, job_failed) = draft
-  δ(rendering, job_canceled) = draft
+  δ(rendering, generation_completed) = completed
+  δ(rendering, generation_failed) = draft
+  δ(rendering, generation_canceled) = draft
   δ(completed, archive) = archived
   δ(completed, render) = rendering  (re-render)
   δ(draft, archive) = archived
@@ -350,5 +350,5 @@ Transitions:
 Notes:
   - Storyboard artifacts may transition directly to 'ready' on creation
   - Media artifacts start as 'pending' and require upload confirmation
-  - Job-output artifacts transition to 'ready' when job completes
+  - Generation-output artifacts transition to 'ready' when generation completes
 ```

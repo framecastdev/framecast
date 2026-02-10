@@ -1,11 +1,11 @@
 """User Journey E2E Tests.
 
 Tests full user journeys spanning multiple domains (9 stories):
-  - Starter upgrade -> conversation -> character -> render (UJ01)
+  - Starter upgrade -> conversation -> character -> generate (UJ01)
   - Invitation accept -> whoami reflects upgrade -> platform access (UJ02)
   - API key drives full content lifecycle (UJ03)
   - Account cleanup and deletion (UJ04)
-  - Conversation archive -> character still accessible and renders (UJ05)
+  - Conversation archive -> character still accessible and generates (UJ05)
   - Team-scoped API key creates team-owned artifacts (UJ06)
   - Multi-conversation artifact isolation with selective artifact deletion (UJ07)
   - Revoked API key loses access mid-workflow (UJ08)
@@ -111,9 +111,10 @@ class TestUserJourneyE2E:
         assert artifact["source"] == "conversation"
         assert artifact["conversation_id"] == conv_id
 
-        # 7. Render character -> job + image artifact
+        # 7. Render character -> generation + image artifact
         resp = await http_client.post(
-            f"/v1/artifacts/{character_id}/render",
+            "/v1/generations",
+            json={"artifact_id": character_id},
             headers=invitee.auth_headers(),
         )
         assert resp.status_code == 201
@@ -230,7 +231,9 @@ class TestUserJourneyE2E:
 
         # 5. Render character via API key
         resp = await http_client.post(
-            f"/v1/artifacts/{character_id}/render", headers=api_headers
+            "/v1/generations",
+            json={"artifact_id": character_id},
+            headers=api_headers,
         )
         assert resp.status_code == 201
         result = resp.json()
@@ -391,7 +394,8 @@ class TestUserJourneyE2E:
 
         # 7. Render still works on character from archived conversation
         resp = await http_client.post(
-            f"/v1/artifacts/{character_id}/render",
+            "/v1/generations",
+            json={"artifact_id": character_id},
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
@@ -690,7 +694,8 @@ class TestUserJourneyE2E:
 
         # 8. Render character
         resp = await http_client.post(
-            f"/v1/artifacts/{character_id}/render",
+            "/v1/generations",
+            json={"artifact_id": character_id},
             headers=invitee.auth_headers(),
         )
         assert resp.status_code == 201

@@ -9,12 +9,12 @@ description: Rust code conventions, error handling, database access patterns. Us
 
 | Type | Convention | Example |
 |------|------------|---------|
-| Entities | PascalCase, singular | `User`, `Job`, `TeamMembership` |
-| DTOs | Suffix with purpose | `CreateJobRequest`, `JobResponse` |
-| Repositories | Suffix with `Repository` | `UserRepository`, `JobRepository` |
-| Services | Suffix with `Service` | `JobService`, `CreditService` |
-| Handlers | Verb prefix | `create_job`, `cancel_job`, `list_jobs` |
-| Errors | Suffix with `Error` | `JobError`, `AuthError` |
+| Entities | PascalCase, singular | `User`, `Generation`, `TeamMembership` |
+| DTOs | Suffix with purpose | `CreateGenerationRequest`, `GenerationResponse` |
+| Repositories | Suffix with `Repository` | `UserRepository`, `GenerationRepository` |
+| Services | Suffix with `Service` | `GenerationService`, `CreditService` |
+| Handlers | Verb prefix | `create_generation`, `cancel_generation`, `list_generations` |
+| Errors | Suffix with `Error` | `GenerationError`, `AuthError` |
 
 ## Error Handling
 
@@ -26,12 +26,12 @@ Use `thiserror` for explicit error types:
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum JobError {
-    #[error("Job not found: {0}")]
+pub enum GenerationError {
+    #[error("Generation not found: {0}")]
     NotFound(Uuid),
 
-    #[error("Job already in terminal state: {0}")]
-    AlreadyTerminal(JobStatus),
+    #[error("Generation already in terminal state: {0}")]
+    AlreadyTerminal(GenerationStatus),
 
     #[error("Insufficient credits: required {required}, available {available}")]
     InsufficientCredits { required: i32, available: i32 },
@@ -71,18 +71,18 @@ impl IntoResponse for ApiError {
 ### Repository Pattern
 
 ```rust
-pub struct JobRepository {
+pub struct GenerationRepository {
     pool: PgPool,
 }
 
-impl JobRepository {
-    pub async fn find(&self, id: Uuid) -> Result<Option<Job>, sqlx::Error> {
+impl GenerationRepository {
+    pub async fn find(&self, id: Uuid) -> Result<Option<Generation>, sqlx::Error> {
         sqlx::query_as!(
-            Job,
+            Generation,
             r#"
-            SELECT id, owner, status as "status: JobStatus",
+            SELECT id, owner, status as "status: GenerationStatus",
                    credits_charged, created_at
-            FROM jobs WHERE id = $1
+            FROM generations WHERE id = $1
             "#,
             id
         )
@@ -90,16 +90,16 @@ impl JobRepository {
         .await
     }
 
-    pub async fn create(&self, job: &NewJob) -> Result<Job, sqlx::Error> {
+    pub async fn create(&self, generation: &NewGeneration) -> Result<Generation, sqlx::Error> {
         sqlx::query_as!(
-            Job,
+            Generation,
             r#"
-            INSERT INTO jobs (id, owner, triggered_by, spec_snapshot, status)
+            INSERT INTO generations (id, owner, triggered_by, spec_snapshot, status)
             VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, owner, status as "status: JobStatus",
+            RETURNING id, owner, status as "status: GenerationStatus",
                       credits_charged, created_at
             "#,
-            job.id, job.owner, job.triggered_by, job.spec_snapshot, job.status as _
+            generation.id, generation.owner, generation.triggered_by, generation.spec_snapshot, generation.status as _
         )
         .fetch_one(&self.pool)
         .await
@@ -110,28 +110,28 @@ impl JobRepository {
 ### Transactions
 
 ```rust
-pub async fn cancel_job_with_refund(
+pub async fn cancel_generation_with_refund(
     &self,
-    job_id: Uuid,
+    generation_id: Uuid,
     refund_amount: i32,
-) -> Result<Job, JobError> {
+) -> Result<Generation, GenerationError> {
     let mut tx = self.pool.begin().await?;
 
-    // Update job
-    let job = sqlx::query_as!(...)
+    // Update generation
+    let generation = sqlx::query_as!(...)
         .fetch_one(&mut *tx)
         .await?;
 
     // Update credits
     sqlx::query!(
         "UPDATE users SET credits = credits + $1 WHERE id = $2",
-        refund_amount, job.triggered_by
+        refund_amount, generation.triggered_by
     )
     .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
-    Ok(job)
+    Ok(generation)
 }
 ```
 
@@ -158,21 +158,21 @@ pub async fn cancel_job_with_refund(
 ## Handler Pattern
 
 ```rust
-pub async fn create_job(
+pub async fn create_generation(
     State(ctx): State<AppContext>,
     AuthUser(user): AuthUser,
-    Json(req): Json<CreateJobRequest>,
-) -> Result<Json<JobResponse>, ApiError> {
+    Json(req): Json<CreateGenerationRequest>,
+) -> Result<Json<GenerationResponse>, ApiError> {
     // Validate
     req.validate()?;
 
     // Check permissions
-    ctx.auth.check_can_create_job(&user, &req.owner)?;
+    ctx.auth.check_can_create_generation(&user, &req.owner)?;
 
     // Execute
-    let job = ctx.job_service.create(&user, req).await?;
+    let generation = ctx.generation_service.create(&user, req).await?;
 
-    Ok(Json(JobResponse::from(job)))
+    Ok(Json(GenerationResponse::from(generation)))
 }
 ```
 
@@ -191,11 +191,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_job_charges_credits() {
+    async fn create_generation_charges_credits() {
         let ctx = TestContext::new().await;
         let user = ctx.create_user_with_credits(100).await;
 
-        let job = ctx.job_service.create(&user, valid_spec()).await.unwrap();
+        let generation = ctx.generation_service.create(&user, valid_spec()).await.unwrap();
 
         let updated = ctx.user_repo.find(user.id).await.unwrap();
         assert!(updated.credits < 100);
@@ -210,7 +210,7 @@ crates/
 ├── api/            # Lambda handlers, middleware
 ├── domain/         # Entities, services, validation
 ├── db/             # Repositories, migrations
-├── inngest/        # Job orchestration
+├── inngest/        # Generation orchestration
 ├── comfyui/        # RunPod client
 ├── anthropic/      # LLM integration
 └── common/         # Config, URN, ID generation

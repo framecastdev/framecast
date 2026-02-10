@@ -136,7 +136,8 @@ mod test_create_api_key {
             .header("authorization", format!("Bearer {}", starter.jwt_token))
             .header("content-type", "application/json")
             .body(Body::from(
-                json!({"name": "Starter Key", "scopes": ["generate", "jobs:read"]}).to_string(),
+                json!({"name": "Starter Key", "scopes": ["generate", "generations:read"]})
+                    .to_string(),
             ))
             .unwrap();
 

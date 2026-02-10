@@ -1,6 +1,6 @@
-"""Job Events SSE E2E Tests.
+"""Generation Events SSE E2E Tests.
 
-Tests SSE event streaming for jobs (15 stories):
+Tests SSE event streaming for generations (15 stories):
   - Basic event retrieval (SSE-01 through SSE-05)
   - Event content validation (SSE-06 through SSE-10)
   - Last-Event-ID resumption (SSE-11 through SSE-13)
@@ -18,34 +18,34 @@ import httpx  # noqa: E402
 import pytest  # noqa: E402
 from conftest import (  # noqa: E402
     SeededUsers,
-    complete_job,
-    create_ephemeral_job,
-    fail_job,
+    complete_generation,
+    create_ephemeral_generation,
+    fail_generation,
     trigger_callback,
 )
 
 
 @pytest.mark.sse
-class TestJobEventsSseE2E:
-    """Job events SSE end-to-end tests."""
+class TestGenerationEventsSseE2E:
+    """Generation events SSE end-to-end tests."""
 
     async def _read_sse_events(
         self,
         http_client: httpx.AsyncClient,
         headers: dict[str, str],
-        job_id: str,
+        generation_id: str,
         last_event_id: str | None = None,
     ) -> list[dict]:
-        """Read SSE events from job events endpoint.
+        """Read SSE events from generation events endpoint.
 
-        The job MUST be in a terminal state before calling this, otherwise
+        The generation MUST be in a terminal state before calling this, otherwise
         the SSE stream will poll indefinitely and the request will time out.
         """
         req_headers = {**headers}
         if last_event_id:
             req_headers["Last-Event-ID"] = last_event_id
         resp = await http_client.get(
-            f"/v1/jobs/{job_id}/events",
+            f"/v1/generations/{generation_id}/events",
             headers=req_headers,
             timeout=10.0,
         )
@@ -76,38 +76,38 @@ class TestJobEventsSseE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """SSE-01: GET /v1/jobs/:id/events returns 200."""
+        """SSE-01: GET /v1/generations/:id/events returns 200."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
         # Cancel so the SSE stream closes and we can read the response
         resp = await http_client.post(
-            f"/v1/jobs/{job['id']}/cancel", headers=owner.auth_headers()
+            f"/v1/generations/{gen['id']}/cancel", headers=owner.auth_headers()
         )
         assert resp.status_code == 200
 
         resp = await http_client.get(
-            f"/v1/jobs/{job['id']}/events",
+            f"/v1/generations/{gen['id']}/events",
             headers=owner.auth_headers(),
             timeout=10.0,
         )
         assert resp.status_code == 200
 
-    async def test_sse02_queued_job_has_queued_event(
+    async def test_sse02_queued_generation_has_queued_event(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """SSE-02: Job has at least a queued event."""
+        """SSE-02: Generation has at least a queued event."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
         # Cancel to close the stream (queued event already recorded)
         await http_client.post(
-            f"/v1/jobs/{job['id']}/cancel", headers=owner.auth_headers()
+            f"/v1/generations/{gen['id']}/cancel", headers=owner.auth_headers()
         )
         events = await self._read_sse_events(
-            http_client, owner.auth_headers(), job["id"]
+            http_client, owner.auth_headers(), gen["id"]
         )
         event_types = [e.get("event") for e in events]
         assert "queued" in event_types
@@ -120,56 +120,62 @@ class TestJobEventsSseE2E:
         """SSE-03: Started callback produces an event in the stream."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
 
-        resp = await trigger_callback(http_client, job_id, "started")
+        resp = await trigger_callback(http_client, generation_id, "started")
         assert resp.status_code == 200
 
         # Complete to close the stream
         resp = await trigger_callback(
             http_client,
-            job_id,
+            generation_id,
             "completed",
             output={"url": "https://example.com/output.png"},
             output_size_bytes=12345,
         )
         assert resp.status_code == 200
 
-        events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
+        events = await self._read_sse_events(
+            http_client, owner.auth_headers(), generation_id
+        )
         event_types = [e.get("event") for e in events]
         assert "started" in event_types
 
-    async def test_sse04_completed_job_has_all_events(
+    async def test_sse04_completed_generation_has_all_events(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """SSE-04: Completed job has started + completed events."""
+        """SSE-04: Completed generation has started + completed events."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
-        await complete_job(http_client, job_id)
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
+        await complete_generation(http_client, generation_id)
 
-        events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
+        events = await self._read_sse_events(
+            http_client, owner.auth_headers(), generation_id
+        )
         event_types = [e.get("event") for e in events]
         assert "started" in event_types
         assert "completed" in event_types
 
-    async def test_sse05_failed_job_has_failed_event(
+    async def test_sse05_failed_generation_has_failed_event(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """SSE-05: Failed job has a failed event."""
+        """SSE-05: Failed generation has a failed event."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
-        await fail_job(http_client, job_id)
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
+        await fail_generation(http_client, generation_id)
 
-        events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
+        events = await self._read_sse_events(
+            http_client, owner.auth_headers(), generation_id
+        )
         event_types = [e.get("event") for e in events]
         assert "failed" in event_types
 
@@ -185,11 +191,13 @@ class TestJobEventsSseE2E:
         """SSE-06: Each SSE event has an id field."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
-        await complete_job(http_client, job_id)
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
+        await complete_generation(http_client, generation_id)
 
-        events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
+        events = await self._read_sse_events(
+            http_client, owner.auth_headers(), generation_id
+        )
         for event in events:
             assert "id" in event, f"Event missing 'id' field: {event}"
 
@@ -201,11 +209,13 @@ class TestJobEventsSseE2E:
         """SSE-07: Each SSE event has an event field."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
-        await complete_job(http_client, job_id)
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
+        await complete_generation(http_client, generation_id)
 
-        events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
+        events = await self._read_sse_events(
+            http_client, owner.auth_headers(), generation_id
+        )
         for event in events:
             assert "event" in event, f"Event missing 'event' field: {event}"
 
@@ -217,11 +227,13 @@ class TestJobEventsSseE2E:
         """SSE-08: Each SSE event has a data field."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
-        await complete_job(http_client, job_id)
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
+        await complete_generation(http_client, generation_id)
 
-        events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
+        events = await self._read_sse_events(
+            http_client, owner.auth_headers(), generation_id
+        )
         for event in events:
             assert "data" in event, f"Event missing 'data' field: {event}"
 
@@ -233,11 +245,13 @@ class TestJobEventsSseE2E:
         """SSE-09: Event data field contains valid JSON."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
-        await complete_job(http_client, job_id)
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
+        await complete_generation(http_client, generation_id)
 
-        events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
+        events = await self._read_sse_events(
+            http_client, owner.auth_headers(), generation_id
+        )
         for event in events:
             if "data" in event:
                 parsed = json.loads(event["data"])
@@ -251,26 +265,28 @@ class TestJobEventsSseE2E:
         """SSE-10: Progress event data contains percent."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
 
-        await trigger_callback(http_client, job_id, "started")
+        await trigger_callback(http_client, generation_id, "started")
         resp = await trigger_callback(
-            http_client, job_id, "progress", progress_percent=42.5
+            http_client, generation_id, "progress", progress_percent=42.5
         )
         assert resp.status_code == 200
 
         # Complete to close the stream
         resp = await trigger_callback(
             http_client,
-            job_id,
+            generation_id,
             "completed",
             output={"url": "https://example.com/output.png"},
             output_size_bytes=12345,
         )
         assert resp.status_code == 200
 
-        events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
+        events = await self._read_sse_events(
+            http_client, owner.auth_headers(), generation_id
+        )
         progress_events = [e for e in events if e.get("event") == "progress"]
         assert len(progress_events) >= 1
         data = json.loads(progress_events[0]["data"])
@@ -288,15 +304,17 @@ class TestJobEventsSseE2E:
         """SSE-11: Last-Event-ID filters out events before that ID."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
-        await trigger_callback(http_client, job_id, "started")
-        await trigger_callback(http_client, job_id, "progress", progress_percent=50.0)
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
+        await trigger_callback(http_client, generation_id, "started")
+        await trigger_callback(
+            http_client, generation_id, "progress", progress_percent=50.0
+        )
 
         # Complete to close the stream
         resp = await trigger_callback(
             http_client,
-            job_id,
+            generation_id,
             "completed",
             output={"url": "https://example.com/output.png"},
             output_size_bytes=12345,
@@ -305,7 +323,7 @@ class TestJobEventsSseE2E:
 
         # Get all events first
         all_events = await self._read_sse_events(
-            http_client, owner.auth_headers(), job_id
+            http_client, owner.auth_headers(), generation_id
         )
         assert len(all_events) >= 2
 
@@ -315,7 +333,7 @@ class TestJobEventsSseE2E:
             resumed_events = await self._read_sse_events(
                 http_client,
                 owner.auth_headers(),
-                job_id,
+                generation_id,
                 last_event_id=first_event_id,
             )
             # Should have fewer events (first one filtered out)
@@ -329,14 +347,14 @@ class TestJobEventsSseE2E:
         """SSE-12: Last-Event-ID with unknown ID returns all events or empty."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
-        await complete_job(http_client, job_id)
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
+        await complete_generation(http_client, generation_id)
 
         events = await self._read_sse_events(
             http_client,
             owner.auth_headers(),
-            job_id,
+            generation_id,
             last_event_id="nonexistent-id-999",
         )
         # Should return events (behavior depends on implementation)
@@ -350,23 +368,29 @@ class TestJobEventsSseE2E:
         """SSE-13: Event IDs are monotonically increasing."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        job_id = job["id"]
-        await trigger_callback(http_client, job_id, "started")
-        await trigger_callback(http_client, job_id, "progress", progress_percent=25.0)
-        await trigger_callback(http_client, job_id, "progress", progress_percent=75.0)
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        generation_id = gen["id"]
+        await trigger_callback(http_client, generation_id, "started")
+        await trigger_callback(
+            http_client, generation_id, "progress", progress_percent=25.0
+        )
+        await trigger_callback(
+            http_client, generation_id, "progress", progress_percent=75.0
+        )
 
         # Complete to close the stream
         resp = await trigger_callback(
             http_client,
-            job_id,
+            generation_id,
             "completed",
             output={"url": "https://example.com/output.png"},
             output_size_bytes=12345,
         )
         assert resp.status_code == 200
 
-        events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
+        events = await self._read_sse_events(
+            http_client, owner.auth_headers(), generation_id
+        )
         ids = [e.get("id") for e in events if e.get("id")]
         # IDs should be ordered (numeric or lexicographic depending on format)
         assert ids == sorted(ids)
@@ -375,17 +399,17 @@ class TestJobEventsSseE2E:
     # Error Handling (SSE-14 through SSE-15)
     # -------------------------------------------------------------------
 
-    async def test_sse14_events_nonexistent_job_returns_404(
+    async def test_sse14_events_nonexistent_generation_returns_404(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """SSE-14: GET /v1/jobs/:id/events for nonexistent job -> 404."""
+        """SSE-14: GET /v1/generations/:id/events for nonexistent generation -> 404."""
         owner = seed_users.owner
 
         fake_id = str(uuid.uuid4())
         resp = await http_client.get(
-            f"/v1/jobs/{fake_id}/events",
+            f"/v1/generations/{fake_id}/events",
             headers=owner.auth_headers(),
             timeout=10.0,
         )
@@ -396,12 +420,12 @@ class TestJobEventsSseE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """SSE-15: GET /v1/jobs/:id/events without auth -> 401."""
+        """SSE-15: GET /v1/generations/:id/events without auth -> 401."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
         resp = await http_client.get(
-            f"/v1/jobs/{job['id']}/events",
+            f"/v1/generations/{gen['id']}/events",
             timeout=10.0,
         )
         assert resp.status_code == 401

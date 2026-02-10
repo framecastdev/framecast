@@ -1,16 +1,16 @@
-//! Jobs domain state and auth backend integration
+//! Generations domain state and auth backend integration
 
-use crate::JobsRepositories;
+use crate::GenerationsRepositories;
 use axum::extract::FromRef;
 use framecast_auth::AuthBackend;
 use framecast_inngest::InngestService;
 use framecast_runpod::RenderService;
 use std::sync::Arc;
 
-/// Application state for the Jobs domain
+/// Application state for the Generations domain
 #[derive(Clone)]
-pub struct JobsState {
-    pub repos: JobsRepositories,
+pub struct GenerationsState {
+    pub repos: GenerationsRepositories,
     pub auth: AuthBackend,
     pub inngest: Arc<dyn InngestService>,
     pub render: Arc<dyn RenderService>,
@@ -22,8 +22,8 @@ pub struct JobsState {
         Option<Arc<std::sync::Mutex<Vec<framecast_runpod::mock::RecordedRenderRequest>>>>,
 }
 
-impl FromRef<JobsState> for AuthBackend {
-    fn from_ref(state: &JobsState) -> Self {
+impl FromRef<GenerationsState> for AuthBackend {
+    fn from_ref(state: &GenerationsState) -> Self {
         state.auth.clone()
     }
 }

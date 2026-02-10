@@ -108,7 +108,7 @@ pub enum ArtifactSource {
     #[default]
     Upload,
     Conversation,
-    Job,
+    Generation,
 }
 
 impl std::fmt::Display for ArtifactSource {
@@ -116,7 +116,7 @@ impl std::fmt::Display for ArtifactSource {
         match self {
             ArtifactSource::Upload => write!(f, "upload"),
             ArtifactSource::Conversation => write!(f, "conversation"),
-            ArtifactSource::Job => write!(f, "job"),
+            ArtifactSource::Generation => write!(f, "generation"),
         }
     }
 }
@@ -137,7 +137,7 @@ pub struct Artifact {
     pub size_bytes: Option<i64>,
     pub spec: Option<serde_json::Value>,
     pub conversation_id: Option<Uuid>,
-    pub source_job_id: Option<Uuid>,
+    pub source_generation_id: Option<Uuid>,
     pub metadata: Json<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -165,7 +165,7 @@ impl Artifact {
             size_bytes: None,
             spec: Some(spec),
             conversation_id: None,
-            source_job_id: None,
+            source_generation_id: None,
             metadata: Json(serde_json::Value::Object(serde_json::Map::new())),
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -198,7 +198,7 @@ impl Artifact {
             size_bytes: None,
             spec: Some(spec),
             conversation_id,
-            source_job_id: None,
+            source_generation_id: None,
             metadata: Json(serde_json::Value::Object(serde_json::Map::new())),
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -239,7 +239,7 @@ impl Artifact {
             size_bytes: Some(size_bytes),
             spec: None,
             conversation_id: None,
-            source_job_id: None,
+            source_generation_id: None,
             metadata: Json(serde_json::Value::Object(serde_json::Map::new())),
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -394,10 +394,10 @@ impl Artifact {
             ));
         }
 
-        // INV-ART6: source=job requires source_job_id
-        if self.source == ArtifactSource::Job && self.source_job_id.is_none() {
+        // INV-ART6: source=generation requires source_generation_id
+        if self.source == ArtifactSource::Generation && self.source_generation_id.is_none() {
             return Err(Error::Validation(
-                "Job-sourced artifacts require a source_job_id".to_string(),
+                "Generation-sourced artifacts require a source_generation_id".to_string(),
             ));
         }
 
@@ -584,7 +584,7 @@ mod tests {
     fn test_artifact_source_display() {
         assert_eq!(ArtifactSource::Upload.to_string(), "upload");
         assert_eq!(ArtifactSource::Conversation.to_string(), "conversation");
-        assert_eq!(ArtifactSource::Job.to_string(), "job");
+        assert_eq!(ArtifactSource::Generation.to_string(), "generation");
     }
 
     #[test]
@@ -910,23 +910,23 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_source_job_requires_source_job_id() {
+    fn test_validate_source_generation_requires_source_generation_id() {
         let owner = Urn::user(Uuid::new_v4());
         let mut artifact =
             Artifact::new_storyboard(owner, Uuid::new_v4(), None, json!({})).unwrap();
-        artifact.source = ArtifactSource::Job;
-        artifact.source_job_id = None;
+        artifact.source = ArtifactSource::Generation;
+        artifact.source_generation_id = None;
 
         assert!(artifact.validate().is_err());
     }
 
     #[test]
-    fn test_validate_source_job_with_id_succeeds() {
+    fn test_validate_source_generation_with_id_succeeds() {
         let owner = Urn::user(Uuid::new_v4());
         let mut artifact =
             Artifact::new_storyboard(owner, Uuid::new_v4(), None, json!({})).unwrap();
-        artifact.source = ArtifactSource::Job;
-        artifact.source_job_id = Some(Uuid::new_v4());
+        artifact.source = ArtifactSource::Generation;
+        artifact.source_generation_id = Some(Uuid::new_v4());
 
         assert!(artifact.validate().is_ok());
     }

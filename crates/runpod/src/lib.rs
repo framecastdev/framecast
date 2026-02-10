@@ -22,19 +22,19 @@ pub enum RenderError {
     Response(String),
 }
 
-/// Request to submit a render job
+/// Request to submit a render generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderRequest {
-    pub job_id: uuid::Uuid,
+    pub generation_id: uuid::Uuid,
     pub spec_snapshot: serde_json::Value,
     pub options: serde_json::Value,
     pub callback_url: String,
 }
 
-/// Result from a render job (sent via callback)
+/// Result from a render generation (sent via callback)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderResult {
-    pub job_id: uuid::Uuid,
+    pub generation_id: uuid::Uuid,
     pub status: String,
     pub output: Option<serde_json::Value>,
     pub output_size_bytes: Option<i64>,
@@ -162,9 +162,9 @@ mod tests {
     // RP-U05: RenderRequest serialization round-trip
     #[test]
     fn test_render_request_serialization_round_trip() {
-        let job_id = uuid::Uuid::new_v4();
+        let generation_id = uuid::Uuid::new_v4();
         let request = RenderRequest {
-            job_id,
+            generation_id,
             spec_snapshot: serde_json::json!({"frames": [{"prompt": "A sunset"}]}),
             options: serde_json::json!({"resolution": "1080p"}),
             callback_url: "http://localhost:3000/callbacks/render".to_string(),
@@ -173,7 +173,7 @@ mod tests {
         let json = serde_json::to_string(&request).unwrap();
         let deserialized: RenderRequest = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.job_id, job_id);
+        assert_eq!(deserialized.generation_id, generation_id);
         assert_eq!(deserialized.spec_snapshot, request.spec_snapshot);
         assert_eq!(deserialized.options, request.options);
         assert_eq!(deserialized.callback_url, request.callback_url);
@@ -182,9 +182,9 @@ mod tests {
     // RP-U06: RenderResult serialization — success case
     #[test]
     fn test_render_result_serialization_success() {
-        let job_id = uuid::Uuid::new_v4();
+        let generation_id = uuid::Uuid::new_v4();
         let result = RenderResult {
-            job_id,
+            generation_id,
             status: "completed".to_string(),
             output: Some(serde_json::json!({"url": "https://storage.example.com/video.mp4"})),
             output_size_bytes: Some(2048),
@@ -194,7 +194,7 @@ mod tests {
         let json = serde_json::to_string(&result).unwrap();
         let deserialized: RenderResult = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.job_id, job_id);
+        assert_eq!(deserialized.generation_id, generation_id);
         assert_eq!(deserialized.status, "completed");
         assert!(deserialized.output.is_some());
         assert_eq!(deserialized.output_size_bytes, Some(2048));
@@ -204,9 +204,9 @@ mod tests {
     // RP-U07: RenderResult serialization — failure case
     #[test]
     fn test_render_result_serialization_failure() {
-        let job_id = uuid::Uuid::new_v4();
+        let generation_id = uuid::Uuid::new_v4();
         let result = RenderResult {
-            job_id,
+            generation_id,
             status: "failed".to_string(),
             output: None,
             output_size_bytes: None,
@@ -216,7 +216,7 @@ mod tests {
         let json = serde_json::to_string(&result).unwrap();
         let deserialized: RenderResult = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.job_id, job_id);
+        assert_eq!(deserialized.generation_id, generation_id);
         assert_eq!(deserialized.status, "failed");
         assert!(deserialized.output.is_none());
         assert!(deserialized.output_size_bytes.is_none());

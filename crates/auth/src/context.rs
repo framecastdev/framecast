@@ -199,15 +199,15 @@ mod tests {
     fn test_has_scope_returns_false_when_scope_missing() {
         let user = create_test_identity(AuthTier::Creator);
         let user_id = user.id;
-        let api_key = create_test_api_key(user_id, vec!["jobs:read".to_string()]);
+        let api_key = create_test_api_key(user_id, vec!["generations:read".to_string()]);
 
         let ctx = AuthContext::new(user, vec![], Some(api_key));
 
         // Scope present -> true
-        assert!(ctx.has_scope("jobs:read"));
+        assert!(ctx.has_scope("generations:read"));
 
         // Scope not present -> false (kills "replace with true" mutant)
-        assert!(!ctx.has_scope("jobs:write"));
+        assert!(!ctx.has_scope("generations:write"));
         assert!(!ctx.has_scope("team:admin"));
     }
 
@@ -219,7 +219,7 @@ mod tests {
 
         let ctx = AuthContext::new(user, vec![], Some(api_key));
 
-        assert!(ctx.has_scope("jobs:write"));
+        assert!(ctx.has_scope("generations:write"));
         assert!(ctx.has_scope("team:admin"));
         assert!(ctx.has_scope("anything"));
     }
@@ -265,7 +265,7 @@ mod tests {
         let user = create_test_identity(AuthTier::Creator);
         let ctx = AuthContext::new(user, vec![], None);
 
-        assert!(ctx.has_scope("jobs:write"));
+        assert!(ctx.has_scope("generations:write"));
         assert!(ctx.has_scope("team:admin"));
     }
 }

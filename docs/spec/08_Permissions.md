@@ -4,13 +4,13 @@
 
 | Endpoint | Starter | Creator |
 |----------|---------|---------|
-| `POST /v1/generate` | ✓ | ✓ |
-| `GET /v1/jobs` | ✓ (own jobs) | ✓ (accessible via owner URN) |
-| `GET /v1/jobs/:id` | ✓ (own jobs) | ✓ (accessible via owner URN) |
-| `GET /v1/jobs/:id/events` | ✓ (own jobs) | ✓ (accessible via owner URN) |
-| `POST /v1/jobs/:id/cancel` | ✓ (own jobs) | ✓ (accessible via owner URN) |
-| `POST /v1/jobs/:id/clone` | ✓ (own jobs) | ✓ (accessible jobs) |
-| `DELETE /v1/jobs/:id` | ✓ (own ephemeral) | ✓ (accessible ephemeral) |
+| `POST /v1/generations` | ✓ | ✓ |
+| `GET /v1/generations` | ✓ (own generations) | ✓ (accessible via owner URN) |
+| `GET /v1/generations/:id` | ✓ (own generations) | ✓ (accessible via owner URN) |
+| `GET /v1/generations/:id/events` | ✓ (own generations) | ✓ (accessible via owner URN) |
+| `POST /v1/generations/:id/cancel` | ✓ (own generations) | ✓ (accessible via owner URN) |
+| `POST /v1/generations/:id/clone` | ✓ (own generations) | ✓ (accessible generations) |
+| `DELETE /v1/generations/:id` | ✓ (own ephemeral) | ✓ (accessible ephemeral) |
 | `GET /v1/account` | ✓ | ✓ |
 | `PATCH /v1/account` | ✓ | ✓ |
 | `* /v1/auth/keys` | ✓ | ✓ |
@@ -54,7 +54,7 @@
 **v4.1 Additions:**
 
 - `POST /v1/teams`: Creators can create new teams
-- `POST /v1/jobs/:id/clone`: Starters can clone own jobs; Creators can clone accessible jobs
+- `POST /v1/generations/:id/clone`: Starters can clone own generations; Creators can clone accessible generations
 
 ---
 
@@ -79,8 +79,8 @@
 | Archive projects | ✓ | ✓ | ✗ | ✗ |
 | Unarchive projects | ✓ | ✓ | ✗ | ✗ |
 | Trigger render | ✓ | ✓ | ✓ | ✗ |
-| Cancel jobs | ✓ | ✓ | ✓ (own) | ✗ |
-| Clone jobs | ✓ | ✓ | ✓ | ✗ |
+| Cancel generations | ✓ | ✓ | ✓ (own) | ✗ |
+| Clone generations | ✓ | ✓ | ✓ | ✗ |
 | View assets | ✓ | ✓ | ✓ | ✓ |
 | Upload assets | ✓ | ✓ | ✓ | ✗ |
 | Delete assets | ✓ | ✓ | ✓ (own) | ✗ |
@@ -96,13 +96,13 @@
 
 ```
 Scope: generate
-  Allows: POST /v1/generate
+  Allows: POST /v1/generations
 
-Scope: jobs:read
-  Allows: GET /v1/jobs, GET /v1/jobs/:id, GET /v1/jobs/:id/events
+Scope: generations:read
+  Allows: GET /v1/generations, GET /v1/generations/:id, GET /v1/generations/:id/events
 
-Scope: jobs:write
-  Allows: POST /v1/jobs/:id/cancel, POST /v1/jobs/:id/clone, DELETE /v1/jobs/:id
+Scope: generations:write
+  Allows: POST /v1/generations/:id/cancel, POST /v1/generations/:id/clone, DELETE /v1/generations/:id
 
 Scope: assets:read
   Allows: GET /v1/assets, GET /v1/assets/:id
@@ -152,7 +152,7 @@ Scope: * (wildcard)
 
 **v4.1 Updates:**
 
-- `jobs:write` now includes `POST /v1/jobs/:id/clone` in addition to existing operations
+- `generations:write` now includes `POST /v1/generations/:id/clone` in addition to existing operations
 - `team:admin` scope expanded to include `POST /v1/teams` (team creation)
 
 ---
@@ -161,12 +161,12 @@ Scope: * (wildcard)
 
 | Tier | Allowed Scopes |
 |------|----------------|
-| Starter | `generate`, `jobs:read`, `jobs:write`, `assets:read`, `assets:write`, `artifacts:read`, `artifacts:write`, `conversations:read`, `conversations:write` |
+| Starter | `generate`, `generations:read`, `generations:write`, `assets:read`, `assets:write`, `artifacts:read`, `artifacts:write`, `conversations:read`, `conversations:write` |
 | Creator | All scopes |
 
 **Notes:**
 
 - Starters cannot create API keys with `team:read` or `team:admin` scopes
 - Creators can create API keys with any scope (subject to membership role permissions)
-- The `jobs:write` scope now includes job cloning operations for both tiers (with tier-specific access constraints)
+- The `generations:write` scope now includes generation cloning operations for both tiers (with tier-specific access constraints)
 - The `team:admin` scope allows team creation only for Creator tier users

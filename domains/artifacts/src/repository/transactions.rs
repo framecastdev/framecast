@@ -16,14 +16,14 @@ pub async fn create_artifact_tx(
             id, owner, created_by, project_id,
             kind, status, source,
             filename, s3_key, content_type, size_bytes,
-            spec, conversation_id, source_job_id,
+            spec, conversation_id, source_generation_id,
             metadata, created_at, updated_at
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id, owner, created_by, project_id,
                   kind, status, source,
                   filename, s3_key, content_type, size_bytes,
-                  spec, conversation_id, source_job_id,
+                  spec, conversation_id, source_generation_id,
                   metadata, created_at, updated_at
         "#,
     )
@@ -40,7 +40,7 @@ pub async fn create_artifact_tx(
     .bind(artifact.size_bytes)
     .bind(&artifact.spec)
     .bind(artifact.conversation_id)
-    .bind(artifact.source_job_id)
+    .bind(artifact.source_generation_id)
     .bind(&artifact.metadata)
     .bind(artifact.created_at)
     .bind(artifact.updated_at)

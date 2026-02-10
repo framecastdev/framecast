@@ -39,7 +39,7 @@ id, team_id FK, user_id FK, role {owner|admin|member|viewer}, created_at
 UNIQUE(team_id, user_id)
 ```
 
-### Job
+### Generation
 
 ```
 id, owner URN, triggered_by FK→User, project_id? FK→Project,
@@ -101,21 +101,21 @@ Derived: state ∈ {pending|accepted|expired|revoked}
 - **INV-M2**: Role ∈ {owner, admin, member, viewer}
 - **INV-M4**: Only creator users can have memberships
 
-**Job:**
+**Generation:**
 
 - **INV-J1**: Status ∈ {queued, processing, completed, failed, canceled}
-- **INV-J6**: Failed/canceled jobs must have failure_type
+- **INV-J6**: Failed/canceled generations must have failure_type
 - **INV-J8**: credits_refunded ≤ credits_charged
-- **INV-J11**: Project jobs must be team-owned
-- **INV-J12**: Max 1 active job per project
+- **INV-J11**: Project generations must be team-owned
+- **INV-J12**: Max 1 active generation per project
 
 **Cardinality Constraints:**
 
 - **CARD-2**: Max 10 owned teams per user
 - **CARD-3**: Max 50 team memberships per user
 - **CARD-4**: Max 50 pending invitations per team
-- **CARD-5**: Max 5 concurrent jobs per team
-- **CARD-6**: Max 1 concurrent job per starter user
+- **CARD-5**: Max 5 concurrent generations per team
+- **CARD-6**: Max 1 concurrent generation per starter user
 
 **Rate Limits:**
 
@@ -131,12 +131,12 @@ Derived: state ∈ {pending|accepted|expired|revoked}
 | Create projects | ✓ | ✓ | ✓ | ✗ |
 | Delete projects | ✓ | ✓ | ✗ | ✗ |
 | Trigger render | ✓ | ✓ | ✓ | ✗ |
-| Cancel jobs | ✓ | ✓ | Own only | ✗ |
+| Cancel generations | ✓ | ✓ | Own only | ✗ |
 | Manage webhooks | ✓ | ✓ | ✗ | ✗ |
 
 ## State Machines
 
-### Job.status
+### Generation.status
 
 ```
 queued → processing → completed
@@ -151,7 +151,7 @@ queued/processing → canceled (user action)
 ```
 draft → rendering → completed → archived
   ↑        ↓                       ↓
-  └── (job failed) ←───────────────┘ (unarchive)
+  └── (generation failed) ←────────┘ (unarchive)
 ```
 
 ### Invitation (derived)
@@ -174,8 +174,8 @@ pending → accepted (user accepts)
 ## Webhook Events
 
 ```
-job.queued, job.started, job.progress,
-job.completed, job.failed, job.canceled
+generation.queued, generation.started, generation.progress,
+generation.completed, generation.failed, generation.canceled
 ```
 
 Signature: `HMAC-SHA256(timestamp + "." + body, secret)`
@@ -184,14 +184,14 @@ Signature: `HMAC-SHA256(timestamp + "." + body, secret)`
 
 | Operation | Method | Endpoint |
 |-----------|--------|----------|
-| **Jobs** | | |
-| Create ephemeral job | POST | `/v1/generate` |
-| Create project job | POST | `/v1/projects/:id/render` |
-| Get job | GET | `/v1/jobs/:id` |
-| List jobs | GET | `/v1/jobs` |
-| Cancel job | POST | `/v1/jobs/:id/cancel` |
-| Clone job | POST | `/v1/jobs/:id/clone` |
-| Get job events (SSE) | GET | `/v1/jobs/:id/events` |
+| **Generations** | | |
+| Create ephemeral generation | POST | `/v1/generations` |
+| Create project generation | POST | `/v1/projects/:id/render` |
+| Get generation | GET | `/v1/generations/:id` |
+| List generations | GET | `/v1/generations` |
+| Cancel generation | POST | `/v1/generations/:id/cancel` |
+| Clone generation | POST | `/v1/generations/:id/clone` |
+| Get generation events (SSE) | GET | `/v1/generations/:id/events` |
 | **Projects** | | |
 | List projects | GET | `/v1/teams/:id/projects` |
 | Create project | POST | `/v1/teams/:id/projects` |

@@ -10,7 +10,7 @@ const ARTIFACT_COLUMNS: &str = "\
     id, owner, created_by, project_id, \
     kind, status, source, \
     filename, s3_key, content_type, size_bytes, \
-    spec, conversation_id, source_job_id, \
+    spec, conversation_id, source_generation_id, \
     metadata, created_at, updated_at";
 
 #[derive(Clone)]
@@ -90,7 +90,7 @@ impl ArtifactRepository {
             .bind(artifact.size_bytes)
             .bind(&artifact.spec)
             .bind(artifact.conversation_id)
-            .bind(artifact.source_job_id)
+            .bind(artifact.source_generation_id)
             .bind(&artifact.metadata)
             .bind(artifact.created_at)
             .bind(artifact.updated_at)

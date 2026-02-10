@@ -8,7 +8,7 @@ members = [
     "crates/runpod",
     "crates/common",
     "domains/teams",
-    "domains/jobs",
+    "domains/generations",
     "domains/artifacts",
     "domains/conversations",
     "tests/integration",
@@ -97,7 +97,7 @@ framecast-app = { path = "crates/app" }
 
 # === Domain Crates ===
 framecast-teams = { path = "domains/teams" }
-framecast-jobs = { path = "domains/jobs" }
+framecast-generations = { path = "domains/generations" }
 framecast-artifacts = { path = "domains/artifacts" }
 framecast-conversations = { path = "domains/conversations" }
 

@@ -170,8 +170,8 @@ async def test_happy_01_clean_migration_from_scratch(migration_framework):
         "teams",
         "memberships",
         "projects",
-        "jobs",
-        "job_events",
+        "generations",
+        "generation_events",
         "asset_files",
         "webhooks",
         "api_keys",
@@ -341,8 +341,8 @@ async def test_inv_02_team_ownership_rules(migration_framework):
 
 
 @pytest.mark.asyncio
-async def test_inv_03_job_concurrency_limits(migration_framework):
-    """INV-03: Job concurrency limits enforced"""
+async def test_inv_03_generation_concurrency_limits(migration_framework):
+    """INV-03: Generation concurrency limits enforced"""
     framework = migration_framework
 
     # Run migrations
@@ -356,10 +356,10 @@ async def test_inv_03_job_concurrency_limits(migration_framework):
         RETURNING id
     """)
 
-    # Create first job (should succeed)
-    job1_id = await framework.conn.fetchval(
+    # Create first generation (should succeed)
+    gen1_id = await framework.conn.fetchval(
         """
-        INSERT INTO jobs (owner, triggered_by, status, spec_snapshot)
+        INSERT INTO generations (owner, triggered_by, status, spec_snapshot)
         VALUES ($1, $2, 'queued', '{}')
         RETURNING id
     """,
@@ -367,18 +367,18 @@ async def test_inv_03_job_concurrency_limits(migration_framework):
         user_id,
     )
 
-    assert job1_id is not None, "First job should be created successfully"
+    assert gen1_id is not None, "First generation should be created successfully"
 
-    # Try to create second concurrent job (should fail for starter)
+    # Try to create second concurrent generation (should fail for starter)
     violation = await framework.test_invariant_violation(
         """
-        INSERT INTO jobs (owner, triggered_by, status, spec_snapshot)
+        INSERT INTO generations (owner, triggered_by, status, spec_snapshot)
         VALUES ($1, $2, 'queued', '{}')
     """,
         [f"framecast:user:{user_id}", user_id],
     )
 
-    assert violation, "Should prevent starter user from having >1 concurrent job"
+    assert violation, "Should prevent starter user from having >1 concurrent generation"
 
 
 @pytest.mark.asyncio

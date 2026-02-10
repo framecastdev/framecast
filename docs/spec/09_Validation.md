@@ -199,18 +199,18 @@ When validating a spec, the API returns a comprehensive validation response with
 
 ## 10.3 Webhook Event Types (NEW in v0.4.0)
 
-Webhooks allow your application to receive real-time notifications about job state
+Webhooks allow your application to receive real-time notifications about generation state
 changes. The Framecast API sends webhook events to your registered endpoints
-for job lifecycle events.
+for generation lifecycle events.
 
 ### Valid Webhook Events
 
 ```
-- job.queued       : Job entered queue
-- job.started      : Job processing began
-- job.progress     : Job progress update (throttled to max 1/sec per job)
-- job.completed    : Job finished successfully
-- job.failed       : Job failed
+- generation.queued       : Job entered queue
+- generation.started      : Job processing began
+- generation.progress     : Job progress update (throttled to max 1/sec per job)
+- generation.completed    : Job finished successfully
+- generation.failed       : Job failed
 - job.canceled     : Job was canceled
 ```
 

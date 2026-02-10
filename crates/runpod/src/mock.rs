@@ -95,7 +95,7 @@ impl MockRenderBehavior {
 /// A recorded render request for test assertions
 #[derive(Debug, Clone)]
 pub struct RecordedRenderRequest {
-    pub job_id: uuid::Uuid,
+    pub generation_id: uuid::Uuid,
     pub spec_snapshot: serde_json::Value,
     pub options: serde_json::Value,
     pub callback_url: String,
@@ -155,12 +155,12 @@ impl MockRenderService {
 #[async_trait::async_trait]
 impl RenderService for MockRenderService {
     async fn submit_render(&self, request: RenderRequest) -> Result<(), RenderError> {
-        tracing::info!(job_id = %request.job_id, "Mock render: received render request");
+        tracing::info!(generation_id = %request.generation_id, "Mock render: received render request");
 
         // Record the request
         {
             let recorded = RecordedRenderRequest {
-                job_id: request.job_id,
+                generation_id: request.generation_id,
                 spec_snapshot: request.spec_snapshot.clone(),
                 options: request.options.clone(),
                 callback_url: request.callback_url.clone(),
@@ -177,12 +177,12 @@ impl RenderService for MockRenderService {
 
         // If timeout, just return without posting anything
         if outcome == MockOutcome::Timeout {
-            tracing::info!(job_id = %request.job_id, "Mock render: simulating timeout (no callback)");
+            tracing::info!(generation_id = %request.generation_id, "Mock render: simulating timeout (no callback)");
             return Ok(());
         }
 
         let callback_url = request.callback_url.clone();
-        let job_id = request.job_id;
+        let generation_id = request.generation_id;
 
         // Spawn async task to simulate postback
         tokio::spawn(async move {
@@ -193,7 +193,7 @@ impl RenderService for MockRenderService {
 
             // Send "started" callback
             let started_payload = serde_json::json!({
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "started"
             });
             let _ = client
@@ -206,7 +206,7 @@ impl RenderService for MockRenderService {
             for step in &progress_steps {
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                 let progress_payload = serde_json::json!({
-                    "job_id": job_id,
+                    "generation_id": generation_id,
                     "event": "progress",
                     "progress_percent": step
                 });
@@ -224,16 +224,16 @@ impl RenderService for MockRenderService {
             match outcome {
                 MockOutcome::Complete => {
                     let result = RenderResult {
-                        job_id,
+                        generation_id,
                         status: "completed".to_string(),
                         output: Some(output_payload.unwrap_or_else(|| {
-                            serde_json::json!({"url": format!("https://mock-storage.example.com/renders/{}.mp4", job_id)})
+                            serde_json::json!({"url": format!("https://mock-storage.example.com/renders/{}.mp4", generation_id)})
                         })),
                         output_size_bytes: Some(1024),
                         error: None,
                     };
                     let completed_payload = serde_json::json!({
-                        "job_id": job_id,
+                        "generation_id": generation_id,
                         "event": "completed",
                         "output": result.output,
                         "output_size_bytes": result.output_size_bytes
@@ -249,7 +249,7 @@ impl RenderService for MockRenderService {
                         serde_json::json!({"message": "Mock render failure", "code": "MOCK_ERROR"})
                     });
                     let failed_payload = serde_json::json!({
-                        "job_id": job_id,
+                        "generation_id": generation_id,
                         "event": "failed",
                         "error": error,
                         "failure_type": "system"
@@ -263,7 +263,7 @@ impl RenderService for MockRenderService {
                 MockOutcome::Timeout => unreachable!(),
             }
 
-            tracing::info!(job_id = %job_id, "Mock render: postback sequence completed");
+            tracing::info!(generation_id = %generation_id, "Mock render: postback sequence completed");
         });
 
         Ok(())

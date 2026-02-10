@@ -1,6 +1,6 @@
-//! Job domain entities for Framecast
+//! Generation domain entities for Framecast
 //!
-//! This module contains job-related domain entities as defined in the API specification.
+//! This module contains generation-related domain entities as defined in the API specification.
 //! Each entity includes proper validation, serialization, and business rules.
 
 use chrono::{DateTime, Utc};
@@ -10,13 +10,13 @@ use uuid::Uuid;
 
 use framecast_common::{Error, Result, Urn};
 
-use crate::domain::state::{JobEvent, JobState, JobStateMachine, StateError};
+use crate::domain::state::{GenerationEvent, GenerationState, GenerationStateMachine, StateError};
 
-/// Job status
+/// Generation status
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, Default)]
-#[sqlx(type_name = "job_status", rename_all = "lowercase")]
+#[sqlx(type_name = "generation_status", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
-pub enum JobStatus {
+pub enum GenerationStatus {
     #[default]
     Queued,
     Processing,
@@ -25,63 +25,63 @@ pub enum JobStatus {
     Canceled,
 }
 
-impl JobStatus {
-    /// Check if status is terminal (job has finished)
+impl GenerationStatus {
+    /// Check if status is terminal (generation has finished)
     pub fn is_terminal(&self) -> bool {
         self.to_state().is_terminal()
     }
 
     /// Convert to state machine state
-    pub fn to_state(&self) -> JobState {
+    pub fn to_state(&self) -> GenerationState {
         match self {
-            JobStatus::Queued => JobState::Queued,
-            JobStatus::Processing => JobState::Processing,
-            JobStatus::Completed => JobState::Completed,
-            JobStatus::Failed => JobState::Failed,
-            JobStatus::Canceled => JobState::Canceled,
+            GenerationStatus::Queued => GenerationState::Queued,
+            GenerationStatus::Processing => GenerationState::Processing,
+            GenerationStatus::Completed => GenerationState::Completed,
+            GenerationStatus::Failed => GenerationState::Failed,
+            GenerationStatus::Canceled => GenerationState::Canceled,
         }
     }
 
     /// Create from state machine state
-    pub fn from_state(state: JobState) -> Self {
+    pub fn from_state(state: GenerationState) -> Self {
         match state {
-            JobState::Queued => JobStatus::Queued,
-            JobState::Processing => JobStatus::Processing,
-            JobState::Completed => JobStatus::Completed,
-            JobState::Failed => JobStatus::Failed,
-            JobState::Canceled => JobStatus::Canceled,
+            GenerationState::Queued => GenerationStatus::Queued,
+            GenerationState::Processing => GenerationStatus::Processing,
+            GenerationState::Completed => GenerationStatus::Completed,
+            GenerationState::Failed => GenerationStatus::Failed,
+            GenerationState::Canceled => GenerationStatus::Canceled,
         }
     }
 
     /// Get valid next states from current state
-    pub fn valid_transitions(&self) -> Vec<JobStatus> {
+    pub fn valid_transitions(&self) -> Vec<GenerationStatus> {
         self.to_state()
             .valid_transitions()
             .iter()
-            .map(|s| JobStatus::from_state(*s))
+            .map(|s| GenerationStatus::from_state(*s))
             .collect()
     }
 }
 
-/// Job failure type
+/// Generation failure type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "job_failure_type", rename_all = "lowercase")]
+#[sqlx(type_name = "generation_failure_type", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
-pub enum JobFailureType {
+pub enum GenerationFailureType {
     System,
     Validation,
     Timeout,
     Canceled,
 }
 
-/// Job entity
+/// Generation entity
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
-pub struct Job {
+pub struct Generation {
     pub id: Uuid,
     pub owner: String, // URN as string
     pub triggered_by: Uuid,
     pub project_id: Option<Uuid>,
-    pub status: JobStatus,
+    pub status: GenerationStatus,
     pub spec_snapshot: Json<serde_json::Value>,
     pub options: Json<serde_json::Value>,
     pub progress: Json<serde_json::Value>,
@@ -89,7 +89,7 @@ pub struct Job {
     pub output_size_bytes: Option<i64>,
     pub error: Option<Json<serde_json::Value>>,
     pub credits_charged: i32,
-    pub failure_type: Option<JobFailureType>,
+    pub failure_type: Option<GenerationFailureType>,
     pub credits_refunded: i32,
     pub idempotency_key: Option<String>,
     pub started_at: Option<DateTime<Utc>>,
@@ -98,8 +98,8 @@ pub struct Job {
     pub updated_at: DateTime<Utc>,
 }
 
-impl Job {
-    /// Create a new job with validation
+impl Generation {
+    /// Create a new generation with validation
     pub fn new(
         owner: Urn,
         triggered_by: Uuid,
@@ -117,12 +117,12 @@ impl Job {
         }
 
         let now = Utc::now();
-        Ok(Job {
+        Ok(Generation {
             id: Uuid::new_v4(),
             owner: owner.to_string(),
             triggered_by,
             project_id,
-            status: JobStatus::default(),
+            status: GenerationStatus::default(),
             spec_snapshot: Json(spec_snapshot),
             options: Json(
                 options.unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new())),
@@ -142,12 +142,12 @@ impl Job {
         })
     }
 
-    /// Check if job is ephemeral (not tied to project)
+    /// Check if generation is ephemeral (not tied to project)
     pub fn is_ephemeral(&self) -> bool {
         self.project_id.is_none()
     }
 
-    /// Check if job is terminal
+    /// Check if generation is terminal
     pub fn is_terminal(&self) -> bool {
         self.status.is_terminal()
     }
@@ -157,23 +157,23 @@ impl Job {
         self.credits_charged - self.credits_refunded
     }
 
-    /// Start job processing
+    /// Start generation processing
     pub fn start(&mut self) -> Result<()> {
-        let new_state = self.apply_transition(JobEvent::WorkerPicksUp)?;
-        self.status = JobStatus::from_state(new_state);
+        let new_state = self.apply_transition(GenerationEvent::WorkerPicksUp)?;
+        self.status = GenerationStatus::from_state(new_state);
         self.started_at = Some(Utc::now());
         self.updated_at = Utc::now();
         Ok(())
     }
 
-    /// Complete job successfully
+    /// Complete generation successfully
     pub fn complete(
         &mut self,
         output: serde_json::Value,
         output_size_bytes: Option<i64>,
     ) -> Result<()> {
-        let new_state = self.apply_transition(JobEvent::Success)?;
-        self.status = JobStatus::from_state(new_state);
+        let new_state = self.apply_transition(GenerationEvent::Success)?;
+        self.status = GenerationStatus::from_state(new_state);
         self.output = Some(Json(output));
         self.output_size_bytes = output_size_bytes;
         self.completed_at = Some(Utc::now());
@@ -181,10 +181,14 @@ impl Job {
         Ok(())
     }
 
-    /// Fail job
-    pub fn fail(&mut self, error: serde_json::Value, failure_type: JobFailureType) -> Result<()> {
-        let new_state = self.apply_transition(JobEvent::Failure)?;
-        self.status = JobStatus::from_state(new_state);
+    /// Fail generation
+    pub fn fail(
+        &mut self,
+        error: serde_json::Value,
+        failure_type: GenerationFailureType,
+    ) -> Result<()> {
+        let new_state = self.apply_transition(GenerationEvent::Failure)?;
+        self.status = GenerationStatus::from_state(new_state);
         self.error = Some(Json(error));
         self.failure_type = Some(failure_type.clone());
 
@@ -196,14 +200,14 @@ impl Job {
         Ok(())
     }
 
-    /// Cancel job
+    /// Cancel generation
     pub fn cancel(&mut self) -> Result<()> {
-        let new_state = self.apply_transition(JobEvent::Cancel)?;
-        self.status = JobStatus::from_state(new_state);
-        self.failure_type = Some(JobFailureType::Canceled);
+        let new_state = self.apply_transition(GenerationEvent::Cancel)?;
+        self.status = GenerationStatus::from_state(new_state);
+        self.failure_type = Some(GenerationFailureType::Canceled);
 
         // Apply refund with 10% cancellation fee
-        self.apply_refund(JobFailureType::Canceled);
+        self.apply_refund(GenerationFailureType::Canceled);
 
         self.completed_at = Some(Utc::now());
         self.updated_at = Utc::now();
@@ -211,15 +215,15 @@ impl Job {
     }
 
     /// Apply a state transition using the state machine
-    fn apply_transition(&self, event: JobEvent) -> Result<JobState> {
+    fn apply_transition(&self, event: GenerationEvent) -> Result<GenerationState> {
         let current_state = self.status.to_state();
-        JobStateMachine::transition(current_state, event).map_err(|e| match e {
+        GenerationStateMachine::transition(current_state, event).map_err(|e| match e {
             StateError::InvalidTransition { from, event, .. } => Error::Conflict(format!(
-                "Invalid job transition: cannot apply '{}' event from '{}' state",
+                "Invalid generation transition: cannot apply '{}' event from '{}' state",
                 event, from
             )),
             StateError::TerminalState(state) => Error::Conflict(format!(
-                "Job is in terminal state '{}' and cannot transition",
+                "Generation is in terminal state '{}' and cannot transition",
                 state
             )),
             StateError::GuardFailed(msg) => Error::Conflict(msg),
@@ -227,8 +231,8 @@ impl Job {
     }
 
     /// Check if a transition is valid without applying it
-    pub fn can_transition(&self, event: &JobEvent) -> bool {
-        JobStateMachine::can_transition(self.status.to_state(), event)
+    pub fn can_transition(&self, event: &GenerationEvent) -> bool {
+        GenerationStateMachine::can_transition(self.status.to_state(), event)
     }
 
     /// Get owner URN
@@ -237,7 +241,7 @@ impl Job {
     }
 
     /// Calculate refund amount based on failure type and progress
-    pub fn calculate_refund(&self, failure_type: JobFailureType) -> i32 {
+    pub fn calculate_refund(&self, failure_type: GenerationFailureType) -> i32 {
         let progress_percent_raw = self.get_progress_percent();
 
         // Convert to integer with 2 decimal precision (10000 = 100.00%)
@@ -246,10 +250,10 @@ impl Job {
 
         match failure_type {
             // Full refund for system errors and timeouts
-            JobFailureType::System | JobFailureType::Timeout => self.credits_charged,
+            GenerationFailureType::System | GenerationFailureType::Timeout => self.credits_charged,
 
             // Partial refund based on remaining work for validation errors
-            JobFailureType::Validation => {
+            GenerationFailureType::Validation => {
                 let remaining_work_int = 10000 - progress_int; // Remaining work as integer
                                                                // FLOOR operation: integer division automatically floors for positive numbers
                                                                // Use i64 for intermediate calculation to prevent overflow
@@ -258,7 +262,7 @@ impl Job {
             }
 
             // Partial refund with 10% cancellation fee
-            JobFailureType::Canceled => {
+            GenerationFailureType::Canceled => {
                 let remaining_work_int = 10000 - progress_int;
 
                 // Calculate: credits * remaining_work * 0.9 using i64 to prevent overflow
@@ -288,8 +292,8 @@ impl Job {
         rounded.clamp(0.0, 100.0)
     }
 
-    /// Apply refund to the job based on failure type
-    pub fn apply_refund(&mut self, failure_type: JobFailureType) {
+    /// Apply refund to the generation based on failure type
+    pub fn apply_refund(&mut self, failure_type: GenerationFailureType) {
         self.credits_refunded = self.calculate_refund(failure_type);
     }
 
@@ -342,59 +346,61 @@ impl Job {
             ));
         }
 
-        // INV-J2: Terminal jobs have completion timestamp
+        // INV-J2: Terminal generations have completion timestamp
         if self.is_terminal() && self.completed_at.is_none() {
             return Err(Error::Validation(
-                "Terminal jobs must have completion timestamp".to_string(),
+                "Terminal generations must have completion timestamp".to_string(),
             ));
         }
 
-        // INV-J3: Processing jobs have start timestamp
-        if self.status == JobStatus::Processing && self.started_at.is_none() {
+        // INV-J3: Processing generations have start timestamp
+        if self.status == GenerationStatus::Processing && self.started_at.is_none() {
             return Err(Error::Validation(
-                "Processing jobs must have start timestamp".to_string(),
+                "Processing generations must have start timestamp".to_string(),
             ));
         }
 
-        // INV-J4: Completed jobs must have output
-        if self.status == JobStatus::Completed && self.output.is_none() {
+        // INV-J4: Completed generations must have output
+        if self.status == GenerationStatus::Completed && self.output.is_none() {
             return Err(Error::Validation(
-                "Completed jobs must have output".to_string(),
+                "Completed generations must have output".to_string(),
             ));
         }
 
-        // INV-J5: Failed jobs must have error
-        if self.status == JobStatus::Failed && self.error.is_none() {
-            return Err(Error::Validation("Failed jobs must have error".to_string()));
+        // INV-J5: Failed generations must have error
+        if self.status == GenerationStatus::Failed && self.error.is_none() {
+            return Err(Error::Validation(
+                "Failed generations must have error".to_string(),
+            ));
         }
 
         // INV-J6 & J7: Failure type consistency
         match (&self.status, &self.failure_type) {
-            (JobStatus::Failed | JobStatus::Canceled, None) => {
+            (GenerationStatus::Failed | GenerationStatus::Canceled, None) => {
                 return Err(Error::Validation(
-                    "Failed/canceled jobs must have failure type".to_string(),
+                    "Failed/canceled generations must have failure type".to_string(),
                 ));
             }
-            (JobStatus::Completed, Some(_)) => {
+            (GenerationStatus::Completed, Some(_)) => {
                 return Err(Error::Validation(
-                    "Completed jobs must not have failure type".to_string(),
+                    "Completed generations must not have failure type".to_string(),
                 ));
             }
             _ => {}
         }
 
-        // INV-J11: Project jobs must be team-owned
+        // INV-J11: Project generations must be team-owned
         if self.project_id.is_some() {
             let urn = self.owner_urn()?;
             if !urn.is_team() {
                 return Err(Error::Validation(
-                    "Project-based jobs must be team-owned".to_string(),
+                    "Project-based generations must be team-owned".to_string(),
                 ));
             }
         }
 
         // SPEC: Cancellation must charge at least 10% (maximum 90% refund)
-        if let Some(JobFailureType::Canceled) = self.failure_type {
+        if let Some(GenerationFailureType::Canceled) = self.failure_type {
             let min_charge = (self.credits_charged * 10) / 100; // 10% minimum
             let actual_charge = self.credits_charged - self.credits_refunded;
             if actual_charge < min_charge {
@@ -491,11 +497,11 @@ impl Usage {
     }
 }
 
-/// Job event type enum matching the database enum
+/// Generation event type enum matching the database enum
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "job_event_type", rename_all = "snake_case")]
+#[sqlx(type_name = "generation_event_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
-pub enum JobEventType {
+pub enum GenerationEventType {
     Queued,
     Started,
     Progress,
@@ -505,13 +511,13 @@ pub enum JobEventType {
     Canceled,
 }
 
-/// Job event record from the database
+/// Generation event record from the database
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
-pub struct JobEventRecord {
+pub struct GenerationEventRecord {
     pub id: Uuid,
-    pub job_id: Uuid,
+    pub generation_id: Uuid,
     pub sequence: i64,
-    pub event_type: JobEventType,
+    pub event_type: GenerationEventType,
     pub payload: Json<serde_json::Value>,
     pub created_at: DateTime<Utc>,
 }
@@ -522,13 +528,13 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn test_job_creation() {
+    fn test_generation_creation() {
         let owner = Urn::user(Uuid::new_v4());
         let triggered_by = Uuid::new_v4();
         let spec = json!({"type": "render", "duration": 30});
         let credits_charged = 100;
 
-        let job = Job::new(
+        let generation = Generation::new(
             owner.clone(),
             triggered_by,
             None,
@@ -539,80 +545,85 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(job.owner_urn().unwrap(), owner);
-        assert_eq!(job.triggered_by, triggered_by);
-        assert!(job.is_ephemeral());
-        assert_eq!(job.status, JobStatus::Queued);
-        assert_eq!(job.credits_charged, credits_charged);
-        assert_eq!(job.credits_refunded, 0);
-        assert!(!job.is_terminal());
+        assert_eq!(generation.owner_urn().unwrap(), owner);
+        assert_eq!(generation.triggered_by, triggered_by);
+        assert!(generation.is_ephemeral());
+        assert_eq!(generation.status, GenerationStatus::Queued);
+        assert_eq!(generation.credits_charged, credits_charged);
+        assert_eq!(generation.credits_refunded, 0);
+        assert!(!generation.is_terminal());
     }
 
     #[test]
-    fn test_job_state_transitions() {
+    fn test_generation_state_transitions() {
         let owner = Urn::user(Uuid::new_v4());
         let triggered_by = Uuid::new_v4();
-        let mut job = Job::new(owner, triggered_by, None, json!({}), None, 100, None).unwrap();
+        let mut generation =
+            Generation::new(owner, triggered_by, None, json!({}), None, 100, None).unwrap();
 
-        // Start job
-        job.start().unwrap();
-        assert_eq!(job.status, JobStatus::Processing);
-        assert!(job.started_at.is_some());
+        // Start generation
+        generation.start().unwrap();
+        assert_eq!(generation.status, GenerationStatus::Processing);
+        assert!(generation.started_at.is_some());
 
-        // Complete job
+        // Complete generation
         let output = json!({"url": "https://example.com/video.mp4"});
-        job.complete(output.clone(), Some(1024)).unwrap();
-        assert_eq!(job.status, JobStatus::Completed);
-        assert!(job.output.is_some());
-        assert_eq!(job.output_size_bytes, Some(1024));
-        assert!(job.is_terminal());
+        generation.complete(output.clone(), Some(1024)).unwrap();
+        assert_eq!(generation.status, GenerationStatus::Completed);
+        assert!(generation.output.is_some());
+        assert_eq!(generation.output_size_bytes, Some(1024));
+        assert!(generation.is_terminal());
     }
 
     #[test]
-    fn test_job_failure() {
+    fn test_generation_failure() {
         let owner = Urn::user(Uuid::new_v4());
         let triggered_by = Uuid::new_v4();
-        let mut job = Job::new(owner, triggered_by, None, json!({}), None, 100, None).unwrap();
+        let mut generation =
+            Generation::new(owner, triggered_by, None, json!({}), None, 100, None).unwrap();
 
-        job.start().unwrap();
+        generation.start().unwrap();
 
         let error = json!({"message": "Rendering failed", "code": "RENDER_ERROR"});
-        job.fail(error.clone(), JobFailureType::System).unwrap();
+        generation
+            .fail(error.clone(), GenerationFailureType::System)
+            .unwrap();
 
-        assert_eq!(job.status, JobStatus::Failed);
-        assert!(job.error.is_some());
-        assert_eq!(job.failure_type, Some(JobFailureType::System));
-        assert!(job.is_terminal());
+        assert_eq!(generation.status, GenerationStatus::Failed);
+        assert!(generation.error.is_some());
+        assert_eq!(generation.failure_type, Some(GenerationFailureType::System));
+        assert!(generation.is_terminal());
     }
 
     #[test]
-    fn test_job_invariants() {
+    fn test_generation_invariants() {
         let owner = Urn::user(Uuid::new_v4());
         let triggered_by = Uuid::new_v4();
 
         // Test negative credits
-        let result = Job::new(owner.clone(), triggered_by, None, json!({}), None, -1, None);
+        let result = Generation::new(owner.clone(), triggered_by, None, json!({}), None, -1, None);
         assert!(result.is_err());
 
-        let mut job = Job::new(owner, triggered_by, None, json!({}), None, 100, None).unwrap();
+        let mut generation =
+            Generation::new(owner, triggered_by, None, json!({}), None, 100, None).unwrap();
 
-        // Valid job
-        assert!(job.validate().is_ok());
+        // Valid generation
+        assert!(generation.validate().is_ok());
 
         // Invalid: refund more than charged
-        job.credits_refunded = 150;
-        assert!(job.validate().is_err());
+        generation.credits_refunded = 150;
+        assert!(generation.validate().is_err());
     }
 
     #[test]
-    fn test_job_project_team_constraint() {
+    fn test_generation_project_team_constraint() {
         let team_id = Uuid::new_v4();
         let user_id = Uuid::new_v4();
         let team_owner = Urn::team(team_id);
         let user_owner = Urn::user(user_id);
 
-        // Project job must be team-owned
-        let project_job = Job::new(
+        // Project generation must be team-owned
+        let project_generation = Generation::new(
             team_owner,
             user_id,
             Some(Uuid::new_v4()), // project_id
@@ -622,10 +633,10 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(project_job.validate().is_ok());
+        assert!(project_generation.validate().is_ok());
 
-        // Project job cannot be user-owned
-        let invalid_job = Job::new(
+        // Project generation cannot be user-owned
+        let invalid_generation = Generation::new(
             user_owner,
             user_id,
             Some(Uuid::new_v4()), // project_id
@@ -635,143 +646,174 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(invalid_job.validate().is_err());
+        assert!(invalid_generation.validate().is_err());
     }
 
     #[test]
-    fn test_job_status_terminal() {
-        assert!(!JobStatus::Queued.is_terminal());
-        assert!(!JobStatus::Processing.is_terminal());
-        assert!(JobStatus::Completed.is_terminal());
-        assert!(JobStatus::Failed.is_terminal());
-        assert!(JobStatus::Canceled.is_terminal());
+    fn test_generation_status_terminal() {
+        assert!(!GenerationStatus::Queued.is_terminal());
+        assert!(!GenerationStatus::Processing.is_terminal());
+        assert!(GenerationStatus::Completed.is_terminal());
+        assert!(GenerationStatus::Failed.is_terminal());
+        assert!(GenerationStatus::Canceled.is_terminal());
     }
 
     #[test]
-    fn test_job_refund_calculation() {
+    fn test_generation_refund_calculation() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
+        let mut generation =
+            Generation::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // Set 40% progress
-        job.update_progress(40.0).unwrap();
+        generation.update_progress(40.0).unwrap();
 
         // System error: Full refund
-        let system_refund = job.calculate_refund(JobFailureType::System);
+        let system_refund = generation.calculate_refund(GenerationFailureType::System);
         assert_eq!(system_refund, 100);
 
         // Timeout: Full refund
-        let timeout_refund = job.calculate_refund(JobFailureType::Timeout);
+        let timeout_refund = generation.calculate_refund(GenerationFailureType::Timeout);
         assert_eq!(timeout_refund, 100);
 
         // Validation error: Partial refund based on remaining work
         // 60% remaining = 60 credits refunded
-        let validation_refund = job.calculate_refund(JobFailureType::Validation);
+        let validation_refund = generation.calculate_refund(GenerationFailureType::Validation);
         assert_eq!(validation_refund, 60);
 
         // Cancellation: Partial refund with 10% fee
         // 60% remaining x 0.9 = 54 credits refunded
-        let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+        let cancel_refund = generation.calculate_refund(GenerationFailureType::Canceled);
         assert_eq!(cancel_refund, 54);
     }
 
     #[test]
-    fn test_job_progress_methods() {
+    fn test_generation_progress_methods() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
+        let mut generation =
+            Generation::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // Initially 0% progress
-        assert_eq!(job.get_progress_percent(), 0.0);
+        assert_eq!(generation.get_progress_percent(), 0.0);
 
         // Update progress
-        job.update_progress(25.5).unwrap();
-        assert_eq!(job.get_progress_percent(), 25.5);
+        generation.update_progress(25.5).unwrap();
+        assert_eq!(generation.get_progress_percent(), 25.5);
 
         // Progress bounds validation
-        assert!(job.update_progress(-1.0).is_err());
-        assert!(job.update_progress(101.0).is_err());
+        assert!(generation.update_progress(-1.0).is_err());
+        assert!(generation.update_progress(101.0).is_err());
 
         // Progress clamped to bounds in getter
-        job.progress = Json(json!({"percent": 150.0}));
-        assert_eq!(job.get_progress_percent(), 100.0);
+        generation.progress = Json(json!({"percent": 150.0}));
+        assert_eq!(generation.get_progress_percent(), 100.0);
 
-        job.progress = Json(json!({"percent": -50.0}));
-        assert_eq!(job.get_progress_percent(), 0.0);
+        generation.progress = Json(json!({"percent": -50.0}));
+        assert_eq!(generation.get_progress_percent(), 0.0);
     }
 
     #[test]
-    fn test_job_fail_with_automatic_refund() {
+    fn test_generation_fail_with_automatic_refund() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
+        let mut generation =
+            Generation::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
-        // Start the job
-        job.start().unwrap();
-        assert_eq!(job.status, JobStatus::Processing);
+        // Start the generation
+        generation.start().unwrap();
+        assert_eq!(generation.status, GenerationStatus::Processing);
 
         // Set some progress
-        job.update_progress(30.0).unwrap();
+        generation.update_progress(30.0).unwrap();
 
         // Fail with system error
-        job.fail(json!({"error": "GPU crashed"}), JobFailureType::System)
+        generation
+            .fail(
+                json!({"error": "GPU crashed"}),
+                GenerationFailureType::System,
+            )
             .unwrap();
 
-        assert_eq!(job.status, JobStatus::Failed);
-        assert_eq!(job.failure_type, Some(JobFailureType::System));
-        assert_eq!(job.credits_refunded, 100); // Full refund for system error
-        assert!(job.completed_at.is_some());
+        assert_eq!(generation.status, GenerationStatus::Failed);
+        assert_eq!(generation.failure_type, Some(GenerationFailureType::System));
+        assert_eq!(generation.credits_refunded, 100); // Full refund for system error
+        assert!(generation.completed_at.is_some());
     }
 
     #[test]
-    fn test_job_cancel_with_automatic_refund() {
+    fn test_generation_cancel_with_automatic_refund() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
+        let mut generation =
+            Generation::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
-        // Start the job
-        job.start().unwrap();
-        assert_eq!(job.status, JobStatus::Processing);
+        // Start the generation
+        generation.start().unwrap();
+        assert_eq!(generation.status, GenerationStatus::Processing);
 
         // Set some progress (20%)
-        job.update_progress(20.0).unwrap();
+        generation.update_progress(20.0).unwrap();
 
-        // Cancel the job
-        job.cancel().unwrap();
+        // Cancel the generation
+        generation.cancel().unwrap();
 
-        assert_eq!(job.status, JobStatus::Canceled);
-        assert_eq!(job.failure_type, Some(JobFailureType::Canceled));
+        assert_eq!(generation.status, GenerationStatus::Canceled);
+        assert_eq!(
+            generation.failure_type,
+            Some(GenerationFailureType::Canceled)
+        );
 
         // 80% remaining work x 0.9 (10% cancellation fee) = 72 credits refunded
-        assert_eq!(job.credits_refunded, 72);
-        assert!(job.completed_at.is_some());
+        assert_eq!(generation.credits_refunded, 72);
+        assert!(generation.completed_at.is_some());
     }
 
     #[test]
-    fn test_job_refund_edge_cases() {
+    fn test_generation_refund_edge_cases() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
+        let mut generation =
+            Generation::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // 0% progress - full refund minus fee for cancellation
-        job.update_progress(0.0).unwrap();
-        let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+        generation.update_progress(0.0).unwrap();
+        let cancel_refund = generation.calculate_refund(GenerationFailureType::Canceled);
         assert_eq!(cancel_refund, 90); // 100% x 0.9
 
         // 100% progress - no refund for any failure type except system/timeout
-        job.update_progress(100.0).unwrap();
+        generation.update_progress(100.0).unwrap();
 
-        assert_eq!(job.calculate_refund(JobFailureType::System), 100); // Still full
-        assert_eq!(job.calculate_refund(JobFailureType::Timeout), 100); // Still full
-        assert_eq!(job.calculate_refund(JobFailureType::Validation), 0); // No remaining work
-        assert_eq!(job.calculate_refund(JobFailureType::Canceled), 0); // No remaining work
+        assert_eq!(
+            generation.calculate_refund(GenerationFailureType::System),
+            100
+        ); // Still full
+        assert_eq!(
+            generation.calculate_refund(GenerationFailureType::Timeout),
+            100
+        ); // Still full
+        assert_eq!(
+            generation.calculate_refund(GenerationFailureType::Validation),
+            0
+        ); // No remaining work
+        assert_eq!(
+            generation.calculate_refund(GenerationFailureType::Canceled),
+            0
+        ); // No remaining work
 
         // Test with no credits charged
         let user_owner2 = Urn::user(user_id);
-        let mut free_job = Job::new(user_owner2, user_id, None, json!({}), None, 0, None).unwrap();
-        free_job.update_progress(50.0).unwrap();
-        assert_eq!(free_job.calculate_refund(JobFailureType::System), 0);
-        assert_eq!(free_job.calculate_refund(JobFailureType::Canceled), 0);
+        let mut free_generation =
+            Generation::new(user_owner2, user_id, None, json!({}), None, 0, None).unwrap();
+        free_generation.update_progress(50.0).unwrap();
+        assert_eq!(
+            free_generation.calculate_refund(GenerationFailureType::System),
+            0
+        );
+        assert_eq!(
+            free_generation.calculate_refund(GenerationFailureType::Canceled),
+            0
+        );
     }
 
     #[test]
@@ -808,7 +850,7 @@ mod tests {
         for (credits, progress, expected_validation, expected_cancel, description) in
             precision_test_cases
         {
-            let mut job = Job::new(
+            let mut generation = Generation::new(
                 user_owner.clone(),
                 user_id,
                 None,
@@ -818,10 +860,10 @@ mod tests {
                 None,
             )
             .unwrap();
-            job.update_progress(progress).unwrap();
+            generation.update_progress(progress).unwrap();
 
             // Test validation refund
-            let validation_refund = job.calculate_refund(JobFailureType::Validation);
+            let validation_refund = generation.calculate_refund(GenerationFailureType::Validation);
             assert_eq!(
                 validation_refund, expected_validation,
                 "Validation refund mismatch for {}: {} credits at {}% progress",
@@ -829,7 +871,7 @@ mod tests {
             );
 
             // Test cancellation refund
-            let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+            let cancel_refund = generation.calculate_refund(GenerationFailureType::Canceled);
             assert_eq!(
                 cancel_refund, expected_cancel,
                 "Cancellation refund mismatch for {}: {} credits at {}% progress",
@@ -844,13 +886,25 @@ mod tests {
         let user_owner = Urn::user(user_id);
 
         // Test zero credits
-        let mut zero_job =
-            Job::new(user_owner.clone(), user_id, None, json!({}), None, 0, None).unwrap();
-        zero_job.update_progress(50.0).unwrap();
-        assert_eq!(zero_job.calculate_refund(JobFailureType::System), 0);
-        assert_eq!(zero_job.calculate_refund(JobFailureType::Timeout), 0);
-        assert_eq!(zero_job.calculate_refund(JobFailureType::Validation), 0);
-        assert_eq!(zero_job.calculate_refund(JobFailureType::Canceled), 0);
+        let mut zero_generation =
+            Generation::new(user_owner.clone(), user_id, None, json!({}), None, 0, None).unwrap();
+        zero_generation.update_progress(50.0).unwrap();
+        assert_eq!(
+            zero_generation.calculate_refund(GenerationFailureType::System),
+            0
+        );
+        assert_eq!(
+            zero_generation.calculate_refund(GenerationFailureType::Timeout),
+            0
+        );
+        assert_eq!(
+            zero_generation.calculate_refund(GenerationFailureType::Validation),
+            0
+        );
+        assert_eq!(
+            zero_generation.calculate_refund(GenerationFailureType::Canceled),
+            0
+        );
 
         // Test single credit with various progress values
         let single_credit_cases = vec![
@@ -862,19 +916,20 @@ mod tests {
         ];
 
         for (progress, expected_validation, expected_cancel) in single_credit_cases {
-            let mut single_job =
-                Job::new(user_owner.clone(), user_id, None, json!({}), None, 1, None).unwrap();
-            single_job.update_progress(progress).unwrap();
+            let mut single_generation =
+                Generation::new(user_owner.clone(), user_id, None, json!({}), None, 1, None)
+                    .unwrap();
+            single_generation.update_progress(progress).unwrap();
 
             assert_eq!(
-                single_job.calculate_refund(JobFailureType::Validation),
+                single_generation.calculate_refund(GenerationFailureType::Validation),
                 expected_validation,
                 "Single credit validation refund at {}% progress",
                 progress
             );
 
             assert_eq!(
-                single_job.calculate_refund(JobFailureType::Canceled),
+                single_generation.calculate_refund(GenerationFailureType::Canceled),
                 expected_cancel,
                 "Single credit cancellation refund at {}% progress",
                 progress
@@ -883,7 +938,7 @@ mod tests {
 
         // Test maximum safe integer values
         let max_safe_credits = 1_000_000_000; // Large but safe for i32 math
-        let mut large_job = Job::new(
+        let mut large_generation = Generation::new(
             user_owner,
             user_id,
             None,
@@ -895,9 +950,11 @@ mod tests {
         .unwrap();
 
         // Test with small progress to ensure no overflow
-        large_job.update_progress(1.0).unwrap();
-        let large_validation_refund = large_job.calculate_refund(JobFailureType::Validation);
-        let large_cancel_refund = large_job.calculate_refund(JobFailureType::Canceled);
+        large_generation.update_progress(1.0).unwrap();
+        let large_validation_refund =
+            large_generation.calculate_refund(GenerationFailureType::Validation);
+        let large_cancel_refund =
+            large_generation.calculate_refund(GenerationFailureType::Canceled);
 
         // With 1% progress: 99% should be refunded for validation, 89.1% for cancellation
         assert_eq!(large_validation_refund, 990_000_000); // 99% of 1B
@@ -928,7 +985,7 @@ mod tests {
 
         for (credits, progress, expected_refund, expected_charge, description) in enforcement_cases
         {
-            let mut job = Job::new(
+            let mut generation = Generation::new(
                 user_owner.clone(),
                 user_id,
                 None,
@@ -938,9 +995,9 @@ mod tests {
                 None,
             )
             .unwrap();
-            job.update_progress(progress).unwrap();
+            generation.update_progress(progress).unwrap();
 
-            let actual_refund = job.calculate_refund(JobFailureType::Canceled);
+            let actual_refund = generation.calculate_refund(GenerationFailureType::Canceled);
             let actual_charge = credits - actual_refund;
 
             assert_eq!(
@@ -972,12 +1029,13 @@ mod tests {
         let user_owner = Urn::user(user_id);
 
         // Test that refund calculations are consistent across multiple calls
-        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 150, None).unwrap();
-        job.update_progress(33.33).unwrap();
+        let mut generation =
+            Generation::new(user_owner, user_id, None, json!({}), None, 150, None).unwrap();
+        generation.update_progress(33.33).unwrap();
 
         // Call refund calculation multiple times - should be deterministic
         let refunds: Vec<_> = (0..10)
-            .map(|_| job.calculate_refund(JobFailureType::Validation))
+            .map(|_| generation.calculate_refund(GenerationFailureType::Validation))
             .collect();
 
         // All refunds should be identical
@@ -988,7 +1046,7 @@ mod tests {
 
         // Same for cancellation refunds
         let cancel_refunds: Vec<_> = (0..10)
-            .map(|_| job.calculate_refund(JobFailureType::Canceled))
+            .map(|_| generation.calculate_refund(GenerationFailureType::Canceled))
             .collect();
 
         assert!(
@@ -1005,7 +1063,7 @@ mod tests {
         // Test mathematical properties that should hold for refund calculations
         for credits in [1, 10, 100, 1000] {
             for progress in [0.0, 25.0, 50.0, 75.0, 100.0] {
-                let mut job = Job::new(
+                let mut generation = Generation::new(
                     user_owner.clone(),
                     user_id,
                     None,
@@ -1015,15 +1073,22 @@ mod tests {
                     None,
                 )
                 .unwrap();
-                job.update_progress(progress).unwrap();
+                generation.update_progress(progress).unwrap();
 
                 // Property 1: System/timeout refunds should always equal charged amount
-                assert_eq!(job.calculate_refund(JobFailureType::System), credits);
-                assert_eq!(job.calculate_refund(JobFailureType::Timeout), credits);
+                assert_eq!(
+                    generation.calculate_refund(GenerationFailureType::System),
+                    credits
+                );
+                assert_eq!(
+                    generation.calculate_refund(GenerationFailureType::Timeout),
+                    credits
+                );
 
                 // Property 2: Refunds should never exceed charged amount
-                let validation_refund = job.calculate_refund(JobFailureType::Validation);
-                let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+                let validation_refund =
+                    generation.calculate_refund(GenerationFailureType::Validation);
+                let cancel_refund = generation.calculate_refund(GenerationFailureType::Canceled);
 
                 assert!(
                     validation_refund <= credits,
@@ -1065,7 +1130,8 @@ mod tests {
     fn test_progress_percentage_edge_cases() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
+        let mut generation =
+            Generation::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // Test various progress percentage edge cases
         let progress_cases = vec![
@@ -1078,20 +1144,20 @@ mod tests {
         ];
 
         for (progress, description) in progress_cases {
-            job.update_progress(progress).unwrap();
+            generation.update_progress(progress).unwrap();
 
             // Verify progress is set correctly
             assert!(
-                (job.get_progress_percent() - progress).abs() < 0.01,
+                (generation.get_progress_percent() - progress).abs() < 0.01,
                 "Progress not set correctly for {}: expected {}, got {}",
                 description,
                 progress,
-                job.get_progress_percent()
+                generation.get_progress_percent()
             );
 
             // Verify refunds are calculated correctly
-            let validation_refund = job.calculate_refund(JobFailureType::Validation);
-            let cancel_refund = job.calculate_refund(JobFailureType::Canceled);
+            let validation_refund = generation.calculate_refund(GenerationFailureType::Validation);
+            let cancel_refund = generation.calculate_refund(GenerationFailureType::Canceled);
 
             // Basic sanity checks
             assert!(
@@ -1150,29 +1216,29 @@ mod tests {
     // ====================================================================
 
     #[test]
-    fn test_job_status_valid_transitions_returns_correct_values() {
+    fn test_generation_status_valid_transitions_returns_correct_values() {
         // Kills: replace valid_transitions → vec![] and vec![Default::default()]
-        let queued = JobStatus::Queued.valid_transitions();
+        let queued = GenerationStatus::Queued.valid_transitions();
         assert_eq!(queued.len(), 2);
-        assert!(queued.contains(&JobStatus::Processing));
-        assert!(queued.contains(&JobStatus::Canceled));
+        assert!(queued.contains(&GenerationStatus::Processing));
+        assert!(queued.contains(&GenerationStatus::Canceled));
 
-        let processing = JobStatus::Processing.valid_transitions();
+        let processing = GenerationStatus::Processing.valid_transitions();
         assert_eq!(processing.len(), 3);
-        assert!(processing.contains(&JobStatus::Completed));
-        assert!(processing.contains(&JobStatus::Failed));
-        assert!(processing.contains(&JobStatus::Canceled));
+        assert!(processing.contains(&GenerationStatus::Completed));
+        assert!(processing.contains(&GenerationStatus::Failed));
+        assert!(processing.contains(&GenerationStatus::Canceled));
 
-        assert!(JobStatus::Completed.valid_transitions().is_empty());
-        assert!(JobStatus::Failed.valid_transitions().is_empty());
-        assert!(JobStatus::Canceled.valid_transitions().is_empty());
+        assert!(GenerationStatus::Completed.valid_transitions().is_empty());
+        assert!(GenerationStatus::Failed.valid_transitions().is_empty());
+        assert!(GenerationStatus::Canceled.valid_transitions().is_empty());
     }
 
     #[test]
     fn test_is_ephemeral_false_when_project_id_present() {
         // Kills: replace is_ephemeral → true
         let team_id = Uuid::new_v4();
-        let job = Job::new(
+        let generation = Generation::new(
             Urn::team(team_id),
             Uuid::new_v4(),
             Some(Uuid::new_v4()),
@@ -1182,14 +1248,14 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(!job.is_ephemeral());
+        assert!(!generation.is_ephemeral());
     }
 
     #[test]
     fn test_net_credits_exact_value() {
         // Kills: replace net_credits → 0, 1, -1, and operator mutations (+ instead of -, / instead of -)
         let user_id = Uuid::new_v4();
-        let mut job = Job::new(
+        let mut generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1199,20 +1265,20 @@ mod tests {
             None,
         )
         .unwrap();
-        job.credits_refunded = 50;
-        assert_eq!(job.net_credits(), 150);
+        generation.credits_refunded = 50;
+        assert_eq!(generation.net_credits(), 150);
 
         // Also verify with different values to catch constant replacements
-        job.credits_charged = 300;
-        job.credits_refunded = 100;
-        assert_eq!(job.net_credits(), 200);
+        generation.credits_charged = 300;
+        generation.credits_refunded = 100;
+        assert_eq!(generation.net_credits(), 200);
     }
 
     #[test]
     fn test_can_transition_valid_and_invalid() {
         // Kills: replace can_transition → true, replace can_transition → false
         let user_id = Uuid::new_v4();
-        let job = Job::new(
+        let generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1223,17 +1289,17 @@ mod tests {
         )
         .unwrap();
 
-        // Queued job can transition with WorkerPicksUp
-        assert!(job.can_transition(&JobEvent::WorkerPicksUp));
-        // Queued job cannot transition with Success
-        assert!(!job.can_transition(&JobEvent::Success));
+        // Queued generation can transition with WorkerPicksUp
+        assert!(generation.can_transition(&GenerationEvent::WorkerPicksUp));
+        // Queued generation cannot transition with Success
+        assert!(!generation.can_transition(&GenerationEvent::Success));
     }
 
     #[test]
     fn test_validate_credits_refunded_equals_charged_is_ok() {
         // Kills: replace > with >= in credits_refunded > credits_charged check (line 332)
         let user_id = Uuid::new_v4();
-        let mut job = Job::new(
+        let mut generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1243,15 +1309,15 @@ mod tests {
             None,
         )
         .unwrap();
-        job.credits_refunded = 100; // Equal, not greater — should pass
-        assert!(job.validate().is_ok());
+        generation.credits_refunded = 100; // Equal, not greater — should pass
+        assert!(generation.validate().is_ok());
     }
 
     #[test]
     fn test_validate_negative_credits_refunded_only() {
         // Kills: replace || with && in credits_refunded < 0 || credits_charged < 0 (line 339)
         let user_id = Uuid::new_v4();
-        let mut job = Job::new(
+        let mut generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1261,25 +1327,25 @@ mod tests {
             None,
         )
         .unwrap();
-        job.credits_refunded = -1;
-        assert!(job.validate().is_err());
+        generation.credits_refunded = -1;
+        assert!(generation.validate().is_err());
     }
 
     #[test]
     fn test_validate_zero_credits_is_ok() {
         // Kills: replace < with <= in credits check (line 339) — 0 should pass
         let user_id = Uuid::new_v4();
-        let mut job =
-            Job::new(Urn::user(user_id), user_id, None, json!({}), None, 0, None).unwrap();
-        job.credits_refunded = 0;
-        assert!(job.validate().is_ok());
+        let mut generation =
+            Generation::new(Urn::user(user_id), user_id, None, json!({}), None, 0, None).unwrap();
+        generation.credits_refunded = 0;
+        assert!(generation.validate().is_ok());
     }
 
     #[test]
     fn test_validate_non_terminal_without_completed_at_is_ok() {
         // Kills: replace && with || in terminal + completed_at check (line 346)
         let user_id = Uuid::new_v4();
-        let job = Job::new(
+        let generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1290,14 +1356,14 @@ mod tests {
         )
         .unwrap();
         // Queued (non-terminal), no completed_at — should be valid
-        assert!(job.validate().is_ok());
+        assert!(generation.validate().is_ok());
     }
 
     #[test]
-    fn test_validate_failed_job_without_failure_type() {
+    fn test_validate_failed_generation_without_failure_type() {
         // Kills: delete match arm Failed|Canceled, None in failure type check (line 373)
         let user_id = Uuid::new_v4();
-        let mut job = Job::new(
+        let mut generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1307,18 +1373,18 @@ mod tests {
             None,
         )
         .unwrap();
-        job.status = JobStatus::Failed;
-        job.error = Some(Json(json!({"msg": "err"})));
-        job.completed_at = Some(Utc::now());
-        job.failure_type = None; // Missing — should fail
-        assert!(job.validate().is_err());
+        generation.status = GenerationStatus::Failed;
+        generation.error = Some(Json(json!({"msg": "err"})));
+        generation.completed_at = Some(Utc::now());
+        generation.failure_type = None; // Missing — should fail
+        assert!(generation.validate().is_err());
     }
 
     #[test]
-    fn test_validate_canceled_job_without_failure_type() {
+    fn test_validate_canceled_generation_without_failure_type() {
         // Also catches the Failed|Canceled match arm deletion
         let user_id = Uuid::new_v4();
-        let mut job = Job::new(
+        let mut generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1328,17 +1394,17 @@ mod tests {
             None,
         )
         .unwrap();
-        job.status = JobStatus::Canceled;
-        job.completed_at = Some(Utc::now());
-        job.failure_type = None; // Missing — should fail
-        assert!(job.validate().is_err());
+        generation.status = GenerationStatus::Canceled;
+        generation.completed_at = Some(Utc::now());
+        generation.failure_type = None; // Missing — should fail
+        assert!(generation.validate().is_err());
     }
 
     #[test]
     fn test_validate_completed_with_failure_type() {
         // Kills: delete match arm Completed, Some(_) (line 378)
         let user_id = Uuid::new_v4();
-        let mut job = Job::new(
+        let mut generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1348,18 +1414,18 @@ mod tests {
             None,
         )
         .unwrap();
-        job.status = JobStatus::Completed;
-        job.output = Some(Json(json!({"url": "x"})));
-        job.completed_at = Some(Utc::now());
-        job.failure_type = Some(JobFailureType::System); // Should not have this
-        assert!(job.validate().is_err());
+        generation.status = GenerationStatus::Completed;
+        generation.output = Some(Json(json!({"url": "x"})));
+        generation.completed_at = Some(Utc::now());
+        generation.failure_type = Some(GenerationFailureType::System); // Should not have this
+        assert!(generation.validate().is_err());
     }
 
     #[test]
     fn test_validate_cancellation_at_exact_10_percent_boundary() {
         // Kills: replace < with <= or == in actual_charge < min_charge (line 400)
         let user_id = Uuid::new_v4();
-        let mut job = Job::new(
+        let mut generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1369,24 +1435,24 @@ mod tests {
             None,
         )
         .unwrap();
-        job.status = JobStatus::Canceled;
-        job.completed_at = Some(Utc::now());
-        job.failure_type = Some(JobFailureType::Canceled);
+        generation.status = GenerationStatus::Canceled;
+        generation.completed_at = Some(Utc::now());
+        generation.failure_type = Some(GenerationFailureType::Canceled);
 
         // Exactly 10% charge (90 refunded of 100) — should pass
-        job.credits_refunded = 90;
-        assert!(job.validate().is_ok());
+        generation.credits_refunded = 90;
+        assert!(generation.validate().is_ok());
 
         // 9% charge (91 refunded of 100) — violates 10% minimum
-        job.credits_refunded = 91;
-        assert!(job.validate().is_err());
+        generation.credits_refunded = 91;
+        assert!(generation.validate().is_err());
     }
 
     #[test]
     fn test_validate_cancellation_min_charge_arithmetic() {
         // Kills: arithmetic mutations in min_charge = (credits_charged * 10) / 100 (line 398)
         let user_id = Uuid::new_v4();
-        let mut job = Job::new(
+        let mut generation = Generation::new(
             Urn::user(user_id),
             user_id,
             None,
@@ -1396,16 +1462,16 @@ mod tests {
             None,
         )
         .unwrap();
-        job.status = JobStatus::Canceled;
-        job.completed_at = Some(Utc::now());
-        job.failure_type = Some(JobFailureType::Canceled);
+        generation.status = GenerationStatus::Canceled;
+        generation.completed_at = Some(Utc::now());
+        generation.failure_type = Some(GenerationFailureType::Canceled);
 
         // min_charge = (200 * 10) / 100 = 20, so refunded must be <= 180
-        job.credits_refunded = 180;
-        assert!(job.validate().is_ok());
+        generation.credits_refunded = 180;
+        assert!(generation.validate().is_ok());
 
-        job.credits_refunded = 181; // charge = 19 < 20 minimum
-        assert!(job.validate().is_err());
+        generation.credits_refunded = 181; // charge = 19 < 20 minimum
+        assert!(generation.validate().is_err());
     }
 
     #[test]

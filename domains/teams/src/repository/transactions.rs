@@ -297,17 +297,17 @@ pub async fn count_owned_teams_tx(
     Ok(row.0)
 }
 
-/// Count active (non-terminal) jobs for a team within an existing transaction.
+/// Count active (non-terminal) generations for a team within an existing transaction.
 ///
-/// CQRS read-side query: reads the jobs table directly.
-pub async fn count_active_jobs_for_team_tx(
+/// CQRS read-side query: reads the generations table directly.
+pub async fn count_active_generations_for_team_tx(
     transaction: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
 ) -> std::result::Result<i64, RepositoryError> {
     let row: (i64,) = sqlx::query_as(
         r#"
         SELECT COUNT(*)
-        FROM jobs
+        FROM generations
         WHERE owner = 'framecast:team:' || $1::text
           AND status NOT IN ('completed', 'failed', 'canceled')
         "#,

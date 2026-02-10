@@ -470,7 +470,7 @@ async fn create_test_user_in_db(pool: &PgPool, tier: UserTier) -> Result<User> {
 /// Shared helper: truncate all tables
 async fn cleanup_all(pool: &PgPool) -> Result<()> {
     sqlx::query(
-        "TRUNCATE TABLE jobs, job_events, message_artifacts, messages, artifacts, conversations, \
+        "TRUNCATE TABLE generations, generation_events, message_artifacts, messages, artifacts, conversations, \
          api_keys, invitations, memberships, teams, users CASCADE",
     )
     .execute(pool)
@@ -478,21 +478,21 @@ async fn cleanup_all(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
-/// Test application for the Jobs domain
-pub struct JobsTestApp {
-    pub state: framecast_jobs::JobsState,
+/// Test application for the Generations domain
+pub struct GenerationsTestApp {
+    pub state: framecast_generations::GenerationsState,
     pub config: TestConfig,
     pub pool: PgPool,
     pub mock_inngest: Arc<framecast_inngest::mock::MockInngestService>,
 }
 
-impl JobsTestApp {
+impl GenerationsTestApp {
     pub async fn new() -> Result<Self> {
         let config = TestConfig::from_env();
         let pool = sqlx::PgPool::connect(&config.database_url).await?;
         sqlx::migrate!("../../migrations").run(&pool).await?;
 
-        let repos = framecast_jobs::JobsRepositories::new(pool.clone());
+        let repos = framecast_generations::GenerationsRepositories::new(pool.clone());
         let auth_config = AuthConfig {
             jwt_secret: config.jwt_secret.clone(),
             issuer: Some("framecast-test".to_string()),
@@ -506,7 +506,7 @@ impl JobsTestApp {
         let mock_render_behavior = Some(mock_render.behavior().clone());
         let mock_render_history = Some(mock_render.history().clone());
 
-        let state = framecast_jobs::JobsState {
+        let state = framecast_generations::GenerationsState {
             repos,
             auth: auth_backend,
             inngest: mock_inngest.clone(),
@@ -533,7 +533,7 @@ impl JobsTestApp {
     }
 
     pub fn test_router(&self) -> Router {
-        framecast_jobs::routes().with_state(self.state.clone())
+        framecast_generations::routes().with_state(self.state.clone())
     }
 }
 

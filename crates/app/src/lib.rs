@@ -11,8 +11,8 @@ use framecast_artifacts::{ArtifactsRepositories, ArtifactsState};
 use framecast_auth::{AuthBackend, AuthConfig};
 use framecast_conversations::{ConversationsRepositories, ConversationsState};
 use framecast_email::{EmailConfig, EmailServiceFactory};
+use framecast_generations::{GenerationsRepositories, GenerationsState};
 use framecast_inngest::{InngestConfig, InngestServiceFactory};
-use framecast_jobs::{JobsRepositories, JobsState};
 use framecast_llm::{LlmConfig, LlmServiceFactory};
 use framecast_runpod::{RenderConfig, RenderServiceFactory};
 use framecast_teams::{TeamsRepositories, TeamsState};
@@ -26,7 +26,7 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
     let teams_repos = TeamsRepositories::new(pool.clone());
     let artifacts_repos = ArtifactsRepositories::new(pool.clone());
     let conversations_repos = ConversationsRepositories::new(pool.clone());
-    let jobs_repos = JobsRepositories::new(pool.clone());
+    let generations_repos = GenerationsRepositories::new(pool.clone());
 
     // Create auth config from environment
     let auth_config = AuthConfig {
@@ -103,9 +103,9 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
         auth: auth_backend.clone(),
     };
 
-    // Create Jobs domain state
-    let jobs_state = JobsState {
-        repos: jobs_repos,
+    // Create Generations domain state
+    let generations_state = GenerationsState {
+        repos: generations_repos,
         auth: auth_backend.clone(),
         inngest: Arc::from(inngest_service),
         render: Arc::from(render_service_boxed),
@@ -132,7 +132,7 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
         )
         .merge(framecast_teams::routes().with_state(teams_state))
         .merge(framecast_artifacts::routes().with_state(artifacts_state))
-        .merge(framecast_jobs::routes().with_state(jobs_state))
+        .merge(framecast_generations::routes().with_state(generations_state))
         .merge(framecast_conversations::routes().with_state(conversations_state));
 
     Ok(app)

@@ -8,7 +8,7 @@
 -- ============================================================================
 
 CREATE TYPE artifact_kind AS ENUM ('storyboard', 'image', 'audio', 'video');
-CREATE TYPE artifact_source AS ENUM ('upload', 'conversation', 'job');
+CREATE TYPE artifact_source AS ENUM ('upload', 'conversation', 'generation');
 CREATE TYPE conversation_status AS ENUM ('active', 'archived');
 CREATE TYPE message_role AS ENUM ('user', 'assistant');
 
@@ -69,7 +69,7 @@ CREATE TABLE artifacts (
     spec jsonb,
     -- Provenance (FK to conversations added below, after conversations table)
     conversation_id uuid,
-    source_job_id uuid REFERENCES jobs (id) ON DELETE SET NULL,
+    source_generation_id uuid REFERENCES generations (id) ON DELETE SET NULL,
     -- General
     metadata jsonb NOT NULL DEFAULT '{}',
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -93,8 +93,9 @@ CREATE TABLE artifacts (
         (source = 'conversation' AND conversation_id IS NOT NULL)
         OR source != 'conversation'
     ),
-    CONSTRAINT source_job_consistency CHECK (
-        (source = 'job' AND source_job_id IS NOT NULL) OR source != 'job'
+    CONSTRAINT source_generation_consistency CHECK (
+        (source = 'generation' AND source_generation_id IS NOT NULL)
+        OR source != 'generation'
     ),
     CONSTRAINT project_artifacts_team_owned CHECK (
         project_id IS NULL OR owner LIKE 'framecast:team:%'

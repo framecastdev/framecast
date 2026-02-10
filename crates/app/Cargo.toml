@@ -19,7 +19,7 @@ path = "src/bin/local.rs"
 
 [features]
 default = ["mock-render"]
-mock-render = ["framecast-jobs/mock-render"]
+mock-render = ["framecast-generations/mock-render"]
 
 [dependencies]
 # Domain crates
@@ -27,7 +27,7 @@ framecast-auth.workspace = true
 framecast-teams.workspace = true
 framecast-artifacts.workspace = true
 framecast-conversations.workspace = true
-framecast-jobs.workspace = true
+framecast-generations.workspace = true
 framecast-email.workspace = true
 framecast-llm.workspace = true
 framecast-inngest.workspace = true

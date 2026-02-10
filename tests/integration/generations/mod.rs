@@ -1,4 +1,4 @@
-//! Jobs domain integration tests (JI-01 through JI-40)
+//! Generations domain integration tests (GI-01 through GI-40)
 
 use axum::{
     body::Body,
@@ -11,7 +11,7 @@ use uuid::Uuid;
 use framecast_common::Urn;
 use framecast_teams::UserTier;
 
-use crate::common::{create_test_jwt, JobsTestApp};
+use crate::common::{create_test_jwt, GenerationsTestApp};
 
 /// Helper: build an authenticated request
 fn authed_request(method: Method, uri: &str, jwt: &str, body: Option<Value>) -> Request<Body> {
@@ -52,9 +52,9 @@ async fn parse_body(response: axum::http::Response<Body>) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
-/// Helper: create an ephemeral job and return the parsed response body
-async fn create_job(
-    app: &JobsTestApp,
+/// Helper: create an ephemeral generation and return the parsed response body
+async fn create_generation(
+    app: &GenerationsTestApp,
     jwt: &str,
     spec: Value,
     idempotency_key: Option<&str>,
@@ -64,7 +64,7 @@ async fn create_job(
         body["idempotency_key"] = json!(key);
     }
 
-    let req = authed_request(Method::POST, "/v1/generate", jwt, Some(body));
+    let req = authed_request(Method::POST, "/v1/generations", jwt, Some(body));
     let resp = app.test_router().oneshot(req).await.unwrap();
     let status = resp.status();
     let parsed = parse_body(resp).await;
@@ -72,8 +72,12 @@ async fn create_job(
 }
 
 /// Helper: send a callback to the internal endpoint
-async fn send_callback(app: &JobsTestApp, payload: Value) -> (StatusCode, Value) {
-    let req = unauthed_request(Method::POST, "/internal/jobs/callback", Some(payload));
+async fn send_callback(app: &GenerationsTestApp, payload: Value) -> (StatusCode, Value) {
+    let req = unauthed_request(
+        Method::POST,
+        "/internal/generations/callback",
+        Some(payload),
+    );
     let resp = app.test_router().oneshot(req).await.unwrap();
     let status = resp.status();
     let parsed = parse_body(resp).await;
@@ -92,7 +96,7 @@ async fn insert_test_artifact(
         r#"
         INSERT INTO artifacts (id, owner, created_by, project_id, kind, status, source,
                                filename, s3_key, content_type, size_bytes, spec,
-                               conversation_id, source_job_id, metadata, created_at, updated_at)
+                               conversation_id, source_generation_id, metadata, created_at, updated_at)
         VALUES ($1, $2, $3, NULL, $4::artifact_kind, 'ready'::asset_status, 'upload'::artifact_source,
                 'test.png', $5, 'image/png', 100, $6,
                 NULL, NULL, '{}'::jsonb, NOW(), NOW())
@@ -110,20 +114,20 @@ async fn insert_test_artifact(
 }
 
 // ============================================================================
-// Job Creation (JI-01 through JI-08)
+// Generation Creation (GI-01 through GI-08)
 // ============================================================================
-mod test_job_creation {
+mod test_generation_creation {
     use super::*;
 
-    /// JI-01: Create ephemeral job -- 201, status=queued
+    /// GI-01: Create ephemeral generation -- 201, status=queued
     #[tokio::test]
-    async fn test_create_ephemeral_job_returns_201_queued() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_create_ephemeral_generation_returns_201_queued() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
         let (status, body) =
-            create_job(&app, &jwt, json!({"prompt": "A brave warrior"}), None).await;
+            create_generation(&app, &jwt, json!({"prompt": "A brave warrior"}), None).await;
 
         assert_eq!(status, StatusCode::CREATED);
         assert_eq!(body["status"], "queued");
@@ -131,14 +135,14 @@ mod test_job_creation {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-02: Create ephemeral job -- response has all expected fields
+    /// GI-02: Create ephemeral generation -- response has all expected fields
     #[tokio::test]
-    async fn test_create_ephemeral_job_response_fields() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_create_ephemeral_generation_response_fields() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, body) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let (_, body) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
 
         assert!(body.get("id").is_some(), "missing 'id'");
         assert!(body.get("owner").is_some(), "missing 'owner'");
@@ -156,109 +160,116 @@ mod test_job_creation {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-03: Create ephemeral job -- job_event created (verify via DB query)
+    /// GI-03: Create ephemeral generation -- generation_event created (verify via DB query)
     #[tokio::test]
-    async fn test_create_ephemeral_job_creates_event() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_create_ephemeral_generation_creates_event() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, body) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id: Uuid = body["id"].as_str().unwrap().parse().unwrap();
+        let (_, body) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id: Uuid = body["id"].as_str().unwrap().parse().unwrap();
 
-        // Query job_events directly
+        // Query generation_events directly
         let events = app
             .state
             .repos
-            .job_events
-            .list_by_job(job_id, None)
+            .generation_events
+            .list_by_generation(generation_id, None)
             .await
             .unwrap();
-        assert!(!events.is_empty(), "Expected at least one job event");
+        assert!(!events.is_empty(), "Expected at least one generation event");
         assert_eq!(
             events[0].event_type,
-            framecast_jobs::JobEventType::Queued,
+            framecast_generations::GenerationEventType::Queued,
             "First event should be 'queued'"
         );
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-04: Create ephemeral job -- Inngest event sent
+    /// GI-04: Create ephemeral generation -- Inngest event sent
     #[tokio::test]
-    async fn test_create_ephemeral_job_sends_inngest_event() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_create_ephemeral_generation_sends_inngest_event() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
         app.mock_inngest.reset();
-        let (_, body) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = body["id"].as_str().unwrap();
+        let (_, body) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = body["id"].as_str().unwrap();
 
         let recorded = app.mock_inngest.recorded_events();
         assert!(!recorded.is_empty(), "Expected at least one Inngest event");
-        assert_eq!(recorded[0].name, "framecast/job.queued");
-        assert_eq!(recorded[0].data["job_id"], job_id);
+        assert_eq!(recorded[0].name, "framecast/generation.queued");
+        assert_eq!(recorded[0].data["generation_id"], generation_id);
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-05: Create ephemeral job -- idempotency key dedup returns existing job
+    /// GI-05: Create ephemeral generation -- idempotency key dedup returns existing generation
     #[tokio::test]
-    async fn test_create_ephemeral_job_idempotency_dedup() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_create_ephemeral_generation_idempotency_dedup() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
         let key = "test-idempotency-key-1";
-        let (status1, body1) = create_job(&app, &jwt, json!({"prompt": "first"}), Some(key)).await;
+        let (status1, body1) =
+            create_generation(&app, &jwt, json!({"prompt": "first"}), Some(key)).await;
         assert_eq!(status1, StatusCode::CREATED);
 
-        let (status2, body2) = create_job(&app, &jwt, json!({"prompt": "second"}), Some(key)).await;
+        let (status2, body2) =
+            create_generation(&app, &jwt, json!({"prompt": "second"}), Some(key)).await;
         assert_eq!(
             status2,
             StatusCode::OK,
             "Second call should return 200 (dedup)"
         );
-        assert_eq!(body1["id"], body2["id"], "Should return the same job");
+        assert_eq!(
+            body1["id"], body2["id"],
+            "Should return the same generation"
+        );
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-06: Create ephemeral job -- different users same idempotency key -> separate jobs
+    /// GI-06: Create ephemeral generation -- different users same idempotency key -> separate generations
     #[tokio::test]
-    async fn test_create_ephemeral_job_idempotency_different_users() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_create_ephemeral_generation_idempotency_different_users() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user_a = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt_a = create_test_jwt(&user_a, &app.config.jwt_secret).unwrap();
         let user_b = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt_b = create_test_jwt(&user_b, &app.config.jwt_secret).unwrap();
 
         let key = "shared-idempotency-key";
-        let (status_a, body_a) = create_job(&app, &jwt_a, json!({"prompt": "a"}), Some(key)).await;
-        let (status_b, body_b) = create_job(&app, &jwt_b, json!({"prompt": "b"}), Some(key)).await;
+        let (status_a, body_a) =
+            create_generation(&app, &jwt_a, json!({"prompt": "a"}), Some(key)).await;
+        let (status_b, body_b) =
+            create_generation(&app, &jwt_b, json!({"prompt": "b"}), Some(key)).await;
 
         assert_eq!(status_a, StatusCode::CREATED);
         assert_eq!(status_b, StatusCode::CREATED);
         assert_ne!(
             body_a["id"], body_b["id"],
-            "Different users should get separate jobs even with same idempotency key"
+            "Different users should get separate generations even with same idempotency key"
         );
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-07: Create ephemeral job -- missing spec -> 422
+    /// GI-07: Create ephemeral generation -- missing spec -> 422
     #[tokio::test]
-    async fn test_create_ephemeral_job_missing_spec() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_create_ephemeral_generation_missing_spec() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
         // Send request without "spec" field
         let req = authed_request(
             Method::POST,
-            "/v1/generate",
+            "/v1/generations",
             &jwt,
             Some(json!({"options": {}})),
         );
@@ -275,14 +286,14 @@ mod test_job_creation {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-08: Create ephemeral job -- without auth -> 401
+    /// GI-08: Create ephemeral generation -- without auth -> 401
     #[tokio::test]
-    async fn test_create_ephemeral_job_no_auth() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_create_ephemeral_generation_no_auth() {
+        let app = GenerationsTestApp::new().await.unwrap();
 
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/v1/generate")
+            .uri("/v1/generations")
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::to_string(&json!({"spec": {"prompt": "test"}})).unwrap(),
@@ -297,27 +308,32 @@ mod test_job_creation {
 }
 
 // ============================================================================
-// Job Read (JI-09 through JI-14)
+// Generation Read (GI-09 through GI-14)
 // ============================================================================
-mod test_job_read {
+mod test_generation_read {
     use super::*;
 
-    /// JI-09: Get job by ID -- 200 with all fields
+    /// GI-09: Get generation by ID -- 200 with all fields
     #[tokio::test]
-    async fn test_get_job_by_id() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_get_generation_by_id() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
-        let req = authed_request(Method::GET, &format!("/v1/jobs/{}", job_id), &jwt, None);
+        let req = authed_request(
+            Method::GET,
+            &format!("/v1/generations/{}", generation_id),
+            &jwt,
+            None,
+        );
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
         let body = parse_body(resp).await;
-        assert_eq!(body["id"], job_id);
+        assert_eq!(body["id"], generation_id);
         assert!(body.get("owner").is_some());
         assert!(body.get("status").is_some());
         assert!(body.get("spec_snapshot").is_some());
@@ -326,16 +342,16 @@ mod test_job_read {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-10: Get job -- nonexistent UUID -> 404
+    /// GI-10: Get generation -- nonexistent UUID -> 404
     #[tokio::test]
-    async fn test_get_job_nonexistent() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_get_generation_nonexistent() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
         let req = authed_request(
             Method::GET,
-            &format!("/v1/jobs/{}", Uuid::new_v4()),
+            &format!("/v1/generations/{}", Uuid::new_v4()),
             &jwt,
             None,
         );
@@ -345,33 +361,39 @@ mod test_job_read {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-11: Get job -- other user's job -> 404
+    /// GI-11: Get generation -- other user's generation -> 404
     #[tokio::test]
-    async fn test_get_job_other_user() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_get_generation_other_user() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user_a = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt_a = create_test_jwt(&user_a, &app.config.jwt_secret).unwrap();
         let user_b = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt_b = create_test_jwt(&user_b, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt_a, json!({"prompt": "private"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) =
+            create_generation(&app, &jwt_a, json!({"prompt": "private"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
-        let req = authed_request(Method::GET, &format!("/v1/jobs/{}", job_id), &jwt_b, None);
+        let req = authed_request(
+            Method::GET,
+            &format!("/v1/generations/{}", generation_id),
+            &jwt_b,
+            None,
+        );
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-12: List jobs -- empty for new user
+    /// GI-12: List generations -- empty for new user
     #[tokio::test]
-    async fn test_list_jobs_empty() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_list_generations_empty() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let req = authed_request(Method::GET, "/v1/jobs", &jwt, None);
+        let req = authed_request(Method::GET, "/v1/generations", &jwt, None);
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
@@ -386,19 +408,19 @@ mod test_job_read {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-13: List jobs -- returns own jobs ordered by created_at DESC
+    /// GI-13: List generations -- returns own generations ordered by created_at DESC
     #[tokio::test]
-    async fn test_list_jobs_ordered_desc() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_list_generations_ordered_desc() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        // Create 3 jobs
-        let (_, j1) = create_job(&app, &jwt, json!({"prompt": "first"}), None).await;
-        let (_, j2) = create_job(&app, &jwt, json!({"prompt": "second"}), None).await;
-        let (_, j3) = create_job(&app, &jwt, json!({"prompt": "third"}), None).await;
+        // Create 3 generations
+        let (_, g1) = create_generation(&app, &jwt, json!({"prompt": "first"}), None).await;
+        let (_, g2) = create_generation(&app, &jwt, json!({"prompt": "second"}), None).await;
+        let (_, g3) = create_generation(&app, &jwt, json!({"prompt": "third"}), None).await;
 
-        let req = authed_request(Method::GET, "/v1/jobs", &jwt, None);
+        let req = authed_request(Method::GET, "/v1/generations", &jwt, None);
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
@@ -411,32 +433,37 @@ mod test_job_read {
 
         assert_eq!(body.len(), 3);
         // Newest first
-        assert_eq!(body[0]["id"], j3["id"]);
-        assert_eq!(body[1]["id"], j2["id"]);
-        assert_eq!(body[2]["id"], j1["id"]);
+        assert_eq!(body[0]["id"], g3["id"]);
+        assert_eq!(body[1]["id"], g2["id"]);
+        assert_eq!(body[2]["id"], g1["id"]);
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-14: List jobs -- filter by status=queued
+    /// GI-14: List generations -- filter by status=queued
     #[tokio::test]
-    async fn test_list_jobs_filter_by_status() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_list_generations_filter_by_status() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        // Create a job (queued)
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        // Create a generation (queued)
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Transition one to processing via callback
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
 
-        // Create another job (stays queued)
-        let (_, queued_job) = create_job(&app, &jwt, json!({"prompt": "still queued"}), None).await;
+        // Create another generation (stays queued)
+        let (_, queued_generation) =
+            create_generation(&app, &jwt, json!({"prompt": "still queued"}), None).await;
 
         // Filter by status=queued
-        let req = authed_request(Method::GET, "/v1/jobs?status=queued", &jwt, None);
+        let req = authed_request(Method::GET, "/v1/generations?status=queued", &jwt, None);
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
@@ -448,7 +475,7 @@ mod test_job_read {
         .unwrap();
 
         assert_eq!(body.len(), 1);
-        assert_eq!(body[0]["id"], queued_job["id"]);
+        assert_eq!(body[0]["id"], queued_generation["id"]);
         assert_eq!(body[0]["status"], "queued");
 
         app.cleanup().await.unwrap();
@@ -456,24 +483,24 @@ mod test_job_read {
 }
 
 // ============================================================================
-// Job Cancel (JI-15 through JI-20)
+// Generation Cancel (GI-15 through GI-20)
 // ============================================================================
-mod test_job_cancel {
+mod test_generation_cancel {
     use super::*;
 
-    /// JI-15: Cancel queued job -> 200, status=canceled
+    /// GI-15: Cancel queued generation -> 200, status=canceled
     #[tokio::test]
-    async fn test_cancel_queued_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_cancel_queued_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/cancel", job_id),
+            &format!("/v1/generations/{}/cancel", generation_id),
             &jwt,
             None,
         );
@@ -486,23 +513,27 @@ mod test_job_cancel {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-16: Cancel processing job -> 200, status=canceled
+    /// GI-16: Cancel processing generation -> 200, status=canceled
     #[tokio::test]
-    async fn test_cancel_processing_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_cancel_processing_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Transition to processing
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
 
         // Cancel
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/cancel", job_id),
+            &format!("/v1/generations/{}/cancel", generation_id),
             &jwt,
             None,
         );
@@ -515,22 +546,26 @@ mod test_job_cancel {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-17: Cancel completed job -> 409
+    /// GI-17: Cancel completed generation -> 409
     #[tokio::test]
-    async fn test_cancel_completed_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_cancel_completed_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Transition to processing, then completed
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
         let _ = send_callback(
             &app,
             json!({
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "completed",
                 "output": {"url": "https://example.com/video.mp4"}
             }),
@@ -540,7 +575,7 @@ mod test_job_cancel {
         // Try to cancel
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/cancel", job_id),
+            &format!("/v1/generations/{}/cancel", generation_id),
             &jwt,
             None,
         );
@@ -550,19 +585,19 @@ mod test_job_cancel {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-18: Cancel -- failure_type set to "canceled"
+    /// GI-18: Cancel -- failure_type set to "canceled"
     #[tokio::test]
     async fn test_cancel_sets_failure_type() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/cancel", job_id),
+            &format!("/v1/generations/{}/cancel", generation_id),
             &jwt,
             None,
         );
@@ -574,19 +609,19 @@ mod test_job_cancel {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-19: Cancel -- completed_at is set
+    /// GI-19: Cancel -- completed_at is set
     #[tokio::test]
     async fn test_cancel_sets_completed_at() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/cancel", job_id),
+            &format!("/v1/generations/{}/cancel", generation_id),
             &jwt,
             None,
         );
@@ -601,20 +636,20 @@ mod test_job_cancel {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-20: Cancel -- job_event created
+    /// GI-20: Cancel -- generation_event created
     #[tokio::test]
     async fn test_cancel_creates_event() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id_str = created["id"].as_str().unwrap();
-        let job_id: Uuid = job_id_str.parse().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id_str = created["id"].as_str().unwrap();
+        let generation_id: Uuid = generation_id_str.parse().unwrap();
 
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/cancel", job_id_str),
+            &format!("/v1/generations/{}/cancel", generation_id_str),
             &jwt,
             None,
         );
@@ -624,8 +659,8 @@ mod test_job_cancel {
         let events = app
             .state
             .repos
-            .job_events
-            .list_by_job(job_id, None)
+            .generation_events
+            .list_by_generation(generation_id, None)
             .await
             .unwrap();
         assert!(
@@ -636,7 +671,7 @@ mod test_job_cancel {
 
         let has_canceled = events
             .iter()
-            .any(|e| e.event_type == framecast_jobs::JobEventType::Canceled);
+            .any(|e| e.event_type == framecast_generations::GenerationEventType::Canceled);
         assert!(has_canceled, "Should have a 'canceled' event");
 
         app.cleanup().await.unwrap();
@@ -644,85 +679,104 @@ mod test_job_cancel {
 }
 
 // ============================================================================
-// Job Delete (JI-21 through JI-25)
+// Generation Delete (GI-21 through GI-25)
 // ============================================================================
-mod test_job_delete {
+mod test_generation_delete {
     use super::*;
 
-    /// JI-21: Delete terminal ephemeral job -> 204
+    /// GI-21: Delete terminal ephemeral generation -> 204
     #[tokio::test]
-    async fn test_delete_terminal_ephemeral_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_delete_terminal_ephemeral_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Cancel to make terminal
         let cancel_req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/cancel", job_id),
+            &format!("/v1/generations/{}/cancel", generation_id),
             &jwt,
             None,
         );
         let _ = app.test_router().oneshot(cancel_req).await.unwrap();
 
         // Delete
-        let del_req = authed_request(Method::DELETE, &format!("/v1/jobs/{}", job_id), &jwt, None);
+        let del_req = authed_request(
+            Method::DELETE,
+            &format!("/v1/generations/{}", generation_id),
+            &jwt,
+            None,
+        );
         let resp = app.test_router().oneshot(del_req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-22: Delete queued job -> 400 (not terminal)
+    /// GI-22: Delete queued generation -> 400 (not terminal)
     #[tokio::test]
-    async fn test_delete_queued_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_delete_queued_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
-        let req = authed_request(Method::DELETE, &format!("/v1/jobs/{}", job_id), &jwt, None);
+        let req = authed_request(
+            Method::DELETE,
+            &format!("/v1/generations/{}", generation_id),
+            &jwt,
+            None,
+        );
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-23: Delete processing job -> 400
+    /// GI-23: Delete processing generation -> 400
     #[tokio::test]
-    async fn test_delete_processing_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_delete_processing_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Transition to processing
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
 
-        let req = authed_request(Method::DELETE, &format!("/v1/jobs/{}", job_id), &jwt, None);
+        let req = authed_request(
+            Method::DELETE,
+            &format!("/v1/generations/{}", generation_id),
+            &jwt,
+            None,
+        );
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-24: Delete nonexistent -> 404
+    /// GI-24: Delete nonexistent -> 404
     #[tokio::test]
-    async fn test_delete_nonexistent_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_delete_nonexistent_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
         let req = authed_request(
             Method::DELETE,
-            &format!("/v1/jobs/{}", Uuid::new_v4()),
+            &format!("/v1/generations/{}", Uuid::new_v4()),
             &jwt,
             None,
         );
@@ -732,22 +786,22 @@ mod test_job_delete {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-25: Delete other user's job -> 404
+    /// GI-25: Delete other user's generation -> 404
     #[tokio::test]
-    async fn test_delete_other_users_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_delete_other_users_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user_a = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt_a = create_test_jwt(&user_a, &app.config.jwt_secret).unwrap();
         let user_b = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt_b = create_test_jwt(&user_b, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt_a, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt_a, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Cancel to make terminal
         let cancel_req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/cancel", job_id),
+            &format!("/v1/generations/{}/cancel", generation_id),
             &jwt_a,
             None,
         );
@@ -756,7 +810,7 @@ mod test_job_delete {
         // User B tries to delete
         let req = authed_request(
             Method::DELETE,
-            &format!("/v1/jobs/{}", job_id),
+            &format!("/v1/generations/{}", generation_id),
             &jwt_b,
             None,
         );
@@ -768,28 +822,32 @@ mod test_job_delete {
 }
 
 // ============================================================================
-// Job Clone (JI-26 through JI-30)
+// Generation Clone (GI-26 through GI-30)
 // ============================================================================
-mod test_job_clone {
+mod test_generation_clone {
     use super::*;
 
-    /// JI-26: Clone completed job -> 201, new ID, same spec
+    /// GI-26: Clone completed generation -> 201, new ID, same spec
     #[tokio::test]
-    async fn test_clone_completed_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_clone_completed_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
         let spec = json!({"prompt": "clone me"});
-        let (_, created) = create_job(&app, &jwt, spec.clone(), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, spec.clone(), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Transition to completed
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
         let _ = send_callback(
             &app,
             json!({
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "completed",
                 "output": {"url": "https://example.com/v.mp4"}
             }),
@@ -799,7 +857,7 @@ mod test_job_clone {
         // Clone
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/clone", job_id),
+            &format!("/v1/generations/{}/clone", generation_id),
             &jwt,
             None,
         );
@@ -807,29 +865,33 @@ mod test_job_clone {
         assert_eq!(resp.status(), StatusCode::CREATED);
 
         let body = parse_body(resp).await;
-        assert_ne!(body["id"], job_id, "Clone should have a new ID");
+        assert_ne!(body["id"], generation_id, "Clone should have a new ID");
         assert_eq!(body["status"], "queued");
         assert_eq!(body["spec_snapshot"], spec);
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-27: Clone failed job -> 201
+    /// GI-27: Clone failed generation -> 201
     #[tokio::test]
-    async fn test_clone_failed_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_clone_failed_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "fail me"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "fail me"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Transition to failed
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
         let _ = send_callback(
             &app,
             json!({
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "failed",
                 "error": {"message": "GPU error"}
             }),
@@ -839,7 +901,7 @@ mod test_job_clone {
         // Clone
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/clone", job_id),
+            &format!("/v1/generations/{}/clone", generation_id),
             &jwt,
             None,
         );
@@ -852,19 +914,19 @@ mod test_job_clone {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-28: Clone queued job -> 400 (not terminal)
+    /// GI-28: Clone queued generation -> 400 (not terminal)
     #[tokio::test]
-    async fn test_clone_queued_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_clone_queued_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/clone", job_id),
+            &format!("/v1/generations/{}/clone", generation_id),
             &jwt,
             None,
         );
@@ -874,20 +936,20 @@ mod test_job_clone {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-29: Clone with owner override -> new owner in response
+    /// GI-29: Clone with owner override -> new owner in response
     #[tokio::test]
     async fn test_clone_with_owner_override() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Cancel to make terminal
         let cancel_req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/cancel", job_id),
+            &format!("/v1/generations/{}/cancel", generation_id),
             &jwt,
             None,
         );
@@ -897,7 +959,7 @@ mod test_job_clone {
         let owner_urn = Urn::user(user.id).to_string();
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/clone", job_id),
+            &format!("/v1/generations/{}/clone", generation_id),
             &jwt,
             Some(json!({"owner": owner_urn})),
         );
@@ -910,16 +972,16 @@ mod test_job_clone {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-30: Clone nonexistent -> 404
+    /// GI-30: Clone nonexistent -> 404
     #[tokio::test]
-    async fn test_clone_nonexistent_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_clone_nonexistent_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
         let req = authed_request(
             Method::POST,
-            &format!("/v1/jobs/{}/clone", Uuid::new_v4()),
+            &format!("/v1/generations/{}/clone", Uuid::new_v4()),
             &jwt,
             None,
         );
@@ -931,23 +993,26 @@ mod test_job_clone {
 }
 
 // ============================================================================
-// Callback (JI-31 through JI-37)
+// Callback (GI-31 through GI-37)
 // ============================================================================
-mod test_job_callback {
+mod test_generation_callback {
     use super::*;
 
-    /// JI-31: Callback "started" -> job status=processing, started_at set
+    /// GI-31: Callback "started" -> generation status=processing, started_at set
     #[tokio::test]
     async fn test_callback_started() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
-        let (status, body) =
-            send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let (status, body) = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"], "processing");
@@ -959,24 +1024,28 @@ mod test_job_callback {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-32: Callback "progress" -> progress updated
+    /// GI-32: Callback "progress" -> progress updated
     #[tokio::test]
     async fn test_callback_progress() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Start
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
 
         // Progress
         let (status, body) = send_callback(
             &app,
             json!({
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "progress",
                 "progress_percent": 50.0
             }),
@@ -990,25 +1059,29 @@ mod test_job_callback {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-33: Callback "completed" -> job status=completed, output set
+    /// GI-33: Callback "completed" -> generation status=completed, output set
     #[tokio::test]
     async fn test_callback_completed() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Start
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
 
         // Complete
         let output = json!({"url": "https://example.com/video.mp4"});
         let (status, body) = send_callback(
             &app,
             json!({
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "completed",
                 "output": output,
                 "output_size_bytes": 12345
@@ -1025,10 +1098,10 @@ mod test_job_callback {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-34: Callback "completed" -> artifact status updated to ready
+    /// GI-34: Callback "completed" -> artifact status updated to ready
     #[tokio::test]
     async fn test_callback_completed_updates_artifact_to_ready() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
@@ -1038,27 +1111,31 @@ mod test_job_callback {
             .await
             .unwrap();
 
-        // Render the artifact (creates a job + pending output artifact)
+        // Render the artifact (creates a generation + pending output artifact)
         let render_req = authed_request(
             Method::POST,
-            &format!("/v1/artifacts/{}/render", artifact_id),
+            "/v1/generations",
             &jwt,
-            None,
+            Some(json!({"artifact_id": artifact_id})),
         );
         let render_resp = app.test_router().oneshot(render_req).await.unwrap();
         assert_eq!(render_resp.status(), StatusCode::CREATED);
         let render_body = parse_body(render_resp).await;
-        let job_id = render_body["job"]["id"].as_str().unwrap();
+        let generation_id = render_body["generation"]["id"].as_str().unwrap();
         let output_artifact_id = render_body["artifact"]["id"].as_str().unwrap();
 
-        // Start the job
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        // Start the generation
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
 
-        // Complete the job
+        // Complete the generation
         let _ = send_callback(
             &app,
             json!({
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "completed",
                 "output": {"url": "https://example.com/rendered.png"}
             }),
@@ -1078,25 +1155,29 @@ mod test_job_callback {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-35: Callback "failed" -> job status=failed, error set
+    /// GI-35: Callback "failed" -> generation status=failed, error set
     #[tokio::test]
     async fn test_callback_failed() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
-        let (_, created) = create_job(&app, &jwt, json!({"prompt": "test"}), None).await;
-        let job_id = created["id"].as_str().unwrap();
+        let (_, created) = create_generation(&app, &jwt, json!({"prompt": "test"}), None).await;
+        let generation_id = created["id"].as_str().unwrap();
 
         // Start
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
 
         // Fail
         let error_payload = json!({"message": "GPU crashed", "code": "OOM"});
         let (status, body) = send_callback(
             &app,
             json!({
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "failed",
                 "error": error_payload,
                 "failure_type": "system"
@@ -1113,10 +1194,10 @@ mod test_job_callback {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-36: Callback "failed" -> artifact status updated to failed
+    /// GI-36: Callback "failed" -> artifact status updated to failed
     #[tokio::test]
     async fn test_callback_failed_updates_artifact_to_failed() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
@@ -1129,24 +1210,28 @@ mod test_job_callback {
         // Render the artifact
         let render_req = authed_request(
             Method::POST,
-            &format!("/v1/artifacts/{}/render", artifact_id),
+            "/v1/generations",
             &jwt,
-            None,
+            Some(json!({"artifact_id": artifact_id})),
         );
         let render_resp = app.test_router().oneshot(render_req).await.unwrap();
         assert_eq!(render_resp.status(), StatusCode::CREATED);
         let render_body = parse_body(render_resp).await;
-        let job_id = render_body["job"]["id"].as_str().unwrap();
+        let generation_id = render_body["generation"]["id"].as_str().unwrap();
         let output_artifact_id = render_body["artifact"]["id"].as_str().unwrap();
 
-        // Start the job
-        let _ = send_callback(&app, json!({"job_id": job_id, "event": "started"})).await;
+        // Start the generation
+        let _ = send_callback(
+            &app,
+            json!({"generation_id": generation_id, "event": "started"}),
+        )
+        .await;
 
-        // Fail the job
+        // Fail the generation
         let _ = send_callback(
             &app,
             json!({
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "failed",
                 "error": {"message": "render error"}
             }),
@@ -1166,15 +1251,15 @@ mod test_job_callback {
         app.cleanup().await.unwrap();
     }
 
-    /// JI-37: Callback for nonexistent job -> 404
+    /// GI-37: Callback for nonexistent generation -> 404
     #[tokio::test]
-    async fn test_callback_nonexistent_job() {
-        let app = JobsTestApp::new().await.unwrap();
+    async fn test_callback_nonexistent_generation() {
+        let app = GenerationsTestApp::new().await.unwrap();
 
         let (status, _) = send_callback(
             &app,
             json!({
-                "job_id": Uuid::new_v4(),
+                "generation_id": Uuid::new_v4(),
                 "event": "started"
             }),
         )
@@ -1187,15 +1272,15 @@ mod test_job_callback {
 }
 
 // ============================================================================
-// Render (JI-38 through JI-40)
+// Render (GI-38 through GI-40)
 // ============================================================================
 mod test_render {
     use super::*;
 
-    /// JI-38: Render character -> 201, response has job (status=queued) + artifact (kind=image, status=pending)
+    /// GI-38: Render character -> 201, response has generation (status=queued) + artifact (kind=image, status=pending)
     #[tokio::test]
     async fn test_render_character() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
@@ -1207,18 +1292,21 @@ mod test_render {
 
         let req = authed_request(
             Method::POST,
-            &format!("/v1/artifacts/{}/render", artifact_id),
+            "/v1/generations",
             &jwt,
-            None,
+            Some(json!({"artifact_id": artifact_id})),
         );
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
 
         let body = parse_body(resp).await;
 
-        // Verify job
-        assert!(body.get("job").is_some(), "Response should have 'job'");
-        assert_eq!(body["job"]["status"], "queued");
+        // Verify generation
+        assert!(
+            body.get("generation").is_some(),
+            "Response should have 'generation'"
+        );
+        assert_eq!(body["generation"]["status"], "queued");
 
         // Verify artifact
         assert!(
@@ -1227,20 +1315,23 @@ mod test_render {
         );
         assert_eq!(body["artifact"]["kind"], "image");
         assert_eq!(body["artifact"]["status"], "pending");
-        assert_eq!(body["artifact"]["source"], "job");
+        assert_eq!(body["artifact"]["source"], "generation");
         assert!(
-            body["artifact"]["source_job_id"].is_string(),
-            "artifact should have source_job_id"
+            body["artifact"]["source_generation_id"].is_string(),
+            "artifact should have source_generation_id"
         );
-        assert_eq!(body["artifact"]["source_job_id"], body["job"]["id"]);
+        assert_eq!(
+            body["artifact"]["source_generation_id"],
+            body["generation"]["id"]
+        );
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-39: Render storyboard -> 201, response has job + artifact (kind=video, status=pending)
+    /// GI-39: Render storyboard -> 201, response has generation + artifact (kind=video, status=pending)
     #[tokio::test]
     async fn test_render_storyboard() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
@@ -1252,30 +1343,30 @@ mod test_render {
 
         let req = authed_request(
             Method::POST,
-            &format!("/v1/artifacts/{}/render", artifact_id),
+            "/v1/generations",
             &jwt,
-            None,
+            Some(json!({"artifact_id": artifact_id})),
         );
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
 
         let body = parse_body(resp).await;
 
-        // Verify job
-        assert_eq!(body["job"]["status"], "queued");
+        // Verify generation
+        assert_eq!(body["generation"]["status"], "queued");
 
         // Verify artifact
         assert_eq!(body["artifact"]["kind"], "video");
         assert_eq!(body["artifact"]["status"], "pending");
-        assert_eq!(body["artifact"]["source"], "job");
+        assert_eq!(body["artifact"]["source"], "generation");
 
         app.cleanup().await.unwrap();
     }
 
-    /// JI-40: Render image artifact -> 400 (not renderable)
+    /// GI-40: Render image artifact -> 400 (not renderable)
     #[tokio::test]
     async fn test_render_image_not_renderable() {
-        let app = JobsTestApp::new().await.unwrap();
+        let app = GenerationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
 
@@ -1287,9 +1378,9 @@ mod test_render {
 
         let req = authed_request(
             Method::POST,
-            &format!("/v1/artifacts/{}/render", artifact_id),
+            "/v1/generations",
             &jwt,
-            None,
+            Some(json!({"artifact_id": artifact_id})),
         );
         let resp = app.test_router().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);

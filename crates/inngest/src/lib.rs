@@ -170,16 +170,16 @@ mod tests {
     #[test]
     fn test_event_serialization_all_fields() {
         let event = InngestEvent {
-            name: "app/job.created".to_string(),
-            data: serde_json::json!({"job_id": "123"}),
+            name: "framecast/generation.queued".to_string(),
+            data: serde_json::json!({"generation_id": "123"}),
             user: Some(serde_json::json!({"user_id": "u456"})),
             id: Some("evt-789".to_string()),
             ts: Some(1700000000),
         };
 
         let json = serde_json::to_value(&event).unwrap();
-        assert_eq!(json["name"], "app/job.created");
-        assert_eq!(json["data"]["job_id"], "123");
+        assert_eq!(json["name"], "framecast/generation.queued");
+        assert_eq!(json["data"]["generation_id"], "123");
         assert_eq!(json["user"]["user_id"], "u456");
         assert_eq!(json["id"], "evt-789");
         assert_eq!(json["ts"], 1700000000);
@@ -189,8 +189,8 @@ mod tests {
     #[test]
     fn test_event_serialization_optional_fields_omitted() {
         let event = InngestEvent {
-            name: "app/job.created".to_string(),
-            data: serde_json::json!({"job_id": "123"}),
+            name: "framecast/generation.queued".to_string(),
+            data: serde_json::json!({"generation_id": "123"}),
             user: None,
             id: None,
             ts: None,

@@ -6,8 +6,8 @@
 s3://framecast-outputs/
   ├── user/
   │   └── {user_id}/
-  │       ├── jobs/
-  │       │   └── {job_id}/
+  │       ├── generations/
+  │       │   └── {generation_id}/
   │       │       ├── final.mp4
   │       │       ├── scene_{scene_id}.mp4
   │       │       └── thumbnail.jpg
@@ -17,10 +17,10 @@ s3://framecast-outputs/
   └── team/
       └── {team_id}/
           ├── {user_id}/                    # framecast:{team_id}:{user_id}
-          │   ├── jobs/{job_id}/
+          │   ├── generations/{generation_id}/
           │   └── assets/{asset_id}/
           └── shared/                        # framecast:team:{team_id}
-              ├── jobs/{job_id}/
+              ├── generations/{generation_id}/
               └── assets/{asset_id}/
 
 s3://framecast-system/
@@ -40,9 +40,9 @@ s3://framecast-system/
 
 | Owner | Retention |
 |-------|-----------|
-| `framecast:user:*` | Until job deleted or user deleted |
-| `framecast:{team}:{user}` | Until job deleted or team deleted |
-| `framecast:team:*` | Until job deleted or team deleted |
+| `framecast:user:*` | Until generation deleted or user deleted |
+| `framecast:{team}:{user}` | Until generation deleted or team deleted |
+| `framecast:team:*` | Until generation deleted or team deleted |
 
 No time-based expiry. Storage limits enforce cleanup pressure.
 
@@ -50,7 +50,7 @@ No time-based expiry. Storage limits enforce cleanup pressure.
 
 | Resource | Expiry |
 |----------|--------|
-| Job output (video) | 1 hour |
+| Generation output (video) | 1 hour |
 | Asset files (images) | 1 hour |
 | Upload URLs | 15 minutes |
 | System asset preview | 24 hours |
@@ -64,27 +64,28 @@ No time-based expiry. Storage limits enforce cleanup pressure.
 
 ## 12.6 Credit Source Rules
 
-Credits are debited and refunded based on the job's `owner` URN:
+Credits are debited and refunded based on the generation's `owner` URN:
 
 | Owner URN Pattern | Credit Source | Description |
 |-------------------|---------------|-------------|
-| `framecast:user:{user_id}` | `User.credits` | Personal jobs (Starter or Creator) |
-| `framecast:team:{team_id}` | `Team.credits` | Team-shared jobs |
-| `framecast:{team_id}:{user_id}` | `Team.credits` | Team-private jobs (team pays) |
+| `framecast:user:{user_id}` | `User.credits` | Personal generations (Starter or Creator) |
+| `framecast:team:{team_id}` | `Team.credits` | Team-shared generations |
+| `framecast:{team_id}:{user_id}` | `Team.credits` | Team-private generations (team pays) |
 
 ### Rules
 
-1. **Debit on job creation**: Credits are reserved from the source identified by `owner` URN
+1. **Debit on generation creation**: Credits are reserved from the source identified by `owner` URN
 2. **Refund on failure/cancel**: Credits are returned to the same source
-3. **Creator personal jobs**: When a Creator uses `framecast:user:X`,
+3. **Creator personal generations**: When a Creator uses `framecast:user:X`,
    their personal `User.credits` are used (not any team's credits)
-4. **Membership URN jobs**: The team pays for member's work; useful for tracking individual output while billing the team
-5. **Insufficient credits**: Job creation fails with `INSUFFICIENT_CREDITS` error
+4. **Membership URN generations**: The team pays for member's work;
+   useful for tracking individual output while billing the team
+5. **Insufficient credits**: Generation creation fails with `INSUFFICIENT_CREDITS` error
 
 ### Validation
 
 ```
-ON job.create:
+ON generation.create:
   IF owner = 'framecast:user:{user_id}' THEN
     source = User WHERE id = user_id
   ELSE IF owner = 'framecast:team:{team_id}' THEN
@@ -103,7 +104,7 @@ ON job.create:
 ### Overview
 
 Framecast uses a Runway-style refund policy: automatic refunds for system errors,
-partial charges for cancellations, and no refunds for completed jobs.
+partial charges for cancellations, and no refunds for completed generations.
 
 ### Refund Rules by Failure Type
 
@@ -126,48 +127,48 @@ partial charges for cancellations, and no refunds for completed jobs.
 
 **Timeout (failure_type = 'timeout'):**
 
-- Job exceeded maximum processing time
+- Generation exceeded maximum processing time
 - Usually indicates system issue (not user's spec)
 - Full refund: 100% of credits_charged returned
-- Max processing time: 30 minutes per job (configurable)
+- Max processing time: 30 minutes per generation (configurable)
 
 **Validation Errors (failure_type = 'validation'):**
 
 - Spec issues detected during generation (not caught in pre-validation)
-- Examples: Asset became unavailable, reference integrity broken mid-job
+- Examples: Asset became unavailable, reference integrity broken mid-generation
 - Partial refund based on progress
 - Formula: refund = charged × (1 - progress%)
-- Example: Job failed at 40% → 60% refund
+- Example: Generation failed at 40% → 60% refund
 
 **User Cancellation (failure_type = 'canceled'):**
 
-- User explicitly canceled the job
+- User explicitly canceled the generation
 - Partial refund based on progress, minus 10% cancellation fee
 - Formula: refund = charged × (1 - progress%) × 0.9
 - Example: Canceled at 30% → 63% refund (70% × 0.9)
 - Minimum charge: 10% of estimated (cancellation fee)
 
-**Completed Jobs:**
+**Completed Generations:**
 
-- No refunds for completed jobs regardless of output quality
+- No refunds for completed generations regardless of output quality
 - User received the generated video
 - Quality disputes handled via support (manual review)
 
 ### Refund Processing
 
-1. When job transitions to terminal state (failed, canceled):
+1. When generation transitions to terminal state (failed, canceled):
    - failure_type is set based on cause
    - credits_refunded is calculated per rules above
    - Owner's credit balance is incremented by credits_refunded
 
-2. Credit balance update is atomic with job state transition
+2. Credit balance update is atomic with generation state transition
 
 3. Refund is recorded in Usage entity for billing reconciliation
 
 ### Implementation Notes
 
 ```
-ON job.status → {failed, canceled}:
+ON generation.status → {failed, canceled}:
 
   IF failure_type IN ('system', 'timeout') THEN
     credits_refunded = credits_charged
@@ -189,17 +190,17 @@ ON job.status → {failed, canceled}:
 
   -- Record in usage
   UPDATE Usage SET credits_refunded = credits_refunded + :credits_refunded
-    WHERE owner = job.owner AND period = current_period()
+    WHERE owner = generation.owner AND period = current_period()
 ```
 
 ### Webhook Payload Update
 
-The `job.failed` and `job.canceled` webhook events include refund information:
+The `generation.failed` and `generation.canceled` webhook events include refund information:
 
 ```json
 {
-  "event": "job.failed",
-  "job": {
+  "event": "generation.failed",
+  "generation": {
     "id": "uuid",
     "status": "failed",
     "failure_type": "system",

@@ -470,7 +470,8 @@ mod test_whoami {
             .header("authorization", format!("Bearer {}", creator.jwt_token))
             .header("content-type", "application/json")
             .body(Body::from(
-                json!({"name": "Whoami Test Key", "scopes": ["generate", "jobs:read"]}).to_string(),
+                json!({"name": "Whoami Test Key", "scopes": ["generate", "generations:read"]})
+                    .to_string(),
             ))
             .unwrap();
 
@@ -511,7 +512,7 @@ mod test_whoami {
             .starts_with("sk_live_"));
         let scopes = api_key_info["scopes"].as_array().unwrap();
         assert!(scopes.contains(&json!("generate")));
-        assert!(scopes.contains(&json!("jobs:read")));
+        assert!(scopes.contains(&json!("generations:read")));
         assert!(api_key_info["owner"].as_str().unwrap().contains("user:"));
 
         app.cleanup().await.unwrap();

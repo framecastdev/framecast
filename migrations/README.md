@@ -9,8 +9,8 @@ All migrations are **reversible** (`.up.sql` / `.down.sql` pairs).
 
 | Migration | Description |
 |-----------|-------------|
-| `20240130000001_schema` | Initial schema: users, teams, memberships, invitations, api_keys, projects, jobs, job_events, asset_files, webhooks, webhook_deliveries, usage, system_assets |
-| `20240130000002_functions` | Job event sequencing, concurrency limits, status transitions, project automation, retention, URN validation |
+| `20240130000001_schema` | Initial schema: users, teams, memberships, invitations, api_keys, projects, generations, generation_events, asset_files, webhooks, webhook_deliveries, usage, system_assets |
+| `20240130000002_functions` | Generation event sequencing, concurrency limits, status transitions, project automation, retention, URN validation |
 | `20240130000003_fix_urn_validation` | Fix URN regex to accept hyphens in UUID components |
 | `20250208000001_conversations_artifacts` | Add conversations, messages, artifacts, message_artifacts tables |
 | `20250209000001_add_character_artifact_kind` | Add `character` to `artifact_kind` enum |
@@ -44,8 +44,8 @@ just migrate-rollback
 - **invitations** - Pending team invitations
 - **api_keys** - API authentication keys with URN-based ownership
 - **projects** - Storyboard projects (team-owned)
-- **jobs** - Video generation jobs (ephemeral or project-based)
-- **job_events** - Job progress events for SSE streaming
+- **generations** - AI content generations (ephemeral or project-based)
+- **generation_events** - Generation progress events for SSE streaming
 - **asset_files** - User-uploaded reference files
 - **webhooks** - HTTP callback registrations
 - **webhook_deliveries** - Webhook delivery attempt records
@@ -59,6 +59,6 @@ just migrate-rollback
 
 - **URN-based ownership** - Resources owned by users or teams via URN patterns
 - **Role-based access control** - owner/admin/member/viewer roles with permissions
-- **Job concurrency limits** - Enforced at database level (CARD-5, CARD-6, INV-J12)
-- **Event sequencing** - Monotonic sequence numbers for job events (SSE support)
+- **Generation concurrency limits** - Enforced at database level (CARD-5, CARD-6, INV-G12)
+- **Event sequencing** - Monotonic sequence numbers for generation events (SSE support)
 - **Constraint enforcement** - Business rules enforced via triggers and check constraints

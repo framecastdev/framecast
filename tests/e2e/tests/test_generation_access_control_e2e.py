@@ -1,10 +1,10 @@
-"""Job Access Control E2E Tests.
+"""Generation Access Control E2E Tests.
 
-Tests permissions and RBAC for jobs (20 stories):
-  - Owner-only access (JA-01 through JA-05)
-  - Cross-user isolation (JA-06 through JA-10)
-  - Team-scoped jobs (JA-11 through JA-15)
-  - Auth method variations (JA-16 through JA-20)
+Tests permissions and RBAC for generations (20 stories):
+  - Owner-only access (GA-01 through GA-05)
+  - Cross-user isolation (GA-06 through GA-10)
+  - Team-scoped generations (GA-11 through GA-15)
+  - Auth method variations (GA-16 through GA-20)
 """
 
 import sys
@@ -18,14 +18,14 @@ import pytest  # noqa: E402
 from conftest import (  # noqa: E402
     SeededUsers,
     TestDataFactory,
-    complete_job,
-    create_ephemeral_job,
+    complete_generation,
+    create_ephemeral_generation,
 )
 
 
-@pytest.mark.job_access
-class TestJobAccessControlE2E:
-    """Job access control end-to-end tests."""
+@pytest.mark.generation_access
+class TestGenerationAccessControlE2E:
+    """Generation access control end-to-end tests."""
 
     async def _create_api_key(
         self,
@@ -47,179 +47,179 @@ class TestJobAccessControlE2E:
         return data["api_key"]["id"], data["raw_key"]
 
     # -------------------------------------------------------------------
-    # Owner-Only Access (JA-01 through JA-05)
+    # Owner-Only Access (GA-01 through GA-05)
     # -------------------------------------------------------------------
 
-    async def test_ja01_owner_can_get_own_job(
+    async def test_ga01_owner_can_get_own_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-01: Owner can GET their own job."""
+        """GA-01: Owner can GET their own generation."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
         resp = await http_client.get(
-            f"/v1/jobs/{job['id']}", headers=owner.auth_headers()
+            f"/v1/generations/{gen['id']}", headers=owner.auth_headers()
         )
         assert resp.status_code == 200
-        assert resp.json()["id"] == job["id"]
+        assert resp.json()["id"] == gen["id"]
 
-    async def test_ja02_owner_can_cancel_own_job(
+    async def test_ga02_owner_can_cancel_own_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-02: Owner can cancel their own job."""
+        """GA-02: Owner can cancel their own generation."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
         resp = await http_client.post(
-            f"/v1/jobs/{job['id']}/cancel", headers=owner.auth_headers()
+            f"/v1/generations/{gen['id']}/cancel", headers=owner.auth_headers()
         )
         assert resp.status_code == 200
 
-    async def test_ja03_owner_can_delete_own_completed_job(
+    async def test_ga03_owner_can_delete_own_completed_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-03: Owner can delete their own completed job."""
+        """GA-03: Owner can delete their own completed generation."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        await complete_job(http_client, job["id"])
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        await complete_generation(http_client, gen["id"])
 
         resp = await http_client.delete(
-            f"/v1/jobs/{job['id']}", headers=owner.auth_headers()
+            f"/v1/generations/{gen['id']}", headers=owner.auth_headers()
         )
         assert resp.status_code == 204
 
-    async def test_ja04_owner_can_clone_own_completed_job(
+    async def test_ga04_owner_can_clone_own_completed_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-04: Owner can clone their own completed job."""
+        """GA-04: Owner can clone their own completed generation."""
         owner = seed_users.owner
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        await complete_job(http_client, job["id"])
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        await complete_generation(http_client, gen["id"])
 
         resp = await http_client.post(
-            f"/v1/jobs/{job['id']}/clone", headers=owner.auth_headers()
+            f"/v1/generations/{gen['id']}/clone", headers=owner.auth_headers()
         )
         assert resp.status_code == 201
 
-    async def test_ja05_owner_can_list_own_jobs(
+    async def test_ga05_owner_can_list_own_generations(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-05: Owner can list their own jobs."""
+        """GA-05: Owner can list their own generations."""
         owner = seed_users.owner
 
-        await create_ephemeral_job(http_client, owner.auth_headers())
+        await create_ephemeral_generation(http_client, owner.auth_headers())
 
-        resp = await http_client.get("/v1/jobs", headers=owner.auth_headers())
+        resp = await http_client.get("/v1/generations", headers=owner.auth_headers())
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
 
     # -------------------------------------------------------------------
-    # Cross-User Isolation (JA-06 through JA-10)
+    # Cross-User Isolation (GA-06 through GA-10)
     # -------------------------------------------------------------------
 
-    async def test_ja06_other_user_cannot_get_job(
+    async def test_ga06_other_user_cannot_get_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-06: Another user cannot GET someone else's job."""
+        """GA-06: Another user cannot GET someone else's generation."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
         resp = await http_client.get(
-            f"/v1/jobs/{job['id']}", headers=invitee.auth_headers()
+            f"/v1/generations/{gen['id']}", headers=invitee.auth_headers()
         )
         assert resp.status_code in [403, 404]
 
-    async def test_ja07_other_user_cannot_cancel_job(
+    async def test_ga07_other_user_cannot_cancel_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-07: Another user cannot cancel someone else's job."""
+        """GA-07: Another user cannot cancel someone else's generation."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
         resp = await http_client.post(
-            f"/v1/jobs/{job['id']}/cancel", headers=invitee.auth_headers()
+            f"/v1/generations/{gen['id']}/cancel", headers=invitee.auth_headers()
         )
         assert resp.status_code in [403, 404]
 
-    async def test_ja08_other_user_cannot_delete_job(
+    async def test_ga08_other_user_cannot_delete_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-08: Another user cannot delete someone else's job."""
+        """GA-08: Another user cannot delete someone else's generation."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        await complete_job(http_client, job["id"])
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        await complete_generation(http_client, gen["id"])
 
         resp = await http_client.delete(
-            f"/v1/jobs/{job['id']}", headers=invitee.auth_headers()
+            f"/v1/generations/{gen['id']}", headers=invitee.auth_headers()
         )
         assert resp.status_code in [403, 404]
 
-    async def test_ja09_other_user_jobs_not_in_list(
+    async def test_ga09_other_user_generations_not_in_list(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-09: Another user's jobs don't appear in your list."""
+        """GA-09: Another user's generations don't appear in your list."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
 
-        resp = await http_client.get("/v1/jobs", headers=invitee.auth_headers())
+        resp = await http_client.get("/v1/generations", headers=invitee.auth_headers())
         assert resp.status_code == 200
-        job_ids = {j["id"] for j in resp.json()}
-        assert job["id"] not in job_ids
+        generation_ids = {g["id"] for g in resp.json()}
+        assert gen["id"] not in generation_ids
 
-    async def test_ja10_other_user_cannot_clone_job(
+    async def test_ga10_other_user_cannot_clone_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-10: Another user cannot clone someone else's job."""
+        """GA-10: Another user cannot clone someone else's generation."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
-        job = await create_ephemeral_job(http_client, owner.auth_headers())
-        await complete_job(http_client, job["id"])
+        gen = await create_ephemeral_generation(http_client, owner.auth_headers())
+        await complete_generation(http_client, gen["id"])
 
         resp = await http_client.post(
-            f"/v1/jobs/{job['id']}/clone", headers=invitee.auth_headers()
+            f"/v1/generations/{gen['id']}/clone", headers=invitee.auth_headers()
         )
         assert resp.status_code in [403, 404]
 
     # -------------------------------------------------------------------
-    # Team-Scoped Jobs (JA-11 through JA-15)
+    # Team-Scoped Generations (GA-11 through GA-15)
     # -------------------------------------------------------------------
 
-    async def test_ja11_team_member_can_see_team_jobs(
+    async def test_ga11_team_member_can_see_team_generations(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """JA-11: Team member can see team-scoped jobs."""
+        """GA-11: Team member can see team-scoped generations."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
@@ -247,24 +247,24 @@ class TestJobAccessControlE2E:
         )
         assert resp.status_code == 200
 
-        # Owner creates team-scoped job
-        job = await create_ephemeral_job(
+        # Owner creates team-scoped generation
+        gen = await create_ephemeral_generation(
             http_client, owner.auth_headers(), owner=team_urn
         )
 
-        # Invitee (now member) can see team jobs
-        resp = await http_client.get("/v1/jobs", headers=invitee.auth_headers())
+        # Invitee (now member) can see team generations
+        resp = await http_client.get("/v1/generations", headers=invitee.auth_headers())
         assert resp.status_code == 200
-        job_ids = {j["id"] for j in resp.json()}
-        assert job["id"] in job_ids
+        generation_ids = {g["id"] for g in resp.json()}
+        assert gen["id"] in generation_ids
 
-    async def test_ja12_team_member_can_get_team_job(
+    async def test_ga12_team_member_can_get_team_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """JA-12: Team member can GET a specific team-scoped job."""
+        """GA-12: Team member can GET a specific team-scoped generation."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
@@ -290,23 +290,23 @@ class TestJobAccessControlE2E:
         )
         assert resp.status_code == 200
 
-        job = await create_ephemeral_job(
+        gen = await create_ephemeral_generation(
             http_client, owner.auth_headers(), owner=team_urn
         )
 
         resp = await http_client.get(
-            f"/v1/jobs/{job['id']}", headers=invitee.auth_headers()
+            f"/v1/generations/{gen['id']}", headers=invitee.auth_headers()
         )
         assert resp.status_code == 200
-        assert resp.json()["id"] == job["id"]
+        assert resp.json()["id"] == gen["id"]
 
-    async def test_ja13_non_member_cannot_see_team_jobs(
+    async def test_ga13_non_member_cannot_see_team_generations(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """JA-13: Non-member cannot see team-scoped jobs."""
+        """GA-13: Non-member cannot see team-scoped generations."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
@@ -320,22 +320,22 @@ class TestJobAccessControlE2E:
         team_id = resp.json()["id"]
         team_urn = f"framecast:team:{team_id}"
 
-        job = await create_ephemeral_job(
+        gen = await create_ephemeral_generation(
             http_client, owner.auth_headers(), owner=team_urn
         )
 
-        resp = await http_client.get("/v1/jobs", headers=invitee.auth_headers())
+        resp = await http_client.get("/v1/generations", headers=invitee.auth_headers())
         assert resp.status_code == 200
-        job_ids = {j["id"] for j in resp.json()}
-        assert job["id"] not in job_ids
+        generation_ids = {g["id"] for g in resp.json()}
+        assert gen["id"] not in generation_ids
 
-    async def test_ja14_non_member_cannot_get_team_job(
+    async def test_ga14_non_member_cannot_get_team_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """JA-14: Non-member cannot GET a team-scoped job directly."""
+        """GA-14: Non-member cannot GET a team-scoped generation directly."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
@@ -348,22 +348,22 @@ class TestJobAccessControlE2E:
         team_id = resp.json()["id"]
         team_urn = f"framecast:team:{team_id}"
 
-        job = await create_ephemeral_job(
+        gen = await create_ephemeral_generation(
             http_client, owner.auth_headers(), owner=team_urn
         )
 
         resp = await http_client.get(
-            f"/v1/jobs/{job['id']}", headers=invitee.auth_headers()
+            f"/v1/generations/{gen['id']}", headers=invitee.auth_headers()
         )
         assert resp.status_code in [403, 404]
 
-    async def test_ja15_starter_cannot_create_team_scoped_job(
+    async def test_ga15_starter_cannot_create_team_scoped_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
         test_data_factory: TestDataFactory,
     ):
-        """JA-15: Starter user cannot create a job with team URN owner."""
+        """GA-15: Starter user cannot create a generation with team URN owner."""
         owner = seed_users.owner
         invitee = seed_users.invitee
 
@@ -377,76 +377,76 @@ class TestJobAccessControlE2E:
         team_id = resp.json()["id"]
         team_urn = f"framecast:team:{team_id}"
 
-        # Starter tries to create job with team owner
+        # Starter tries to create generation with team owner
         resp = await http_client.post(
-            "/v1/generate",
+            "/v1/generations",
             json={"spec": {"prompt": "test"}, "owner": team_urn},
             headers=invitee.auth_headers(),
         )
         assert resp.status_code in [400, 403]
 
     # -------------------------------------------------------------------
-    # Auth Method Variations (JA-16 through JA-20)
+    # Auth Method Variations (GA-16 through GA-20)
     # -------------------------------------------------------------------
 
-    async def test_ja16_no_auth_create_job_returns_401(
+    async def test_ga16_no_auth_create_generation_returns_401(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-16: POST /v1/generate without auth -> 401."""
+        """GA-16: POST /v1/generations without auth -> 401."""
         resp = await http_client.post(
-            "/v1/generate",
+            "/v1/generations",
             json={"spec": {"prompt": "test"}},
         )
         assert resp.status_code == 401
 
-    async def test_ja17_no_auth_list_jobs_returns_401(
+    async def test_ga17_no_auth_list_generations_returns_401(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-17: GET /v1/jobs without auth -> 401."""
-        resp = await http_client.get("/v1/jobs")
+        """GA-17: GET /v1/generations without auth -> 401."""
+        resp = await http_client.get("/v1/generations")
         assert resp.status_code == 401
 
-    async def test_ja18_no_auth_cancel_job_returns_401(
+    async def test_ga18_no_auth_cancel_generation_returns_401(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-18: POST /v1/jobs/:id/cancel without auth -> 401."""
+        """GA-18: POST /v1/generations/:id/cancel without auth -> 401."""
         fake_id = str(uuid.uuid4())
-        resp = await http_client.post(f"/v1/jobs/{fake_id}/cancel")
+        resp = await http_client.post(f"/v1/generations/{fake_id}/cancel")
         assert resp.status_code == 401
 
-    async def test_ja19_api_key_can_create_job(
+    async def test_ga19_api_key_can_create_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-19: API key can create ephemeral job."""
+        """GA-19: API key can create ephemeral generation."""
         owner = seed_users.owner
 
         _, raw_key = await self._create_api_key(http_client, owner.auth_headers())
         api_headers = {"Authorization": f"Bearer {raw_key}"}
 
-        job = await create_ephemeral_job(http_client, api_headers)
-        assert job["status"] == "queued"
+        gen = await create_ephemeral_generation(http_client, api_headers)
+        assert gen["status"] == "queued"
 
-    async def test_ja20_revoked_api_key_cannot_access_jobs(
+    async def test_ga20_revoked_api_key_cannot_access_generations(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """JA-20: Revoked API key cannot access jobs."""
+        """GA-20: Revoked API key cannot access generations."""
         owner = seed_users.owner
 
         key_id, raw_key = await self._create_api_key(http_client, owner.auth_headers())
         api_headers = {"Authorization": f"Bearer {raw_key}"}
 
         # Verify key works
-        resp = await http_client.get("/v1/jobs", headers=api_headers)
+        resp = await http_client.get("/v1/generations", headers=api_headers)
         assert resp.status_code == 200
 
         # Revoke key
@@ -456,5 +456,5 @@ class TestJobAccessControlE2E:
         assert resp.status_code == 204
 
         # Key no longer works
-        resp = await http_client.get("/v1/jobs", headers=api_headers)
+        resp = await http_client.get("/v1/generations", headers=api_headers)
         assert resp.status_code == 401

@@ -90,12 +90,12 @@ Operation: delete_user(user_id: UUID) → void
   Post: User deleted (cascades to Membership, ApiKey)
         ∧ Supabase Auth account deleted
         ∧ Teams where user was sole member are deleted (cascade)
-        ∧ Jobs and assets owned by user URN preserved (orphaned)
+        ∧ Generations and assets owned by user URN preserved (orphaned)
 
   Notes:
     - Cannot delete if user is sole owner of any team with other members (INV-T2)
     - Must transfer ownership or remove other members first
-    - Ephemeral jobs/assets under personal URN become inaccessible
+    - Ephemeral generations/assets under personal URN become inaccessible
 ```
 
 ---
@@ -181,15 +181,15 @@ Operation: delete_team(team_id: UUID, user_id: UUID) → void
         ∧ ∃ m ∈ Membership : m.team_id = team_id ∧ m.user_id = user_id
             ∧ m.role = 'owner'
         ∧ |{m ∈ Membership : m.team_id = team_id}| = 1
-        ∧ ∄ j ∈ Job : j.owner STARTS WITH 'framecast:team:' || team_id
-            ∧ j.status ∈ {'queued', 'processing'}
+        ∧ ∄ g ∈ Generation : g.owner STARTS WITH 'framecast:team:' || team_id
+            ∧ g.status ∈ {'queued', 'processing'}
   Post: Team deleted (cascades to Membership, Project, Webhook, Invitation)
         ∧ Associated S3 storage scheduled for cleanup
 
   Notes:
     - Owner-only operation
     - Team must have no other members (sole member check)
-    - No active jobs can exist for the team
+    - No active generations can exist for the team
     - Cascades to all team-owned resources
 ```
 
@@ -383,19 +383,19 @@ Operation: decline_invitation(invitation_id: UUID, user_id: UUID) → void
 
 ---
 
-## 8.5 Job Operations
+## 8.5 Generation Operations
 
 ```
-Operation: list_jobs(user_id: UUID, filters: JobFilters?) → Page<Job>
+Operation: list_generations(user_id: UUID, filters: GenerationFilters?) → Page<Generation>
   Pre:  ∃ u ∈ User : u.id = user_id
-  Post: Returns jobs accessible to user:
+  Post: Returns generations accessible to user:
           IF u.tier = 'starter' THEN
             WHERE owner = 'framecast:user:' || user_id
           ELSE
             WHERE owner ∈ user_accessible_urns(user_id)
         Ordered by created_at DESC
 
-  JobFilters:
+  GenerationFilters:
     status?: {queued | processing | completed | failed | canceled}
     owner?: URN
     project_id?: UUID
@@ -405,31 +405,31 @@ Operation: list_jobs(user_id: UUID, filters: JobFilters?) → Page<Job>
     cursor?: String
 
   Notes:
-    - Starters see only personal jobs
-    - Creators see jobs for all accessible URNs (personal + team + membership)
+    - Starters see only personal generations
+    - Creators see generations for all accessible URNs (personal + team + membership)
     - Cursor-based pagination
 
-Operation: get_job(job_id: UUID, user_id: UUID) → Job
-  Pre:  ∃ j ∈ Job : j.id = job_id
-        ∧ user_can_access_owner(user_id, j.owner)
-  Post: Returns job with all fields
+Operation: get_generation(generation_id: UUID, user_id: UUID) → Generation
+  Pre:  ∃ g ∈ Generation : g.id = generation_id
+        ∧ user_can_access_owner(user_id, g.owner)
+  Post: Returns generation with all fields
         ∧ Output URLs are presigned (1 hour expiry) if status = 'completed'
 
   Notes:
     - Access determined by owner URN
-    - Starters can only access own jobs (owner = framecast:user:{user_id})
-    - Creators can access team/membership URN jobs where they have membership
+    - Starters can only access own generations (owner = framecast:user:{user_id})
+    - Creators can access team/membership URN generations where they have membership
 
-Operation: create_ephemeral_job(user_id: UUID, params: EphemeralJobParams) → Job
+Operation: create_ephemeral_generation(user_id: UUID, params: EphemeralGenerationParams) → Generation
   Pre:  ∃ u ∈ User : u.id = user_id
         ∧ validate_spec(params.spec, user_id).valid = true
         ∧ (params.owner IS NULL ∨ user_can_use_owner_urn(user_id, params.owner))
         ∧ credit_source(params.owner ?? 'framecast:user:' || user_id).credits ≥ estimated_credits(params.spec)
-        ∧ concurrent_job_count(params.owner ?? 'framecast:user:' || user_id) < concurrent_limit(u)
-        ∧ (params.idempotency_key IS NULL ∨ ∄ j ∈ Job :
-            j.triggered_by = user_id ∧ j.idempotency_key = params.idempotency_key)
+        ∧ concurrent_generation_count(params.owner ?? 'framecast:user:' || user_id) < concurrent_limit(u)
+        ∧ (params.idempotency_key IS NULL ∨ ∄ g ∈ Generation :
+            g.triggered_by = user_id ∧ g.idempotency_key = params.idempotency_key)
   Post: BEGIN TRANSACTION
-          Job created with:
+          Generation created with:
             id = uuid()
             owner = params.owner ?? 'framecast:user:' || user_id
             triggered_by = user_id
@@ -439,12 +439,12 @@ Operation: create_ephemeral_job(user_id: UUID, params: EphemeralJobParams) → J
             options = params.options ?? {}
             credits_charged = estimated_credits(params.spec)
             idempotency_key = params.idempotency_key
-          ∧ Credits debited from credit_source(job.owner)
-          ∧ JobEvent created (type = 'queued')
-          ∧ Job enqueued to Inngest for processing
+          ∧ Credits debited from credit_source(generation.owner)
+          ∧ GenerationEvent created (type = 'queued')
+          ∧ Generation enqueued to Inngest for processing
         COMMIT
 
-  EphemeralJobParams:
+  EphemeralGenerationParams:
     spec: JSONB! (valid spec)
     owner?: URN
     options?: JSONB
@@ -452,22 +452,22 @@ Operation: create_ephemeral_job(user_id: UUID, params: EphemeralJobParams) → J
 
   Notes:
     - Available to both Starter and Creator tiers
-    - Starter: max 1 concurrent job (CARD-6), owner must be personal URN
-    - Creator: max 5 concurrent jobs per team (CARD-5)
+    - Starter: max 1 concurrent generation (CARD-6), owner must be personal URN
+    - Creator: max 5 concurrent generations per team (CARD-5)
     - Credits reserved upfront, refunded on failure per refund policy (§12.7)
     - Idempotency key prevents duplicate submissions
 
-Operation: create_project_job(project_id: UUID, user_id: UUID, params: ProjectJobParams?) → Job
+Operation: create_project_generation(project_id: UUID, user_id: UUID, params: ProjectGenerationParams?) → Generation
   Pre:  ∃ p ∈ Project : p.id = project_id ∧ p.status ∈ {draft, completed}
         ∧ p.spec IS NOT NULL
         ∧ ∃ m ∈ Membership : m.team_id = p.team_id ∧ m.user_id = user_id
             ∧ m.role ∈ {owner, admin, member}
         ∧ validate_spec(p.spec, user_id).valid = true
-        ∧ ∄ j ∈ Job : j.project_id = project_id ∧ j.status ∈ {'queued', 'processing'}
+        ∧ ∄ g ∈ Generation : g.project_id = project_id ∧ g.status ∈ {'queued', 'processing'}
         ∧ credit_source('framecast:team:' || p.team_id).credits ≥ estimated_credits(p.spec)
-        ∧ concurrent_job_count('framecast:team:' || p.team_id) < 5
+        ∧ concurrent_generation_count('framecast:team:' || p.team_id) < 5
   Post: BEGIN TRANSACTION
-          Job created with:
+          Generation created with:
             id = uuid()
             owner = 'framecast:team:' || p.team_id
             triggered_by = user_id
@@ -478,107 +478,107 @@ Operation: create_project_job(project_id: UUID, user_id: UUID, params: ProjectJo
             credits_charged = estimated_credits(p.spec)
           ∧ p.status = 'rendering'
           ∧ Credits debited from Team.credits
-          ∧ JobEvent created (type = 'queued')
-          ∧ Job enqueued to Inngest for processing
+          ∧ GenerationEvent created (type = 'queued')
+          ∧ Generation enqueued to Inngest for processing
         COMMIT
 
-  ProjectJobParams:
+  ProjectGenerationParams:
     options?: JSONB
 
   Notes:
     - Creator-only (requires team membership)
     - Owner, admin, or member role required (viewer cannot trigger)
-    - Enforces INV-J12 (max 1 active job per project)
-    - Enforces CARD-5 (max 5 concurrent jobs per team)
+    - Enforces INV-J12 (max 1 active generation per project)
+    - Enforces CARD-5 (max 5 concurrent generations per team)
     - Project status transitions to 'rendering' atomically
-    - Project spec is snapshot into job (immutable copy)
+    - Project spec is snapshot into generation (immutable copy)
 
-Operation: get_job_events(job_id: UUID, user_id: UUID, last_event_id?: String) → SSE<JobEvent>
-  Pre:  ∃ j ∈ Job : j.id = job_id
-        ∧ user_can_access_owner(user_id, j.owner)
-  Post: Returns Server-Sent Events stream of job events
+Operation: get_generation_events(generation_id: UUID, user_id: UUID, last_event_id?: String) → SSE<GenerationEvent>
+  Pre:  ∃ g ∈ Generation : g.id = generation_id
+        ∧ user_can_access_owner(user_id, g.owner)
+  Post: Returns Server-Sent Events stream of generation events
         IF last_event_id IS NOT NULL THEN
-          Parse job_id and sequence from last_event_id
-          Replay events WHERE job_id = j.id AND sequence > parsed_sequence
+          Parse generation_id and sequence from last_event_id
+          Replay events WHERE generation_id = g.id AND sequence > parsed_sequence
           IF parsed_sequence not found (expired) THEN return HTTP 410 Gone
         ELSE
           Stream all events from current position
 
   SSE Event Format:
-    id: {job_id}:{sequence}
+    id: {generation_id}:{sequence}
     event: {event_type}
     data: {payload as JSON}
 
   Notes:
     - Supports reconnection via Last-Event-ID header
     - Events retained for 7 days (see §4.8 Retention)
-    - Stream closes when job reaches terminal state
+    - Stream closes when generation reaches terminal state
     - Access determined by owner URN
 
-Operation: cancel_job(job_id: UUID, user_id: UUID) → Job
-  Pre:  ∃ j ∈ Job : j.id = job_id ∧ j.status ∈ {'queued', 'processing'}
-        ∧ (j.triggered_by = user_id
-           ∨ (∃ m ∈ Membership : m.team_id = extract_team_from_urn(j.owner)
+Operation: cancel_generation(generation_id: UUID, user_id: UUID) → Generation
+  Pre:  ∃ g ∈ Generation : g.id = generation_id ∧ g.status ∈ {'queued', 'processing'}
+        ∧ (g.triggered_by = user_id
+           ∨ (∃ m ∈ Membership : m.team_id = extract_team_from_urn(g.owner)
               ∧ m.user_id = user_id ∧ m.role ∈ {owner, admin}))
   Post: BEGIN TRANSACTION
-          j.status = 'canceled'
-          ∧ j.failure_type = 'canceled'
-          ∧ j.completed_at = now()
-          ∧ j.updated_at = now()
+          g.status = 'canceled'
+          ∧ g.failure_type = 'canceled'
+          ∧ g.completed_at = now()
+          ∧ g.updated_at = now()
           ∧ Credits partially refunded per refund policy (§12.7)
-          ∧ JobEvent created (type = 'canceled')
-          ∧ IF j.project_id IS NOT NULL THEN
+          ∧ GenerationEvent created (type = 'canceled')
+          ∧ IF g.project_id IS NOT NULL THEN
               Project.status = 'draft'
         COMMIT
 
   Notes:
-    - Job creator can cancel their own jobs
-    - Team owner/admin can cancel any team job
-    - Members can cancel only their own jobs
-    - Enforces Job state machine: queued → canceled, processing → canceled
+    - Generation creator can cancel their own generations
+    - Team owner/admin can cancel any team generation
+    - Members can cancel only their own generations
+    - Enforces Generation state machine: queued → canceled, processing → canceled
     - Partial credit refund based on progress (see §12.7)
 
-Operation: delete_job(job_id: UUID, user_id: UUID) → void
-  Pre:  ∃ j ∈ Job : j.id = job_id
-        ∧ j.is_ephemeral = true (project_id IS NULL)
-        ∧ j.status ∈ {completed, failed, canceled}
-        ∧ user_can_access_owner(user_id, j.owner)
-  Post: Job deleted (cascades to JobEvent)
+Operation: delete_generation(generation_id: UUID, user_id: UUID) → void
+  Pre:  ∃ g ∈ Generation : g.id = generation_id
+        ∧ g.is_ephemeral = true (project_id IS NULL)
+        ∧ g.status ∈ {completed, failed, canceled}
+        ∧ user_can_access_owner(user_id, g.owner)
+  Post: Generation deleted (cascades to GenerationEvent)
         ∧ Associated S3 output files scheduled for deletion
 
   Notes:
-    - Only ephemeral (non-project) jobs can be deleted
-    - Job must be in terminal state
-    - Starters can delete own ephemeral jobs
-    - Creators can delete accessible ephemeral jobs
+    - Only ephemeral (non-project) generations can be deleted
+    - Generation must be in terminal state
+    - Starters can delete own ephemeral generations
+    - Creators can delete accessible ephemeral generations
 
-Operation: clone_job(job_id: UUID, user_id: UUID, params: CloneJobParams?) → Job
-  Pre:  ∃ j ∈ Job : j.id = job_id
-        ∧ user_can_access_owner(user_id, j.owner)
+Operation: clone_generation(generation_id: UUID, user_id: UUID, params: CloneGenerationParams?) → Generation
+  Pre:  ∃ g ∈ Generation : g.id = generation_id
+        ∧ user_can_access_owner(user_id, g.owner)
         ∧ (params.owner IS NULL ∨ user_can_use_owner_urn(user_id, params.owner))
-        ∧ credit_source(params.owner ?? j.owner).credits ≥ estimated_credits(j.spec_snapshot)
-        ∧ concurrent_job_count(params.owner ?? j.owner) < concurrent_limit(user)
-  Post: New ephemeral Job created with:
+        ∧ credit_source(params.owner ?? g.owner).credits ≥ estimated_credits(g.spec_snapshot)
+        ∧ concurrent_generation_count(params.owner ?? g.owner) < concurrent_limit(user)
+  Post: New ephemeral Generation created with:
           id = uuid()
-          owner = params.owner ?? j.owner
+          owner = params.owner ?? g.owner
           triggered_by = user_id
           project_id = NULL
           status = 'queued'
-          spec_snapshot = j.spec_snapshot
-          options = j.options
-          credits_charged = estimated_credits(j.spec_snapshot)
-        ∧ Credits debited from credit_source(new_job.owner)
-        ∧ JobEvent created (type = 'queued')
-        ∧ Job enqueued to Inngest for processing
+          spec_snapshot = g.spec_snapshot
+          options = g.options
+          credits_charged = estimated_credits(g.spec_snapshot)
+        ∧ Credits debited from credit_source(new_generation.owner)
+        ∧ GenerationEvent created (type = 'queued')
+        ∧ Generation enqueued to Inngest for processing
 
-  CloneJobParams:
+  CloneGenerationParams:
     owner?: URN
 
   Notes:
-    - Creates a new ephemeral job from an existing job's spec
-    - Starters can clone their own jobs
-    - Creators can clone any accessible job
-    - Cloned job is always ephemeral (no project association)
+    - Creates a new ephemeral generation from an existing generation's spec
+    - Starters can clone their own generations
+    - Creators can clone any accessible generation
+    - Cloned generation is always ephemeral (no project association)
     - Owner can be overridden to bill a different entity
 ```
 
@@ -608,7 +608,7 @@ Operation: get_project(project_id: UUID, user_id: UUID) → Project
   Pre:  ∃ p ∈ Project : p.id = project_id
         ∧ ∃ m ∈ Membership : m.team_id = p.team_id ∧ m.user_id = user_id
   Post: Returns project with all fields including spec
-        ∧ Includes latest job status if one exists
+        ∧ Includes latest generation status if one exists
 
   Notes:
     - Any team member can view project details (all roles)
@@ -671,15 +671,15 @@ Operation: delete_project(project_id: UUID, user_id: UUID) → void
   Pre:  ∃ p ∈ Project : p.id = project_id ∧ p.status ≠ 'rendering'
         ∧ ∃ m ∈ Membership : m.team_id = p.team_id ∧ m.user_id = user_id
             ∧ m.role ∈ {owner, admin}
-        ∧ ∄ j ∈ Job : j.project_id = project_id ∧ j.status ∈ {'queued', 'processing'}
+        ∧ ∄ g ∈ Generation : g.project_id = project_id ∧ g.status ∈ {'queued', 'processing'}
   Post: Project deleted (cascades to AssetFile)
-        ∧ Associated jobs have project_id set to NULL (ON DELETE SET NULL)
+        ∧ Associated generations have project_id set to NULL (ON DELETE SET NULL)
 
   Notes:
     - Owner or admin role required
     - Cannot delete while rendering
-    - No active jobs can reference the project
-    - Jobs are preserved (project_id set to NULL) for billing audit
+    - No active generations can reference the project
+    - Generations are preserved (project_id set to NULL) for billing audit
     - Project-scoped assets are deleted (cascade)
 ```
 
@@ -863,12 +863,12 @@ Operation: create_webhook(team_id: UUID, user_id: UUID, params: WebhookParams) �
     events: String[] (at least one valid event)
 
   ValidWebhookEvents:
-    - job.queued
-    - job.started
-    - job.progress
-    - job.completed
-    - job.failed
-    - job.canceled
+    - generation.queued
+    - generation.started
+    - generation.progress
+    - generation.completed
+    - generation.failed
+    - generation.canceled
 
 Operation: update_webhook(webhook_id: UUID, user_id: UUID, updates: WebhookUpdates) → Webhook
   Pre:  ∃ w ∈ Webhook : w.id = webhook_id
@@ -971,8 +971,8 @@ Operation: create_api_key(user_id: UUID, params: ApiKeyParams) → {api_key: Api
 
   AllowedScopes:
     - generate
-    - jobs:read
-    - jobs:write
+    - generations:read
+    - generations:write
     - assets:read
     - assets:write
     - artifacts:read
@@ -987,8 +987,8 @@ Operation: create_api_key(user_id: UUID, params: ApiKeyParams) → {api_key: Api
 
   StarterAllowedScopes:
     - generate
-    - jobs:read
-    - jobs:write
+    - generations:read
+    - generations:write
     - assets:read
     - assets:write
     - artifacts:read
@@ -1028,7 +1028,7 @@ Operation: archive_project(project_id: UUID, user_id: UUID) → Project
   Notes:
     - Cannot archive a project that is currently rendering
     - Archived projects are hidden from default list view
-    - Jobs and assets associated with project are preserved
+    - Generations and assets associated with project are preserved
 
 Operation: unarchive_project(project_id: UUID, user_id: UUID) → Project
   Pre:  ∃ p ∈ Project : p.id = project_id ∧ p.status = 'archived'
@@ -1202,18 +1202,18 @@ Their domain crates exist as stubs.
 | delete_project | DELETE | `/v1/projects/:id` | Projects | CreatorUser |
 | archive_project | POST | `/v1/projects/:id/archive` | Projects | CreatorUser |
 | unarchive_project | POST | `/v1/projects/:id/unarchive` | Projects | CreatorUser |
-| **Job** | | | | |
-| list_jobs | GET | `/v1/jobs` | Jobs | AnyAuth |
-| get_job | GET | `/v1/jobs/:id` | Jobs | AnyAuth |
-| create_ephemeral_job | POST | `/v1/generate` | Jobs | AnyAuth |
-| create_project_job | POST | `/v1/projects/:id/render` | Jobs | CreatorUser |
-| get_job_events | GET | `/v1/jobs/:id/events` | Jobs | AnyAuth |
-| cancel_job | POST | `/v1/jobs/:id/cancel` | Jobs | AnyAuth |
-| delete_job | DELETE | `/v1/jobs/:id` | Jobs | AnyAuth |
-| clone_job | POST | `/v1/jobs/:id/clone` | Jobs | AnyAuth |
+| **Generation** | | | | |
+| list_generations | GET | `/v1/generations` | Generations | AnyAuth |
+| get_generation | GET | `/v1/generations/:id` | Generations | AnyAuth |
+| create_ephemeral_generation | POST | `/v1/generations` | Generations | AnyAuth |
+| create_project_generation | POST | `/v1/projects/:id/render` | Generations | CreatorUser |
+| get_generation_events | GET | `/v1/generations/:id/events` | Generations | AnyAuth |
+| cancel_generation | POST | `/v1/generations/:id/cancel` | Generations | AnyAuth |
+| delete_generation | DELETE | `/v1/generations/:id` | Generations | AnyAuth |
+| clone_generation | POST | `/v1/generations/:id/clone` | Generations | AnyAuth |
 | **Estimation** | | | | |
-| validate_spec | POST | `/v1/spec/validate` | Jobs | AnyAuth |
-| estimate_spec | POST | `/v1/spec/estimate` | Jobs | AnyAuth |
+| validate_spec | POST | `/v1/spec/validate` | Generations | AnyAuth |
+| estimate_spec | POST | `/v1/spec/estimate` | Generations | AnyAuth |
 | **Asset** | | | | |
 | list_assets | GET | `/v1/assets` | Artifacts | AnyAuth |
 | get_asset | GET | `/v1/assets/:id` | Artifacts | AnyAuth |
@@ -1411,7 +1411,7 @@ Operation: list_artifacts(user_id: UUID, filters: ArtifactFilters?) → Page<Art
     owner?: URN
     project_id?: UUID
     kind?: {storyboard | character | image | audio | video}
-    source?: {upload | conversation | job}
+    source?: {upload | conversation | generation}
     status?: {pending | ready | failed}
     limit?: Integer (1-100, default 20)
     cursor?: String
@@ -1505,7 +1505,7 @@ Operation: render_artifact(artifact_id: UUID, user_id: UUID) → Artifact
           created_by = user_id
           kind = 'image'
           status = 'pending'
-          source = 'job'
+          source = 'generation'
 
   Notes:
     - Only character artifacts can be rendered (other kinds → 400)
