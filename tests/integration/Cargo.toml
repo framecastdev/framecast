@@ -34,7 +34,7 @@ framecast-conversations = { workspace = true }
 framecast-llm = { workspace = true, features = ["test-support"] }
 framecast-email = { workspace = true }
 framecast-common = { workspace = true }
-framecast-jobs = { workspace = true }
+framecast-jobs = { workspace = true, features = ["mock-render"] }
 framecast-inngest = { workspace = true }
 framecast-runpod = { workspace = true }
 

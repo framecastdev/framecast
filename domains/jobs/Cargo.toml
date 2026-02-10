@@ -40,6 +40,9 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 futures-core = "0.3"
 async-stream = "0.3"
 
+[features]
+mock-render = []
+
 [dev-dependencies]
 tokio.workspace = true
 tokio-test.workspace = true

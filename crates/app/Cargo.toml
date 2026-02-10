@@ -17,6 +17,10 @@ path = "src/bin/lambda.rs"
 name = "local"
 path = "src/bin/local.rs"
 
+[features]
+default = ["mock-render"]
+mock-render = ["framecast-jobs/mock-render"]
+
 [dependencies]
 # Domain crates
 framecast-auth.workspace = true
