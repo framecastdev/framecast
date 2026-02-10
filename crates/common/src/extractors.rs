@@ -5,10 +5,37 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Deserialize};
 use validator::Validate;
 
 use crate::Error;
+
+/// Default page size for list endpoints
+const DEFAULT_LIMIT: i64 = 50;
+
+/// Maximum page size for list endpoints
+const MAX_LIMIT: i64 = 100;
+
+/// Pagination query parameters for list endpoints
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct Pagination {
+    #[serde(default)]
+    pub offset: Option<i64>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+impl Pagination {
+    /// Get the offset, defaulting to 0
+    pub fn offset(&self) -> i64 {
+        self.offset.unwrap_or(0).max(0)
+    }
+
+    /// Get the limit, defaulting to 50, capped at 100
+    pub fn limit(&self) -> i64 {
+        self.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT)
+    }
+}
 
 /// JSON extractor that validates the deserialized value automatically.
 ///
@@ -115,5 +142,63 @@ mod tests {
         // Validation failures return 400
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // Pagination tests
+
+    #[test]
+    fn test_pagination_defaults() {
+        let p = Pagination {
+            offset: None,
+            limit: None,
+        };
+        assert_eq!(p.offset(), 0);
+        assert_eq!(p.limit(), 50);
+    }
+
+    #[test]
+    fn test_pagination_custom_values() {
+        let p = Pagination {
+            offset: Some(20),
+            limit: Some(10),
+        };
+        assert_eq!(p.offset(), 20);
+        assert_eq!(p.limit(), 10);
+    }
+
+    #[test]
+    fn test_pagination_limit_clamped_to_max() {
+        let p = Pagination {
+            offset: None,
+            limit: Some(500),
+        };
+        assert_eq!(p.limit(), 100);
+    }
+
+    #[test]
+    fn test_pagination_limit_clamped_to_min() {
+        let p = Pagination {
+            offset: None,
+            limit: Some(0),
+        };
+        assert_eq!(p.limit(), 1);
+    }
+
+    #[test]
+    fn test_pagination_negative_offset_clamped() {
+        let p = Pagination {
+            offset: Some(-5),
+            limit: None,
+        };
+        assert_eq!(p.offset(), 0);
+    }
+
+    #[test]
+    fn test_pagination_negative_limit_clamped() {
+        let p = Pagination {
+            offset: None,
+            limit: Some(-10),
+        };
+        assert_eq!(p.limit(), 1);
     }
 }

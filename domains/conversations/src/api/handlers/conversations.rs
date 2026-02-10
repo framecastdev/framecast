@@ -7,7 +7,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use framecast_auth::AnyAuth;
-use framecast_common::{Error, Result, ValidatedJson};
+use framecast_common::{Error, Pagination, Result, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -39,6 +39,10 @@ pub struct UpdateConversationRequest {
 #[derive(Debug, Deserialize)]
 pub struct ListConversationsQuery {
     pub status: Option<ConversationStatus>,
+    #[serde(default)]
+    pub offset: Option<i64>,
+    #[serde(default)]
+    pub limit: Option<i64>,
 }
 
 /// Conversation response DTO
@@ -96,10 +100,19 @@ pub async fn list_conversations(
     State(state): State<ConversationsState>,
     Query(query): Query<ListConversationsQuery>,
 ) -> Result<Json<Vec<ConversationResponse>>> {
+    let pagination = Pagination {
+        offset: query.offset,
+        limit: query.limit,
+    };
     let convs = state
         .repos
         .conversations
-        .list_by_user(ctx.user.id, query.status)
+        .list_by_user(
+            ctx.user.id,
+            query.status,
+            pagination.limit(),
+            pagination.offset(),
+        )
         .await?;
 
     let responses: Vec<ConversationResponse> = convs.into_iter().map(Into::into).collect();

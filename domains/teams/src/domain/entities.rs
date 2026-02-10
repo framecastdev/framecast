@@ -16,9 +16,7 @@ use framecast_common::{Error, Result, Urn};
 use validator::ValidateEmail;
 
 pub use crate::domain::state::InvitationState;
-use crate::domain::state::{
-    InvitationEvent, InvitationGuardContext, InvitationStateMachine, StateError,
-};
+use crate::domain::state::{InvitationEvent, InvitationGuardContext, StateError};
 
 /// Maximum number of team memberships a single user can hold (INV-T8)
 pub const MAX_TEAM_MEMBERSHIPS: i64 = 50;
@@ -520,8 +518,9 @@ impl Invitation {
         let context = InvitationGuardContext {
             is_expired: self.is_expired(),
         };
-        InvitationStateMachine::transition(current_state, event, Some(&context)).map_err(
-            |e| match e {
+        current_state
+            .transition(event, Some(&context))
+            .map_err(|e| match e {
                 StateError::InvalidTransition { from, event, .. } => Error::Validation(format!(
                     "Invalid invitation transition: cannot apply '{}' event from '{}' state",
                     event, from
@@ -531,8 +530,7 @@ impl Invitation {
                     state
                 )),
                 StateError::GuardFailed(msg) => Error::Validation(msg),
-            },
-        )
+            })
     }
 
     /// Check if a transition is valid without applying it
@@ -540,7 +538,7 @@ impl Invitation {
         let context = InvitationGuardContext {
             is_expired: self.is_expired(),
         };
-        InvitationStateMachine::can_transition(self.state(), event, Some(&context))
+        self.state().can_transition(event, Some(&context))
     }
 
     /// Validate invariants per spec

@@ -32,8 +32,8 @@ impl SystemAssetRepository {
         Ok(asset)
     }
 
-    /// List all system assets
-    pub async fn list(&self) -> Result<Vec<SystemAsset>> {
+    /// List all system assets with pagination
+    pub async fn list(&self, limit: i64, offset: i64) -> Result<Vec<SystemAsset>> {
         let assets = sqlx::query_as::<_, SystemAsset>(
             r#"
             SELECT id, category, name, description,
@@ -41,8 +41,11 @@ impl SystemAssetRepository {
                    size_bytes, tags, created_at
             FROM system_assets
             ORDER BY category, name
+            LIMIT $1 OFFSET $2
             "#,
         )
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await?;
 

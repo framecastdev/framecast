@@ -16,7 +16,34 @@ impl MessageRepository {
     }
 
     /// List messages for a conversation, ordered by sequence ASC
-    pub async fn list_by_conversation(&self, conversation_id: Uuid) -> Result<Vec<Message>> {
+    pub async fn list_by_conversation(
+        &self,
+        conversation_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Message>> {
+        let messages = sqlx::query_as::<_, Message>(
+            r#"
+            SELECT id, conversation_id, role, content, artifacts,
+                   model, input_tokens, output_tokens,
+                   sequence, created_at
+            FROM messages
+            WHERE conversation_id = $1
+            ORDER BY sequence ASC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(conversation_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(messages)
+    }
+
+    /// List all messages for a conversation (unpaginated, for LLM context)
+    pub async fn list_all_by_conversation(&self, conversation_id: Uuid) -> Result<Vec<Message>> {
         let messages = sqlx::query_as::<_, Message>(
             r#"
             SELECT id, conversation_id, role, content, artifacts,

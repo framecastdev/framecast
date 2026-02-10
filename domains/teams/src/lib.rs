@@ -6,9 +6,7 @@ pub mod repository;
 
 // Re-export domain types at the crate root for convenience
 pub use domain::entities::*;
-pub use domain::state::{
-    InvitationEvent, InvitationGuardContext, InvitationState, InvitationStateMachine, StateError,
-};
+pub use domain::state::{InvitationEvent, InvitationGuardContext, InvitationState, StateError};
 // Re-export repository types
 pub use repository::{
     count_active_jobs_for_team_tx, count_for_user_tx, count_members_for_team_tx,

@@ -35,8 +35,13 @@ impl ArtifactRepository {
         Ok(artifact)
     }
 
-    /// List artifacts by owner URN
-    pub async fn list_by_owner(&self, owner: &str) -> Result<Vec<Artifact>> {
+    /// List artifacts by owner URN with pagination
+    pub async fn list_by_owner(
+        &self,
+        owner: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Artifact>> {
         let artifacts = sqlx::query_as::<_, Artifact>(
             r#"
             SELECT id, owner, created_by, project_id,
@@ -47,9 +52,12 @@ impl ArtifactRepository {
             FROM artifacts
             WHERE owner = $1
             ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
             "#,
         )
         .bind(owner)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await?;
 
@@ -57,7 +65,12 @@ impl ArtifactRepository {
     }
 
     /// List artifacts by multiple owner URNs (user + teams)
-    pub async fn list_by_owners(&self, owners: &[String]) -> Result<Vec<Artifact>> {
+    pub async fn list_by_owners(
+        &self,
+        owners: &[String],
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Artifact>> {
         let artifacts = sqlx::query_as::<_, Artifact>(
             r#"
             SELECT id, owner, created_by, project_id,
@@ -68,9 +81,12 @@ impl ArtifactRepository {
             FROM artifacts
             WHERE owner = ANY($1)
             ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
             "#,
         )
         .bind(owners)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await?;
 
