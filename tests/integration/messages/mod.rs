@@ -138,7 +138,7 @@ mod test_send_message {
     }
 
     #[tokio::test]
-    async fn test_send_to_archived_returns_422() {
+    async fn test_send_to_archived_returns_400() {
         let app = ConversationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
@@ -167,7 +167,7 @@ mod test_send_message {
     }
 
     #[tokio::test]
-    async fn test_send_empty_content_returns_422() {
+    async fn test_send_empty_content_returns_400() {
         let app = ConversationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
@@ -186,7 +186,7 @@ mod test_send_message {
     }
 
     #[tokio::test]
-    async fn test_send_whitespace_content_returns_422() {
+    async fn test_send_whitespace_content_returns_400() {
         let app = ConversationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();

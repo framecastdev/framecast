@@ -388,7 +388,7 @@ class TestApiKeysE2E:
             headers=invitee.auth_headers(),
         )
         # If default scope is * and starter can't use *, this should fail
-        assert resp.status_code in [400, 403, 422], (
+        assert resp.status_code in [400, 403], (
             f"Expected rejection for starter default scopes, got {resp.status_code} {resp.text}"
         )
 

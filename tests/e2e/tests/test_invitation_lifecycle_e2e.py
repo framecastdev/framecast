@@ -788,8 +788,8 @@ class TestInvitationLifecycleE2E:
             json={"email": "newuser@test.com", "role": "owner"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for owner-role invitation, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for owner-role invitation, got {resp.status_code} {resp.text}"
         )
 
     async def test_i28_accept_respects_max_memberships(

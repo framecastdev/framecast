@@ -48,7 +48,7 @@ class TestTeamLimitsE2E:
             json={"name": "Limit Team 11"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 409, 422], (
+        assert resp.status_code in [400, 409], (
             f"Expected limit error for 11th team, got {resp.status_code} {resp.text}"
         )
 
@@ -108,7 +108,7 @@ class TestTeamLimitsE2E:
             json={"name": "Over Limit Post-Upgrade"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 409, 422], (
+        assert resp.status_code in [400, 409], (
             f"Expected limit error, got {resp.status_code} {resp.text}"
         )
 
@@ -233,7 +233,7 @@ class TestTeamLimitsE2E:
             json={"email": "invite-limit-51@test.com", "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 409, 422], (
+        assert resp.status_code in [400, 409], (
             f"Expected limit error for 51st invitation, got {resp.status_code} {resp.text}"
         )
 

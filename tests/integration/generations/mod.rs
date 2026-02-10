@@ -259,7 +259,7 @@ mod test_generation_creation {
         app.cleanup().await.unwrap();
     }
 
-    /// GI-07: Create ephemeral generation -- missing spec -> 422
+    /// GI-07: Create ephemeral generation -- missing spec -> 400
     #[tokio::test]
     async fn test_create_ephemeral_generation_missing_spec() {
         let app = GenerationsTestApp::new().await.unwrap();
@@ -275,13 +275,7 @@ mod test_generation_creation {
         );
         let resp = app.test_router().oneshot(req).await.unwrap();
 
-        // Should be 400 or 422 (missing required field causes deserialization failure)
-        let status = resp.status();
-        assert!(
-            status == StatusCode::BAD_REQUEST || status == StatusCode::UNPROCESSABLE_ENTITY,
-            "Expected 400 or 422, got {}",
-            status
-        );
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }

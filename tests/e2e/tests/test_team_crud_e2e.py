@@ -618,7 +618,7 @@ class TestTeamCrudE2E:
             json={"name": name},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [201, 400, 409, 422], (
+        assert resp.status_code in [201, 400, 409], (
             f"Unexpected status {resp.status_code} for name={name!r}: {resp.text}"
         )
 

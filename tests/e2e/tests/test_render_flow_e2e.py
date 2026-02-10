@@ -490,32 +490,32 @@ class TestRenderFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-22: Callback without generation_id -> 400/422."""
+        """RF-22: Callback without generation_id -> 400."""
         resp = await http_client.post(
             "/internal/generations/callback",
             json={"event": "started"},
         )
-        assert resp.status_code in [400, 422]
+        assert resp.status_code == 400
 
     async def test_rf23_callback_missing_event_returns_400(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-23: Callback without event -> 400/422."""
+        """RF-23: Callback without event -> 400."""
         fake_id = str(uuid.uuid4())
         resp = await http_client.post(
             "/internal/generations/callback",
             json={"generation_id": fake_id},
         )
-        assert resp.status_code in [400, 422]
+        assert resp.status_code == 400
 
     async def test_rf24_callback_invalid_event_returns_400(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-24: Callback with invalid event name -> 400/422."""
+        """RF-24: Callback with invalid event name -> 400."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
@@ -528,14 +528,14 @@ class TestRenderFlowE2E:
             "/internal/generations/callback",
             json={"generation_id": generation_id, "event": "invalid_event_name"},
         )
-        assert resp.status_code in [400, 422]
+        assert resp.status_code == 400
 
     async def test_rf25_failed_callback_requires_failure_type(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-25: Failed callback without failure_type -> 400/422 or defaults."""
+        """RF-25: Failed callback without failure_type -> 400 or defaults."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
@@ -557,8 +557,8 @@ class TestRenderFlowE2E:
                 "error": {"message": "Something broke"},
             },
         )
-        # Either requires failure_type (400/422) or defaults it
-        assert resp.status_code in [200, 400, 422]
+        # Either requires failure_type (400) or defaults it
+        assert resp.status_code in [200, 400]
 
     # -------------------------------------------------------------------
     # Mock Render Integration (RF-26 through RF-30)

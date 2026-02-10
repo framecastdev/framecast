@@ -218,7 +218,7 @@ mod test_create_storyboard {
     }
 
     #[tokio::test]
-    async fn test_create_storyboard_missing_spec_returns_422() {
+    async fn test_create_storyboard_missing_spec_returns_400() {
         let app = ArtifactsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();

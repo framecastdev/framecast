@@ -87,12 +87,12 @@ class TestErrorHandlingE2E:
         body = resp.json()
         assert "error" in body, f"Expected error key in 400 response: {body}"
 
-    async def test_e5_422_deserialization_error(
+    async def test_e5_400_deserialization_error(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """E5: Malformed JSON body -> 422."""
+        """E5: Malformed JSON body -> 400."""
         owner = seed_users.owner
 
         resp = await http_client.post(
@@ -103,8 +103,8 @@ class TestErrorHandlingE2E:
                 "Content-Type": "application/json",
             },
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for malformed JSON, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for malformed JSON, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------
@@ -122,8 +122,8 @@ class TestErrorHandlingE2E:
         resp = await http_client.get(
             "/v1/teams/not-a-uuid", headers=owner.auth_headers()
         )
-        assert resp.status_code in [400, 404, 422], (
-            f"Expected 400/404/422 for non-UUID, got {resp.status_code}"
+        assert resp.status_code in [400, 404], (
+            f"Expected 400/404 for non-UUID, got {resp.status_code}"
         )
 
     async def test_e7_empty_request_body_on_post(
@@ -131,7 +131,7 @@ class TestErrorHandlingE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """E7: POST /v1/teams with no body -> 422."""
+        """E7: POST /v1/teams with no body -> 400."""
         owner = seed_users.owner
 
         resp = await http_client.post(
@@ -141,8 +141,8 @@ class TestErrorHandlingE2E:
                 "Content-Type": "application/json",
             },
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for empty body, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for empty body, got {resp.status_code} {resp.text}"
         )
 
     async def test_e8_extra_unknown_fields_ignored(
@@ -171,7 +171,7 @@ class TestErrorHandlingE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """E9: POST without Content-Type: application/json -> 415 or 422."""
+        """E9: POST without Content-Type: application/json -> 400 or 415."""
         owner = seed_users.owner
 
         resp = await http_client.post(
@@ -182,8 +182,8 @@ class TestErrorHandlingE2E:
                 "Content-Type": "text/plain",
             },
         )
-        assert resp.status_code in [400, 415, 422], (
-            f"Expected 400/415/422 for wrong content type, got {resp.status_code}"
+        assert resp.status_code in [400, 415], (
+            f"Expected 400/415 for wrong content type, got {resp.status_code}"
         )
 
     async def test_e10_very_long_string_inputs(

@@ -360,7 +360,7 @@ class TestUserAccountE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """U14: PATCH /v1/account with malformed JSON -> 422."""
+        """U14: PATCH /v1/account with malformed JSON -> 400."""
         owner = seed_users.owner
 
         resp = await http_client.patch(
@@ -371,8 +371,8 @@ class TestUserAccountE2E:
                 "Content-Type": "application/json",
             },
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for malformed JSON, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for malformed JSON, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------
@@ -541,6 +541,6 @@ class TestUserAccountE2E:
             json={"name": name},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [200, 400, 422], (
+        assert resp.status_code in [200, 400], (
             f"Unexpected status {resp.status_code} for name={name!r}: {resp.text}"
         )

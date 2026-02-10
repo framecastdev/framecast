@@ -63,7 +63,7 @@ class TestCharacterFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CF03: Spec without 'prompt' -> 400/422."""
+        """CF03: Spec without 'prompt' -> 400."""
         invitee = seed_users.invitee
 
         resp = await http_client.post(
@@ -71,8 +71,8 @@ class TestCharacterFlowE2E:
             json={"spec": {"name": "No Prompt"}},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for missing prompt, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for missing prompt, got {resp.status_code} {resp.text}"
         )
 
     async def test_cf04_empty_prompt_rejected(
@@ -80,7 +80,7 @@ class TestCharacterFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CF04: Empty prompt -> 400/422."""
+        """CF04: Empty prompt -> 400."""
         invitee = seed_users.invitee
 
         resp = await http_client.post(
@@ -88,8 +88,8 @@ class TestCharacterFlowE2E:
             json={"spec": {"prompt": ""}},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for empty prompt, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for empty prompt, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------
