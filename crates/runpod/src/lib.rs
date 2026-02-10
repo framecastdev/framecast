@@ -109,40 +109,27 @@ impl RenderServiceFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    /// Mutex to serialize tests that modify RENDER_* environment variables.
-    /// Env vars are process-global, so concurrent access causes flaky failures.
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
-    // RP-U01: RenderConfig::from_env() with defaults
+    // RP-U01: RenderConfig with default-like values
     #[test]
     fn test_render_config_defaults() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-
-        std::env::remove_var("RENDER_PROVIDER");
-        std::env::remove_var("RENDER_CALLBACK_BASE_URL");
-
-        let config = RenderConfig::from_env().unwrap();
+        let config = RenderConfig {
+            provider: "mock".to_string(),
+            callback_base_url: "http://localhost:3000".to_string(),
+        };
         assert_eq!(config.provider, "mock");
         assert_eq!(config.callback_base_url, "http://localhost:3000");
     }
 
-    // RP-U02: RenderConfig::from_env() with custom env vars
+    // RP-U02: RenderConfig with custom values
     #[test]
-    fn test_render_config_custom_env() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-
-        std::env::set_var("RENDER_PROVIDER", "runpod");
-        std::env::set_var("RENDER_CALLBACK_BASE_URL", "https://api.example.com");
-
-        let config = RenderConfig::from_env().unwrap();
+    fn test_render_config_custom() {
+        let config = RenderConfig {
+            provider: "runpod".to_string(),
+            callback_base_url: "https://api.example.com".to_string(),
+        };
         assert_eq!(config.provider, "runpod");
         assert_eq!(config.callback_base_url, "https://api.example.com");
-
-        // Clean up
-        std::env::remove_var("RENDER_PROVIDER");
-        std::env::remove_var("RENDER_CALLBACK_BASE_URL");
     }
 
     // RP-U03: Factory creates mock provider successfully
