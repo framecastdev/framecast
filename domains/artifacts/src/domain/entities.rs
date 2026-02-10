@@ -184,16 +184,6 @@ impl Artifact {
         source: ArtifactSource,
         conversation_id: Option<Uuid>,
     ) -> Result<Self> {
-        // INV-ART-CHAR: Character spec must contain non-empty "prompt"
-        match spec.get("prompt").and_then(|v| v.as_str()) {
-            Some(prompt) if !prompt.trim().is_empty() => {}
-            _ => {
-                return Err(Error::Validation(
-                    "Character artifacts require spec with non-empty \"prompt\"".to_string(),
-                ));
-            }
-        }
-
         let artifact = Self {
             id: Uuid::new_v4(),
             owner: owner.to_string(),
@@ -789,6 +779,22 @@ mod tests {
     }
 
     #[test]
+    fn test_media_filename_max_length_valid() {
+        let owner = Urn::user(Uuid::new_v4());
+        let result = Artifact::new_media(
+            owner,
+            Uuid::new_v4(),
+            None,
+            ArtifactKind::Image,
+            "a".repeat(255),
+            "key".to_string(),
+            "image/jpeg".to_string(),
+            100,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn test_media_filename_too_long() {
         let owner = Urn::user(Uuid::new_v4());
         let result = Artifact::new_media(
@@ -1007,6 +1013,18 @@ mod tests {
             None,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_character_whitespace_prompt_rejected() {
+        // Test validate() directly (not via new_character) to kill mutant on guard condition
+        let owner = Urn::user(Uuid::new_v4());
+        let mut artifact =
+            Artifact::new_storyboard(owner, Uuid::new_v4(), None, json!({})).unwrap();
+        artifact.kind = ArtifactKind::Character;
+        artifact.spec = Some(json!({"prompt": "   "}));
+
+        assert!(artifact.validate().is_err());
     }
 
     #[test]
