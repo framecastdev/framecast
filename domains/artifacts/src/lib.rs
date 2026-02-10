@@ -8,7 +8,7 @@ pub mod repository;
 pub use domain::entities::{
     Artifact, ArtifactKind, ArtifactSource, ArtifactStatus, SystemAsset, SystemAssetCategory,
 };
-pub use domain::state::{ArtifactEvent, ArtifactState, ArtifactStateMachine, StateError};
+pub use domain::state::{ArtifactEvent, ArtifactStateMachine, StateError};
 
 // Re-export repository types
 pub use repository::{

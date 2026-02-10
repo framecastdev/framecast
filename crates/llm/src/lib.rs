@@ -99,8 +99,6 @@ impl std::fmt::Debug for LlmConfig {
 impl LlmConfig {
     /// Create LLM config from environment variables
     pub fn from_env() -> Result<Self, LlmError> {
-        dotenvy::dotenv().ok();
-
         let provider = std::env::var("LLM_PROVIDER").unwrap_or_else(|_| "mock".to_string());
 
         let api_key = std::env::var("ANTHROPIC_API_KEY").unwrap_or_default();

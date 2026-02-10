@@ -24,9 +24,6 @@ thiserror.workspace = true
 # HTTP client
 reqwest = { workspace = true }
 
-# Environment
-dotenvy.workspace = true
-
 # Logging
 tracing.workspace = true
 

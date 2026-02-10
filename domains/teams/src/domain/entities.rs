@@ -728,11 +728,6 @@ impl ApiKey {
         // Encode as hex string with salt prepended for storage
         format!("{}:{}", hex::encode(salt), hex::encode(hash))
     }
-
-    /// Verify an API key against stored hash using constant-time comparison
-    pub fn verify_key(&self, candidate_key: &str) -> bool {
-        framecast_common::verify_key_hash(candidate_key, &self.key_hash)
-    }
 }
 
 /// Authenticated API key — all fields except `key_hash`.
@@ -1070,8 +1065,14 @@ mod tests {
         let user_id = Uuid::new_v4();
         let (api_key, raw_key) =
             ApiKey::new(user_id, Urn::user(user_id), None, None, None).unwrap();
-        assert!(api_key.verify_key(&raw_key));
-        assert!(!api_key.verify_key("sk_live_wrong"));
+        assert!(framecast_common::verify_key_hash(
+            &raw_key,
+            &api_key.key_hash
+        ));
+        assert!(!framecast_common::verify_key_hash(
+            "sk_live_wrong",
+            &api_key.key_hash
+        ));
     }
 
     #[test]
@@ -1111,46 +1112,34 @@ mod tests {
         assert_eq!(parts[1].len(), 64);
 
         // Verify raw key works
-        assert!(api_key.verify_key(&raw_key));
+        assert!(framecast_common::verify_key_hash(
+            &raw_key,
+            &api_key.key_hash
+        ));
 
         // Additional tests with manually constructed keys
         let test_key = "sk_live_test123456789";
         let salt: [u8; 32] = rand::thread_rng().gen();
         let test_hash = ApiKey::hash_key(test_key, &salt);
 
-        // Create a test API key with known hash
-        let mut test_api_key = ApiKey {
-            id: Uuid::new_v4(),
-            user_id,
-            owner: owner.to_string(),
-            name: "Test".to_string(),
-            key_prefix: "sk_live_".to_string(),
-            key_hash: test_hash,
-            key_hash_prefix: Some(ApiKey::compute_hash_prefix(test_key)),
-            scopes: sqlx::types::Json(vec!["*".to_string()]),
-            last_used_at: None,
-            expires_at: None,
-            revoked_at: None,
-            created_at: Utc::now(),
-        };
-
         // Test verification with correct key
-        assert!(test_api_key.verify_key(test_key));
+        assert!(framecast_common::verify_key_hash(test_key, &test_hash));
 
         // Test verification with wrong key
-        assert!(!test_api_key.verify_key("wrong_key"));
-        assert!(!test_api_key.verify_key("sk_live_wrong"));
+        assert!(!framecast_common::verify_key_hash("wrong_key", &test_hash));
+        assert!(!framecast_common::verify_key_hash(
+            "sk_live_wrong",
+            &test_hash
+        ));
 
         // Test verification with empty key
-        assert!(!test_api_key.verify_key(""));
+        assert!(!framecast_common::verify_key_hash("", &test_hash));
 
         // Test verification with malformed hash
-        test_api_key.key_hash = "invalid:hash".to_string();
-        assert!(!test_api_key.verify_key(test_key));
+        assert!(!framecast_common::verify_key_hash(test_key, "invalid:hash"));
 
         // Test verification with missing colon
-        test_api_key.key_hash = "invalidhash".to_string();
-        assert!(!test_api_key.verify_key(test_key));
+        assert!(!framecast_common::verify_key_hash(test_key, "invalidhash"));
     }
 
     #[test]

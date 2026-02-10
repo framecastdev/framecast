@@ -158,10 +158,14 @@ pub async fn delete_team_tx(
     transaction: &mut Transaction<'_, Postgres>,
     team_id: Uuid,
 ) -> std::result::Result<(), RepositoryError> {
-    sqlx::query("DELETE FROM teams WHERE id = $1")
+    let result = sqlx::query("DELETE FROM teams WHERE id = $1")
         .bind(team_id)
         .execute(&mut **transaction)
         .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(RepositoryError::NotFound);
+    }
     Ok(())
 }
 

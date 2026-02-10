@@ -22,9 +22,6 @@ aws-config = { workspace = true }
 aws-sdk-ses = { workspace = true }
 aws-credential-types = { workspace = true }
 
-# === Environment ===
-dotenvy = { workspace = true }
-
 # === Logging ===
 tracing = { workspace = true }
 
