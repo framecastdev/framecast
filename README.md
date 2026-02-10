@@ -39,9 +39,9 @@ domains/           # Domain-driven vertical slices
   teams/           #   Users, Teams, Memberships, Invitations, ApiKeys
   artifacts/       #   Artifacts (storyboards, characters, media), SystemAssets
   conversations/   #   Conversations, Messages (LLM chat)
-  projects/        #   Projects, AssetFiles (stub)
-  jobs/            #   Jobs, JobEvents (stub)
-  webhooks/        #   Webhooks, WebhookDeliveries (stub)
+  projects/        #   Projects, AssetFiles (domain only — no API)
+  jobs/            #   Jobs, JobEvents (fully implemented)
+  webhooks/        #   Webhooks, WebhookDeliveries (domain only — no API)
 crates/            # Shared infrastructure
   app/             #   Composition root, Lambda + local binaries
   auth/            #   JWT/API key authentication, extractors

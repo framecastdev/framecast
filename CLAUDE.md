@@ -267,9 +267,9 @@ domains/                   # Domain-driven vertical slices
 ├── teams/                 # framecast-teams: Users, Teams, Memberships, Invitations, ApiKeys
 ├── artifacts/             # framecast-artifacts: Artifacts, SystemAssets
 ├── conversations/         # framecast-conversations: Conversations, Messages
-├── projects/              # framecast-projects: Projects, AssetFiles (stub)
-├── jobs/                  # framecast-jobs: Jobs, JobEvents (stub)
-└── webhooks/              # framecast-webhooks: Webhooks, WebhookDeliveries (stub)
+├── projects/              # framecast-projects: Projects, AssetFiles (domain only — no API)
+├── jobs/                  # framecast-jobs: Jobs, JobEvents (fully implemented)
+└── webhooks/              # framecast-webhooks: Webhooks, WebhookDeliveries (domain only — no API)
 
 crates/                    # Shared infrastructure
 ├── app/                   # framecast-app: Composition root, Lambda + local binaries
@@ -304,23 +304,23 @@ domains/teams/src/
   framecast-teams        │    │    │    framecast-email
              ↑           │    │    │          ↑
   framecast-artifacts    │    │    └──── framecast-llm
-             ↑           │    │               ↑
-  framecast-conversations┘    │               │
-             ↑                │               │
-  framecast-projects          │               │
-             ↑                │               │
-  framecast-jobs              │               │
-             ↑                │               │
-  framecast-webhooks ─────────┘               │
-             ↑                                │
+             ↑           │    │
+  framecast-conversations┘    │    framecast-inngest
+             ↑                │          ↑
+  framecast-projects          │    framecast-runpod
+             ↑                │       ↑    ↑
+  framecast-jobs ─────────────┤───────┘    │
+             ↑                │            │
+  framecast-webhooks ─────────┘            │
+             ↑                             │
   framecast-auth (reads teams/artifacts/etc tables via CQRS)
              ↑
-  framecast-app → teams + artifacts + conversations + auth + email + llm
+  framecast-app → teams + artifacts + conversations + jobs + auth + email + llm
 ```
 
 - Each domain owns entities + repositories + API handlers (vertical slice)
 - `framecast-teams` has no domain dependencies (only `common` + `email`)
-- `framecast-app` composes teams, artifacts, and conversations routers (not ALL domains)
+- `framecast-app` composes teams, artifacts, conversations, and jobs routers
 - `crates/auth` handles JWT + API key authentication with CQRS read models
 - Cross-domain reads use CQRS: query other domain's tables directly (same DB)
 
