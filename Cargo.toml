@@ -81,6 +81,7 @@ regex = "1.10"
 mutants = "0.0.3"
 
 # === Testing ===
+serial_test = "3"
 tokio-test = "0.4"
 test-log = "0.2"
 

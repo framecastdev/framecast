@@ -32,4 +32,5 @@ async-trait.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
+serial_test.workspace = true
 tokio-test.workspace = true
