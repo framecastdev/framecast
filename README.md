@@ -70,7 +70,3 @@ Run `just` to see all available commands. Key ones:
 ## Architecture
 
 See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation, coding conventions, and development rules.
-
-## License
-
-MIT
