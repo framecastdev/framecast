@@ -3,7 +3,7 @@
 #
 # This compose file provides backing services that match production:
 # - LocalStack (AWS S3 compatible storage)
-# - Inngest (Job orchestration)
+# - Inngest (Generation orchestration)
 # - PostgreSQL (Database - optional, can use Supabase)
 
 version: '3.8'
@@ -49,7 +49,7 @@ services:
       start_period: 10s
 
   # ============================================================================
-  # INNGEST - Job Orchestration and Event Processing
+  # INNGEST - Generation Orchestration and Event Processing
   # ============================================================================
   inngest:
     container_name: framecast-inngest

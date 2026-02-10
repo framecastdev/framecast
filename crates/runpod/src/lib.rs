@@ -74,7 +74,7 @@ impl RenderConfig {
 /// Render service trait for different compute backends
 #[async_trait::async_trait]
 pub trait RenderService: Send + Sync {
-    /// Submit a render job to the compute backend.
+    /// Submit a render request to the compute backend.
     /// The backend will POST results to callback_url when done.
     async fn submit_render(&self, request: RenderRequest) -> Result<(), RenderError>;
 }

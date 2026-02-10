@@ -22,9 +22,3 @@ pub use repository::{
 // Re-export API types
 pub use api::routes;
 pub use api::TeamsState;
-
-// Re-export auth types from framecast-auth for backward compatibility
-pub use framecast_auth::{
-    AnyAuth, ApiKeyUser, AuthBackend, AuthConfig, AuthContext, AuthError, AuthUser, CreatorUser,
-    SupabaseClaims,
-};

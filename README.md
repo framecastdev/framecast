@@ -43,9 +43,11 @@ domains/           # Domain-driven vertical slices
 crates/            # Shared infrastructure
   app/             #   Composition root, Lambda + local binaries
   auth/            #   JWT/API key authentication, extractors
-  llm/             #   LLM provider abstraction (Anthropic, mock)
-  email/           #   AWS SES email service
   common/          #   Shared error types, URN parsing, pagination
+  email/           #   AWS SES email service
+  inngest/         #   Inngest event orchestration
+  llm/             #   LLM provider abstraction (Anthropic, mock)
+  runpod/          #   RunPod GPU compute render service
 migrations/        # SQLx database migrations
 infra/opentofu/    # Infrastructure as Code
 tests/             # Integration and E2E tests

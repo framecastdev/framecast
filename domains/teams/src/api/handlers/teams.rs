@@ -333,14 +333,14 @@ pub async fn update_team(
 ///
 /// **DELETE /v1/teams/:id**
 ///
-/// Deletes a team. Only the owner can delete, and only if there are no active jobs.
+/// Deletes a team. Only the owner can delete, and only if there are no active generations.
 ///
 /// All checks and mutations run inside a single transaction to prevent races
 /// between delete and concurrent member changes.
 ///
 /// **Business Rules:**
 /// - Only team owner can delete (not admin)
-/// - Cannot delete if there are active jobs
+/// - Cannot delete if there are active generations
 /// - Must handle membership cleanup (INV-T1, INV-T2 become irrelevant)
 pub async fn delete_team(
     CreatorUser(auth_context): CreatorUser,

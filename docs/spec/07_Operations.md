@@ -1187,7 +1187,7 @@ Operation: estimate_spec(spec: JSONB, user_id: UUID, owner?: URN) → EstimateRe
 ### Planned Endpoints (not yet implemented)
 
 The following endpoints are defined in the specification but not yet implemented.
-Their domain crates exist as stubs.
+Their domain crates will be created when these features are implemented.
 
 | Operation | Method | Path | Domain | Auth (planned) |
 |-----------|--------|------|--------|----------------|

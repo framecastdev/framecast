@@ -79,10 +79,10 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Test: Cannot delete last owner from team
   - Test: Every team has ≥1 member at all times
 
-- **INV-03**: Job concurrency limits enforced
-  - Test: Starter users cannot exceed 1 concurrent job
-  - Test: Teams cannot exceed 5 concurrent jobs
-  - Test: Projects cannot have >1 active job
+- **INV-03**: Generation concurrency limits enforced
+  - Test: Starter users cannot exceed 1 concurrent generation
+  - Test: Teams cannot exceed 5 concurrent generations
+  - Test: Projects cannot have >1 active generation
 
 - **INV-04**: URN validation working
   - Test: Invalid URN formats rejected
@@ -212,34 +212,34 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 
 - **SEED-INV-01**: All seeded data follows business rules
   - Test: Created users/teams follow tier restrictions
-  - Test: Job statuses are valid
+  - Test: Generation statuses are valid
   - Test: URN ownership is correct
 
-### B. Job Cleanup Script
+### B. Generation Cleanup Script
 
 #### Happy Path Tests
 
-- **CLEANUP-HAPPY-01**: Old job cleanup with S3 objects
-  - Given: Database with old completed jobs and S3 objects
+- **CLEANUP-HAPPY-01**: Old generation cleanup with S3 objects
+  - Given: Database with old completed generations and S3 objects
   - When: Run cleanup script with appropriate retention
-  - Then: Removes old jobs and associated S3 objects
+  - Then: Removes old generations and associated S3 objects
 
 - **CLEANUP-HAPPY-02**: Dry-run mode functionality
-  - Given: Old jobs in database
+  - Given: Old generations in database
   - When: Run cleanup with --dry-run
   - Then: Reports what would be deleted without making changes
 
 #### Edge Cases
 
 - **CLEANUP-EDGE-01**: Large dataset cleanup
-  - Given: Thousands of old jobs to clean up
+  - Given: Thousands of old generations to clean up
   - When: Run cleanup script
   - Then: Processes in batches without memory issues
 
-- **CLEANUP-EDGE-02**: Mixed job statuses cleanup
-  - Given: Jobs in various terminal states
+- **CLEANUP-EDGE-02**: Mixed generation statuses cleanup
+  - Given: Generations in various terminal states
   - When: Run cleanup script
-  - Then: Only removes appropriate jobs based on status and age
+  - Then: Only removes appropriate generations based on status and age
 
 #### Error Conditions
 
@@ -249,7 +249,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Continues with database cleanup, reports S3 errors
 
 - **CLEANUP-ERROR-02**: Database constraint violations
-  - Given: Jobs with foreign key dependencies
+  - Given: Generations with foreign key dependencies
   - When: Attempt cleanup
   - Then: Handles cascading deletes correctly or reports conflicts
 
@@ -275,7 +275,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - Then: Creates valid export with empty collections where appropriate
 
 - **EXPORT-EDGE-02**: User with large dataset
-  - Given: User with extensive history (thousands of jobs)
+  - Given: User with extensive history (thousands of generations)
   - When: Export data
   - Then: Handles large datasets without memory issues
 
@@ -378,7 +378,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - All steps complete successfully with proper data relationships
 
 - **E2E-02**: Admin workflow simulation
-  - Create API key → Export user data → Clean old jobs → Verify health
+  - Create API key → Export user data → Clean old generations → Verify health
   - All admin tasks complete without data corruption
 
 - **E2E-03**: Infrastructure deployment workflow
@@ -392,7 +392,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
   - No constraint violations or relationship issues
 
 - **INT-02**: Cleanup + Health Check integration
-  - Run job cleanup → Check system health → Verify no service degradation
+  - Run generation cleanup → Check system health → Verify no service degradation
   - Cleanup doesn't affect running services
 
 ---
@@ -412,7 +412,7 @@ This document brainstorms test cases BEFORE implementing tests, covering happy p
 ### Script Performance
 
 - **PERF-SCRIPT-01**: Bulk operations
-  - Test cleanup script with 50k+ jobs
+  - Test cleanup script with 50k+ generations
   - Verify memory usage stays bounded
 
 - **PERF-SCRIPT-02**: Export large datasets
