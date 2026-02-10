@@ -3,9 +3,10 @@
 use std::net::SocketAddr;
 use tokio::signal;
 use tower::ServiceBuilder;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 
+use framecast_app::{body_limit_layer, build_cors_layer};
 use sqlx::PgPool;
 
 #[tokio::main]
@@ -38,10 +39,14 @@ async fn main() -> anyhow::Result<()> {
         e
     })?;
 
+    let cors_origins = std::env::var("CORS_ALLOWED_ORIGINS")
+        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+
     let app = app.layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
-            .layer(CorsLayer::permissive())
+            .layer(build_cors_layer(&cors_origins))
+            .layer(body_limit_layer())
             .into_inner(),
     );
 

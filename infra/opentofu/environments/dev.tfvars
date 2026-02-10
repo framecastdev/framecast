@@ -12,6 +12,9 @@ lambda_timeout     = 30
 # S3 configuration
 outputs_expiration_days = 30
 
+# CORS (dev frontend)
+cors_allow_origins = ["http://localhost:3000"]
+
 # Monitoring (disabled for dev by default)
 enable_monitoring = false
 

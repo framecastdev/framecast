@@ -2,7 +2,11 @@
 //!
 //! Composes all domain routers into a single application.
 
-use axum::Router;
+use axum::{
+    extract::DefaultBodyLimit,
+    http::{self, HeaderValue},
+    Router,
+};
 use framecast_artifacts::{ArtifactsRepositories, ArtifactsState};
 use framecast_auth::{AuthBackend, AuthConfig};
 use framecast_conversations::{ConversationsRepositories, ConversationsState};
@@ -14,6 +18,7 @@ use framecast_runpod::{RenderConfig, RenderServiceFactory};
 use framecast_teams::{TeamsRepositories, TeamsState};
 use sqlx::PgPool;
 use std::sync::Arc;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 /// Create the main application router with all routes and middleware
 pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
@@ -131,6 +136,45 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
         .merge(framecast_conversations::routes().with_state(conversations_state));
 
     Ok(app)
+}
+
+/// Build a CORS layer from a comma-separated origins string.
+///
+/// Each origin is trimmed and parsed into an [`AllowOrigin`] list.
+/// Standard methods (GET, POST, PUT, PATCH, DELETE, OPTIONS) and
+/// common API headers are permitted.
+pub fn build_cors_layer(origins: &str) -> CorsLayer {
+    let parsed: Vec<HeaderValue> = origins
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(parsed))
+        .allow_methods([
+            http::Method::GET,
+            http::Method::POST,
+            http::Method::PUT,
+            http::Method::PATCH,
+            http::Method::DELETE,
+            http::Method::OPTIONS,
+        ])
+        .allow_headers([
+            http::header::CONTENT_TYPE,
+            http::header::AUTHORIZATION,
+            http::HeaderName::from_static("x-api-key"),
+        ])
+        .max_age(std::time::Duration::from_secs(3600))
+}
+
+/// Maximum request body size (5 MiB).
+const MAX_BODY_SIZE: usize = 5 * 1024 * 1024;
+
+/// Returns a [`DefaultBodyLimit`] layer capping request bodies at [`MAX_BODY_SIZE`].
+pub fn body_limit_layer() -> DefaultBodyLimit {
+    DefaultBodyLimit::max(MAX_BODY_SIZE)
 }
 
 /// Health check endpoint

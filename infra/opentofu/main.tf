@@ -58,20 +58,21 @@ locals {
 
   # Lambda environment variables
   lambda_environment = {
-    DATABASE_URL      = var.database_url
-    JWT_SECRET        = var.jwt_secret
-    JWT_ISSUER        = var.jwt_issuer
-    JWT_AUDIENCE      = var.jwt_audience
-    APP_BASE_URL      = var.app_base_url
-    FROM_EMAIL        = var.from_email
-    EMAIL_ENABLED     = var.email_enabled
-    EMAIL_PROVIDER    = var.email_provider
-    LLM_PROVIDER      = var.llm_provider
-    ANTHROPIC_API_KEY = var.anthropic_api_key
-    ANTHROPIC_MODEL   = var.anthropic_model
-    LLM_MAX_TOKENS    = var.llm_max_tokens
-    S3_BUCKET_OUTPUTS = module.s3.outputs_bucket_name
-    S3_BUCKET_ASSETS  = module.s3.assets_bucket_name
+    DATABASE_URL         = var.database_url
+    JWT_SECRET           = var.jwt_secret
+    JWT_ISSUER           = var.jwt_issuer
+    JWT_AUDIENCE         = var.jwt_audience
+    APP_BASE_URL         = var.app_base_url
+    FROM_EMAIL           = var.from_email
+    EMAIL_ENABLED        = var.email_enabled
+    EMAIL_PROVIDER       = var.email_provider
+    LLM_PROVIDER         = var.llm_provider
+    ANTHROPIC_API_KEY    = var.anthropic_api_key
+    ANTHROPIC_MODEL      = var.anthropic_model
+    LLM_MAX_TOKENS       = var.llm_max_tokens
+    S3_BUCKET_OUTPUTS    = module.s3.outputs_bucket_name
+    S3_BUCKET_ASSETS     = module.s3.assets_bucket_name
+    CORS_ALLOWED_ORIGINS = join(",", var.cors_allow_origins)
     # For LocalStack, set the endpoint URL
     AWS_ENDPOINT_URL = var.localstack_enabled ? var.localstack_endpoint : ""
   }

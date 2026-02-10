@@ -19,6 +19,7 @@ use crate::domain::entities::{ConversationStatus, MessageRole};
 #[derive(Debug, Deserialize, Validate)]
 pub struct SendMessageRequest {
     /// Message content
+    #[validate(length(min = 1, max = 32768))]
     pub content: String,
 }
 

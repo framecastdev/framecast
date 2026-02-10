@@ -146,7 +146,7 @@ variable "alarm_sns_topic_arn" {
 variable "cors_allow_origins" {
   description = "CORS allowed origins (restrict in production)"
   type        = list(string)
-  default     = ["*"]
+  default     = []
 }
 
 # ==============================================================================
