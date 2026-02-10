@@ -488,6 +488,31 @@ impl Usage {
     }
 }
 
+/// Job event type enum matching the database enum
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "job_event_type", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum JobEventType {
+    Queued,
+    Started,
+    Progress,
+    SceneComplete,
+    Completed,
+    Failed,
+    Canceled,
+}
+
+/// Job event record from the database
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct JobEventRecord {
+    pub id: Uuid,
+    pub job_id: Uuid,
+    pub sequence: i64,
+    pub event_type: JobEventType,
+    pub payload: Json<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
