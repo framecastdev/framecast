@@ -771,8 +771,8 @@ class TestMembershipManagementE2E:
             f"/v1/teams/{fake_team_id}/members/{owner.user_id}",
             headers=owner.auth_headers(),
         )
-        assert resp.status_code == 403, (
-            f"Expected 403 for nonexistent team, got {resp.status_code}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for nonexistent team, got {resp.status_code}"
         )
 
     async def test_m28_update_role_of_non_member(

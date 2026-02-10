@@ -490,25 +490,25 @@ class TestRenderFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-22: Callback without generation_id -> 400."""
+        """RF-22: Callback without generation_id -> 422 (plain Json extractor)."""
         resp = await http_client.post(
             "/internal/generations/callback",
             json={"event": "started"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
-    async def test_rf23_callback_missing_event_returns_400(
+    async def test_rf23_callback_missing_event_returns_422(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-23: Callback without event -> 400."""
+        """RF-23: Callback without event -> 422 (plain Json extractor)."""
         fake_id = str(uuid.uuid4())
         resp = await http_client.post(
             "/internal/generations/callback",
             json={"generation_id": fake_id},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     async def test_rf24_callback_invalid_event_returns_400(
         self,
