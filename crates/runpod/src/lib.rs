@@ -109,10 +109,17 @@ impl RenderServiceFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Mutex to serialize tests that modify RENDER_* environment variables.
+    /// Env vars are process-global, so concurrent access causes flaky failures.
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     // RP-U01: RenderConfig::from_env() with defaults
     #[test]
     fn test_render_config_defaults() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         std::env::remove_var("RENDER_PROVIDER");
         std::env::remove_var("RENDER_CALLBACK_BASE_URL");
 
@@ -124,6 +131,8 @@ mod tests {
     // RP-U02: RenderConfig::from_env() with custom env vars
     #[test]
     fn test_render_config_custom_env() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         std::env::set_var("RENDER_PROVIDER", "runpod");
         std::env::set_var("RENDER_CALLBACK_BASE_URL", "https://api.example.com");
 
