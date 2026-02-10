@@ -192,6 +192,7 @@ mod test_user_tier_permissions {
         app.cleanup().await.unwrap();
     }
 
+    /// JIT provisioning: valid JWT for unknown user auto-creates a starter account.
     #[tokio::test]
     async fn test_user_not_found_in_database() {
         let app = TestApp::new().await.unwrap();
@@ -229,14 +230,16 @@ mod test_user_tier_permissions {
 
         let mut parts = make_parts(Some(&format!("Bearer {}", fake_token)));
 
+        // JIT provisioning: unknown user is auto-created as starter
         let auth_result = AuthUser::from_request_parts(&mut parts, &app.state).await;
-        assert!(auth_result.is_err());
+        assert!(
+            auth_result.is_ok(),
+            "JIT provisioning should auto-create user"
+        );
 
-        if let Err(AuthError::UserNotFound) = auth_result {
-            // Expected error
-        } else {
-            panic!("Expected UserNotFound error");
-        }
+        let AuthUser(auth_context) = auth_result.unwrap();
+        assert_eq!(auth_context.user.id, fake_user_id);
+        assert_eq!(auth_context.user.tier, AuthTier::Starter);
 
         app.cleanup().await.unwrap();
     }
