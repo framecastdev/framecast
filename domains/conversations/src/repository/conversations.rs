@@ -5,6 +5,12 @@ use framecast_common::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// All columns in the conversations table, used for SELECT and RETURNING clauses.
+const CONVERSATION_COLUMNS: &str = "\
+    id, user_id, title, model, system_prompt, \
+    status, message_count, last_message_at, \
+    created_at, updated_at";
+
 #[derive(Clone)]
 pub struct ConversationRepository {
     pool: PgPool,
@@ -17,18 +23,11 @@ impl ConversationRepository {
 
     /// Find conversation by ID
     pub async fn find(&self, id: Uuid) -> Result<Option<Conversation>> {
-        let conv = sqlx::query_as::<_, Conversation>(
-            r#"
-            SELECT id, user_id, title, model, system_prompt,
-                   status, message_count, last_message_at,
-                   created_at, updated_at
-            FROM conversations
-            WHERE id = $1
-            "#,
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let query = format!("SELECT {CONVERSATION_COLUMNS} FROM conversations WHERE id = $1");
+        let conv = sqlx::query_as::<_, Conversation>(&query)
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
 
         Ok(conv)
     }
@@ -43,41 +42,33 @@ impl ConversationRepository {
     ) -> Result<Vec<Conversation>> {
         let convs = match status {
             Some(s) => {
-                sqlx::query_as::<_, Conversation>(
-                    r#"
-                    SELECT id, user_id, title, model, system_prompt,
-                           status, message_count, last_message_at,
-                           created_at, updated_at
-                    FROM conversations
-                    WHERE user_id = $1 AND status = $2
-                    ORDER BY last_message_at DESC NULLS LAST, created_at DESC
-                    LIMIT $3 OFFSET $4
-                    "#,
-                )
-                .bind(user_id)
-                .bind(s)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&self.pool)
-                .await?
+                let query = format!(
+                    "SELECT {CONVERSATION_COLUMNS} FROM conversations \
+                     WHERE user_id = $1 AND status = $2 \
+                     ORDER BY last_message_at DESC NULLS LAST, created_at DESC \
+                     LIMIT $3 OFFSET $4"
+                );
+                sqlx::query_as::<_, Conversation>(&query)
+                    .bind(user_id)
+                    .bind(s)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await?
             }
             None => {
-                sqlx::query_as::<_, Conversation>(
-                    r#"
-                    SELECT id, user_id, title, model, system_prompt,
-                           status, message_count, last_message_at,
-                           created_at, updated_at
-                    FROM conversations
-                    WHERE user_id = $1 AND status = 'active'
-                    ORDER BY last_message_at DESC NULLS LAST, created_at DESC
-                    LIMIT $2 OFFSET $3
-                    "#,
-                )
-                .bind(user_id)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&self.pool)
-                .await?
+                let query = format!(
+                    "SELECT {CONVERSATION_COLUMNS} FROM conversations \
+                     WHERE user_id = $1 AND status = 'active' \
+                     ORDER BY last_message_at DESC NULLS LAST, created_at DESC \
+                     LIMIT $2 OFFSET $3"
+                );
+                sqlx::query_as::<_, Conversation>(&query)
+                    .bind(user_id)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await?
             }
         };
 
@@ -86,31 +77,24 @@ impl ConversationRepository {
 
     /// Create a new conversation
     pub async fn create(&self, conv: &Conversation) -> Result<Conversation> {
-        let created = sqlx::query_as::<_, Conversation>(
-            r#"
-            INSERT INTO conversations (
-                id, user_id, title, model, system_prompt,
-                status, message_count, last_message_at,
-                created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING id, user_id, title, model, system_prompt,
-                      status, message_count, last_message_at,
-                      created_at, updated_at
-            "#,
-        )
-        .bind(conv.id)
-        .bind(conv.user_id)
-        .bind(&conv.title)
-        .bind(&conv.model)
-        .bind(&conv.system_prompt)
-        .bind(conv.status)
-        .bind(conv.message_count)
-        .bind(conv.last_message_at)
-        .bind(conv.created_at)
-        .bind(conv.updated_at)
-        .fetch_one(&self.pool)
-        .await?;
+        let query = format!(
+            "INSERT INTO conversations ({CONVERSATION_COLUMNS}) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
+             RETURNING {CONVERSATION_COLUMNS}"
+        );
+        let created = sqlx::query_as::<_, Conversation>(&query)
+            .bind(conv.id)
+            .bind(conv.user_id)
+            .bind(&conv.title)
+            .bind(&conv.model)
+            .bind(&conv.system_prompt)
+            .bind(conv.status)
+            .bind(conv.message_count)
+            .bind(conv.last_message_at)
+            .bind(conv.created_at)
+            .bind(conv.updated_at)
+            .fetch_one(&self.pool)
+            .await?;
 
         Ok(created)
     }
@@ -122,25 +106,21 @@ impl ConversationRepository {
         title: Option<Option<String>>,
         status: Option<ConversationStatus>,
     ) -> Result<Option<Conversation>> {
-        // Build dynamic update; we pass all fields and use COALESCE
-        let updated = sqlx::query_as::<_, Conversation>(
-            r#"
-            UPDATE conversations SET
-                title = CASE WHEN $2 THEN $3 ELSE title END,
-                status = COALESCE($4, status),
-                updated_at = NOW()
-            WHERE id = $1
-            RETURNING id, user_id, title, model, system_prompt,
-                      status, message_count, last_message_at,
-                      created_at, updated_at
-            "#,
-        )
-        .bind(id)
-        .bind(title.is_some())
-        .bind(title.flatten())
-        .bind(status)
-        .fetch_optional(&self.pool)
-        .await?;
+        let query = format!(
+            "UPDATE conversations SET \
+                 title = CASE WHEN $2 THEN $3 ELSE title END, \
+                 status = COALESCE($4, status), \
+                 updated_at = NOW() \
+             WHERE id = $1 \
+             RETURNING {CONVERSATION_COLUMNS}"
+        );
+        let updated = sqlx::query_as::<_, Conversation>(&query)
+            .bind(id)
+            .bind(title.is_some())
+            .bind(title.flatten())
+            .bind(status)
+            .fetch_optional(&self.pool)
+            .await?;
 
         Ok(updated)
     }
@@ -151,22 +131,19 @@ impl ConversationRepository {
         id: Uuid,
         message_count_increment: i32,
     ) -> Result<Option<Conversation>> {
-        let updated = sqlx::query_as::<_, Conversation>(
-            r#"
-            UPDATE conversations SET
-                message_count = message_count + $2,
-                last_message_at = NOW(),
-                updated_at = NOW()
-            WHERE id = $1
-            RETURNING id, user_id, title, model, system_prompt,
-                      status, message_count, last_message_at,
-                      created_at, updated_at
-            "#,
-        )
-        .bind(id)
-        .bind(message_count_increment)
-        .fetch_optional(&self.pool)
-        .await?;
+        let query = format!(
+            "UPDATE conversations SET \
+                 message_count = message_count + $2, \
+                 last_message_at = NOW(), \
+                 updated_at = NOW() \
+             WHERE id = $1 \
+             RETURNING {CONVERSATION_COLUMNS}"
+        );
+        let updated = sqlx::query_as::<_, Conversation>(&query)
+            .bind(id)
+            .bind(message_count_increment)
+            .fetch_optional(&self.pool)
+            .await?;
 
         Ok(updated)
     }

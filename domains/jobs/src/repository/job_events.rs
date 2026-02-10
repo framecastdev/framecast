@@ -23,19 +23,12 @@ impl JobEventRepository {
         event_type: JobEventType,
         payload: serde_json::Value,
     ) -> Result<JobEventRecord> {
-        let row = sqlx::query_as::<_, JobEventRecord>(
-            r#"
-            INSERT INTO job_events (job_id, sequence, event_type, payload)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id, job_id, sequence, event_type, payload, created_at
-            "#,
+        let mut tx = self.pool.begin().await?;
+        let row = super::transactions::create_job_event_tx(
+            &mut tx, job_id, sequence, event_type, payload,
         )
-        .bind(job_id)
-        .bind(sequence)
-        .bind(&event_type)
-        .bind(sqlx::types::Json(payload))
-        .fetch_one(&self.pool)
         .await?;
+        tx.commit().await?;
         Ok(row)
     }
 
@@ -63,12 +56,9 @@ impl JobEventRepository {
 
     /// Get the next sequence number for a job
     pub async fn next_sequence(&self, job_id: Uuid) -> Result<i64> {
-        let row = sqlx::query_scalar::<_, i64>(
-            "SELECT COALESCE(MAX(sequence), 0) + 1 FROM job_events WHERE job_id = $1",
-        )
-        .bind(job_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let mut tx = self.pool.begin().await?;
+        let row = super::transactions::next_sequence_tx(&mut tx, job_id).await?;
+        tx.commit().await?;
         Ok(row)
     }
 }
