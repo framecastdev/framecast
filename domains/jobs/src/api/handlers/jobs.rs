@@ -663,7 +663,7 @@ pub async fn render_artifact(
     .bind(&output_filename)
     .bind(&output_s3_key)
     .bind(output_content_type)
-    .bind(0_i64) // unknown until render completes
+    .bind(1_i64) // placeholder; updated on job completion via callback
     .bind(&artifact.spec)
     .bind(created_job.id)
     .bind(now)
