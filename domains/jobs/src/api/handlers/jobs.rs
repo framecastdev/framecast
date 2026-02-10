@@ -8,7 +8,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use framecast_auth::AnyAuth;
-use framecast_common::{Error, Result, Urn};
+use framecast_common::{Error, Pagination, Result, Urn};
 use framecast_inngest::InngestEvent;
 use framecast_runpod::RenderRequest;
 use serde::{Deserialize, Serialize};
@@ -138,19 +138,21 @@ pub async fn list_jobs(
     State(state): State<JobsState>,
     Query(params): Query<ListJobsParams>,
 ) -> Result<Json<Vec<JobResponse>>> {
-    // Collect all owner URNs the user can access: personal + each team
-    let mut owner_urns = vec![Urn::user(ctx.user.id).to_string()];
-    for membership in &ctx.memberships {
-        owner_urns.push(Urn::team(membership.team_id).to_string());
-    }
+    let owner_urns = ctx.accessible_owner_urns();
 
-    let limit = params.limit.unwrap_or(20).clamp(1, 100);
-    let offset = params.offset.unwrap_or(0).max(0);
-
+    let pagination = Pagination {
+        offset: params.offset,
+        limit: params.limit,
+    };
     let jobs = state
         .repos
         .jobs
-        .list_by_owners(&owner_urns, params.status.as_ref(), limit, offset)
+        .list_by_owners(
+            &owner_urns,
+            params.status.as_ref(),
+            pagination.limit(),
+            pagination.offset(),
+        )
         .await?;
 
     let responses: Vec<JobResponse> = jobs.into_iter().map(Into::into).collect();

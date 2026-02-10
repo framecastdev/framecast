@@ -57,6 +57,15 @@ impl AuthContext {
         }
     }
 
+    /// Get all owner URNs accessible to this user: personal + each team membership
+    pub fn accessible_owner_urns(&self) -> Vec<String> {
+        let mut urns = vec![Urn::user(self.user.id).to_string()];
+        for membership in &self.memberships {
+            urns.push(Urn::team(membership.team_id).to_string());
+        }
+        urns
+    }
+
     /// Check if user has required scope (if using API key)
     pub fn has_scope(&self, required_scope: &str) -> bool {
         if let Some(api_key) = &self.api_key {
@@ -213,6 +222,41 @@ mod tests {
         assert!(ctx.has_scope("jobs:write"));
         assert!(ctx.has_scope("team:admin"));
         assert!(ctx.has_scope("anything"));
+    }
+
+    #[test]
+    fn test_accessible_owner_urns_includes_user_and_teams() {
+        let user = create_test_identity(AuthTier::Creator);
+        let user_id = user.id;
+        let team_a = Uuid::new_v4();
+        let team_b = Uuid::new_v4();
+
+        let ctx = AuthContext::new(
+            user,
+            vec![
+                create_test_membership(team_a, AuthRole::Owner),
+                create_test_membership(team_b, AuthRole::Member),
+            ],
+            None,
+        );
+
+        let urns = ctx.accessible_owner_urns();
+        assert_eq!(urns.len(), 3);
+        assert_eq!(urns[0], format!("framecast:user:{}", user_id));
+        assert_eq!(urns[1], format!("framecast:team:{}", team_a));
+        assert_eq!(urns[2], format!("framecast:team:{}", team_b));
+    }
+
+    #[test]
+    fn test_accessible_owner_urns_no_teams() {
+        let user = create_test_identity(AuthTier::Starter);
+        let user_id = user.id;
+
+        let ctx = AuthContext::new(user, vec![], None);
+
+        let urns = ctx.accessible_owner_urns();
+        assert_eq!(urns.len(), 1);
+        assert_eq!(urns[0], format!("framecast:user:{}", user_id));
     }
 
     // Test no API key means full access (has_scope returns true)

@@ -80,11 +80,7 @@ pub async fn list_artifacts(
     State(state): State<ArtifactsState>,
     Query(pagination): Query<Pagination>,
 ) -> Result<Json<Vec<ArtifactResponse>>> {
-    // Collect all owner URNs the user can access: personal + each team
-    let mut owner_urns = vec![Urn::user(ctx.user.id).to_string()];
-    for membership in &ctx.memberships {
-        owner_urns.push(Urn::team(membership.team_id).to_string());
-    }
+    let owner_urns = ctx.accessible_owner_urns();
 
     let artifacts = state
         .repos
