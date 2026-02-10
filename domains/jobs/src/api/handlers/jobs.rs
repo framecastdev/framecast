@@ -596,6 +596,12 @@ pub async fn render_artifact(
                 format!("renders/{}/{}.png", ctx.user.id, Uuid::new_v4()),
                 "image/png",
             ),
+            "storyboard" => (
+                "video",
+                format!("render-{}.mp4", artifact_id),
+                format!("renders/{}/{}.mp4", ctx.user.id, Uuid::new_v4()),
+                "video/mp4",
+            ),
             other => {
                 return Err(Error::Validation(format!(
                     "Artifact kind '{}' is not renderable",
