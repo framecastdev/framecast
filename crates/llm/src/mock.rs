@@ -4,8 +4,6 @@
 //! - `MockLlmService`: stateless echo mock used by `LlmServiceFactory`
 //! - `ConfigurableMockLlmService`: configurable mock with request recording
 
-use std::sync::{Arc, Mutex};
-
 use crate::{CompletionRequest, CompletionResponse, LlmArtifact, LlmError, LlmService};
 
 /// Mock LLM service for testing
@@ -116,6 +114,9 @@ pub struct RecordedRequest {
     pub messages: Vec<crate::LlmMessage>,
     pub max_tokens: Option<u32>,
 }
+
+#[cfg(any(test, feature = "test-support"))]
+use std::sync::{Arc, Mutex};
 
 #[cfg(any(test, feature = "test-support"))]
 /// Configurable mock LLM service with request recording
