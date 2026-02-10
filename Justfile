@@ -340,7 +340,7 @@ mutants *args="":
 
 # Run mutation testing on domain crates only (most valuable)
 mutants-domain *args="":
-    cargo mutants --jobs 4 -p framecast-teams -p framecast-projects -p framecast-jobs -p framecast-webhooks -p framecast-artifacts -p framecast-conversations {{args}}
+    cargo mutants --jobs 4 -p framecast-teams -p framecast-jobs -p framecast-artifacts -p framecast-conversations {{args}}
 
 # Quick check — only test missed mutants from last run
 mutants-check *args="":

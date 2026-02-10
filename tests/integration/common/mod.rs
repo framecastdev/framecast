@@ -104,39 +104,7 @@ impl TestApp {
 
     /// Create test user in database
     pub async fn create_test_user(&self, tier: UserTier) -> Result<User> {
-        let user_id = Uuid::new_v4();
-        let email = format!("test_{}@framecast.test", user_id.simple());
-        let name = Some(format!("Test User {}", &user_id.to_string()[0..8]));
-
-        let mut user = User::new(user_id, email, name)?;
-        user.tier = tier;
-
-        // Set upgraded_at for creator users (INV-U1)
-        if tier == UserTier::Creator {
-            user.upgraded_at = Some(Utc::now());
-        }
-
-        let user_tier = user.tier;
-
-        // Insert into database (using runtime query to avoid sqlx offline mode issues in tests)
-        sqlx::query(
-            r#"
-            INSERT INTO users (id, email, name, tier, credits, ephemeral_storage_bytes, upgraded_at, created_at, updated_at)
-            VALUES ($1, $2, $3, $4::user_tier, $5, $6, $7, $8, $9)
-            "#,
-        )
-        .bind(user.id)
-        .bind(&user.email)
-        .bind(&user.name)
-        .bind(user_tier.to_string())
-        .bind(user.credits)
-        .bind(user.ephemeral_storage_bytes)
-        .bind(user.upgraded_at)
-        .bind(user.created_at)
-        .bind(user.updated_at)
-        .execute(&self.pool).await?;
-
-        Ok(user)
+        create_test_user_in_db(&self.pool, tier).await
     }
 
     /// Create test team in database with owner membership
@@ -194,16 +162,7 @@ impl TestApp {
 
     /// Clean up test data (call in test teardown)
     pub async fn cleanup(&self) -> Result<()> {
-        // Use TRUNCATE CASCADE to bypass foreign key constraints and triggers
-        // This is test-only cleanup, so we can bypass the INV-T1 constraint
-        // Using runtime query to avoid sqlx offline mode issues in tests
-        sqlx::query(
-            "TRUNCATE TABLE jobs, job_events, message_artifacts, messages, artifacts, conversations, \
-             api_keys, invitations, memberships, teams, users CASCADE",
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        cleanup_all(&self.pool).await
     }
 
     /// Create test router with all routes wired to this app's state

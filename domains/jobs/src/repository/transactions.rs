@@ -1,5 +1,6 @@
 //! Transaction helpers for Jobs domain
 
+use super::jobs::JOB_COLUMNS;
 use crate::domain::entities::{Job, JobEventRecord, JobEventType};
 use sqlx::{Postgres, Transaction};
 
@@ -26,30 +27,27 @@ pub async fn update_job_tx(
     tx: &mut Transaction<'_, Postgres>,
     job: &Job,
 ) -> Result<Job, sqlx::Error> {
-    let row = sqlx::query_as::<_, Job>(
-        r#"
-        UPDATE jobs SET
-            status = $2, progress = $3, output = $4, output_size_bytes = $5,
-            error = $6, failure_type = $7, credits_refunded = $8,
-            started_at = $9, completed_at = $10, updated_at = NOW()
-        WHERE id = $1
-        RETURNING id, owner, triggered_by, project_id, status, spec_snapshot, options, progress,
-                  output, output_size_bytes, error, credits_charged, failure_type,
-                  credits_refunded, idempotency_key, started_at, completed_at, created_at, updated_at
-        "#,
-    )
-    .bind(job.id)
-    .bind(&job.status)
-    .bind(&job.progress)
-    .bind(&job.output)
-    .bind(job.output_size_bytes)
-    .bind(&job.error)
-    .bind(&job.failure_type)
-    .bind(job.credits_refunded)
-    .bind(job.started_at)
-    .bind(job.completed_at)
-    .fetch_one(&mut **tx)
-    .await?;
+    let query = format!(
+        "UPDATE jobs SET \
+            status = $2, progress = $3, output = $4, output_size_bytes = $5, \
+            error = $6, failure_type = $7, credits_refunded = $8, \
+            started_at = $9, completed_at = $10, updated_at = NOW() \
+         WHERE id = $1 \
+         RETURNING {JOB_COLUMNS}"
+    );
+    let row = sqlx::query_as::<_, Job>(&query)
+        .bind(job.id)
+        .bind(&job.status)
+        .bind(&job.progress)
+        .bind(&job.output)
+        .bind(job.output_size_bytes)
+        .bind(&job.error)
+        .bind(&job.failure_type)
+        .bind(job.credits_refunded)
+        .bind(job.started_at)
+        .bind(job.completed_at)
+        .fetch_one(&mut **tx)
+        .await?;
     Ok(row)
 }
 
@@ -72,39 +70,33 @@ pub async fn create_job_tx(
     tx: &mut Transaction<'_, Postgres>,
     job: &Job,
 ) -> Result<Job, sqlx::Error> {
-    let row = sqlx::query_as::<_, Job>(
-        r#"
-        INSERT INTO jobs (id, owner, triggered_by, project_id, status, spec_snapshot, options,
-                          progress, output, output_size_bytes, error, credits_charged,
-                          failure_type, credits_refunded, idempotency_key,
-                          started_at, completed_at, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-        RETURNING id, owner, triggered_by, project_id, status, spec_snapshot, options, progress,
-                  output, output_size_bytes, error, credits_charged, failure_type,
-                  credits_refunded, idempotency_key, started_at, completed_at, created_at, updated_at
-        "#,
-    )
-    .bind(job.id)
-    .bind(&job.owner)
-    .bind(job.triggered_by)
-    .bind(job.project_id)
-    .bind(&job.status)
-    .bind(&job.spec_snapshot)
-    .bind(&job.options)
-    .bind(&job.progress)
-    .bind(&job.output)
-    .bind(job.output_size_bytes)
-    .bind(&job.error)
-    .bind(job.credits_charged)
-    .bind(&job.failure_type)
-    .bind(job.credits_refunded)
-    .bind(&job.idempotency_key)
-    .bind(job.started_at)
-    .bind(job.completed_at)
-    .bind(job.created_at)
-    .bind(job.updated_at)
-    .fetch_one(&mut **tx)
-    .await?;
+    let query = format!(
+        "INSERT INTO jobs ({JOB_COLUMNS}) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) \
+         RETURNING {JOB_COLUMNS}"
+    );
+    let row = sqlx::query_as::<_, Job>(&query)
+        .bind(job.id)
+        .bind(&job.owner)
+        .bind(job.triggered_by)
+        .bind(job.project_id)
+        .bind(&job.status)
+        .bind(&job.spec_snapshot)
+        .bind(&job.options)
+        .bind(&job.progress)
+        .bind(&job.output)
+        .bind(job.output_size_bytes)
+        .bind(&job.error)
+        .bind(job.credits_charged)
+        .bind(&job.failure_type)
+        .bind(job.credits_refunded)
+        .bind(&job.idempotency_key)
+        .bind(job.started_at)
+        .bind(job.completed_at)
+        .bind(job.created_at)
+        .bind(job.updated_at)
+        .fetch_one(&mut **tx)
+        .await?;
     Ok(row)
 }
 
