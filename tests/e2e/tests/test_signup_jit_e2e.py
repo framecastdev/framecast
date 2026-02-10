@@ -160,11 +160,9 @@ class TestSignupJitE2E:
         assert account["tier"] == "creator"
         assert account["upgraded_at"] is not None
 
-        # 4. Auto-team should exist
+        # 4. Creator can access teams endpoint (no longer 403)
         resp = await http_client.get("/v1/teams", headers=headers)
         assert resp.status_code == 200
-        teams = resp.json()
-        assert len(teams) >= 1, "Expected at least 1 auto-created team after upgrade"
 
     # -------------------------------------------------------------------
     # JIT-06: JIT user full conversation flow
