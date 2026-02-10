@@ -1,14 +1,15 @@
 //! Mock render admin endpoints for E2E testing
 
 use axum::{extract::State, http::StatusCode, Json};
-use framecast_common::{Error, Result};
+use framecast_common::{Error, Result, ValidatedJson};
 use framecast_runpod::mock::MockOutcome;
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
 use crate::api::middleware::GenerationsState;
 
 /// Request to configure mock render behavior
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct ConfigureMockRequest {
     pub outcome: Option<String>,
     pub delay_ms: Option<u64>,
@@ -29,7 +30,7 @@ pub struct MockHistoryEntry {
 /// Configure mock render behavior
 pub async fn configure_mock(
     State(state): State<GenerationsState>,
-    Json(req): Json<ConfigureMockRequest>,
+    ValidatedJson(req): ValidatedJson<ConfigureMockRequest>,
 ) -> Result<StatusCode> {
     let behavior = state
         .mock_render_behavior

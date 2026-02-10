@@ -170,6 +170,30 @@ in the current layer. Add it when it's actually implemented.
 YAGNI: code that does nothing today is noise — it creates unused API surface,
 confuses mutation testing, and misleads readers about what the code actually does.
 
+### Rule 13: ValidatedJson for All JSON Request Bodies
+
+**NEVER** use axum's plain `Json<T>` extractor in handler function signatures.
+Always use `ValidatedJson<T>` from `framecast_common`. Plain `Json<T>` returns
+**422** on deserialization errors; `ValidatedJson<T>` normalizes all input
+errors (deserialization + validation) to **400**.
+
+```rust
+// ✅ CORRECT — ValidatedJson returns 400 for all input errors
+use framecast_common::ValidatedJson;
+
+pub async fn my_handler(
+    ValidatedJson(req): ValidatedJson<MyRequest>,
+) -> Result<Json<MyResponse>> { ... }
+
+// ❌ FORBIDDEN — Plain Json returns 422 for deserialization errors
+pub async fn my_handler(
+    Json(req): Json<MyRequest>,
+) -> Result<Json<MyResponse>> { ... }
+```
+
+The request struct must derive `Validate` (from the `validator` crate).
+If no validation rules are needed, a bare `#[derive(Validate)]` is sufficient.
+
 ### Compliance Check
 
 Before executing ANY command, ask yourself:
@@ -188,6 +212,7 @@ Before executing ANY command, ask yourself:
 - Am I working on main branch? → STOP, create feature branch
 - Am I about to run tests/clippy/fmt/checks locally? → STOP, let CI do it
 - Am I adding placeholder code? → STOP, YAGNI — add it when it's needed
+- Am I using plain `Json<T>` in a handler? → STOP, use `ValidatedJson<T>` (400, not 422)
 </law>
 
 ---

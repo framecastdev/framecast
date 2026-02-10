@@ -29,7 +29,7 @@ pub struct CreateConversationRequest {
 }
 
 /// Request for updating a conversation
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct UpdateConversationRequest {
     pub title: Option<String>,
     pub status: Option<ConversationStatus>,
@@ -144,7 +144,7 @@ pub async fn update_conversation(
     AnyAuth(ctx): AnyAuth,
     State(state): State<ConversationsState>,
     Path(id): Path<Uuid>,
-    Json(req): Json<UpdateConversationRequest>,
+    ValidatedJson(req): ValidatedJson<UpdateConversationRequest>,
 ) -> Result<Json<ConversationResponse>> {
     // Verify ownership
     let conv = state
