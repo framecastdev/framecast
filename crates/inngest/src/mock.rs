@@ -22,12 +22,18 @@ impl MockInngestService {
 
     /// Return all recorded events.
     pub fn recorded_events(&self) -> Vec<InngestEvent> {
-        self.events.lock().unwrap().clone()
+        self.events
+            .lock()
+            .expect("events lock poisoned — prior test panicked")
+            .clone()
     }
 
     /// Clear all recorded events.
     pub fn reset(&self) {
-        self.events.lock().unwrap().clear();
+        self.events
+            .lock()
+            .expect("events lock poisoned — prior test panicked")
+            .clear();
     }
 }
 
@@ -41,13 +47,19 @@ impl Default for MockInngestService {
 impl InngestService for MockInngestService {
     async fn send_event(&self, event: InngestEvent) -> Result<(), InngestError> {
         tracing::debug!(event_name = %event.name, "Mock Inngest: recording event");
-        self.events.lock().unwrap().push(event);
+        self.events
+            .lock()
+            .map_err(|e| InngestError::Request(format!("events lock poisoned: {e}")))?
+            .push(event);
         Ok(())
     }
 
     async fn send_events(&self, events: Vec<InngestEvent>) -> Result<(), InngestError> {
         tracing::debug!(count = events.len(), "Mock Inngest: recording events");
-        let mut stored = self.events.lock().unwrap();
+        let mut stored = self
+            .events
+            .lock()
+            .map_err(|e| InngestError::Request(format!("events lock poisoned: {e}")))?;
         stored.extend(events);
         Ok(())
     }

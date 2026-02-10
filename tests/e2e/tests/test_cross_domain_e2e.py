@@ -661,7 +661,7 @@ class TestCrossDomainE2E:
         assert resp.status_code == 401
 
     # -----------------------------------------------------------------------
-    # Jobs Cross-Domain (XD31-XD35)
+    # Generations Cross-Domain (XD31-XD35)
     # -----------------------------------------------------------------------
 
     async def test_xd31_render_creates_generation_and_artifact(
@@ -764,7 +764,7 @@ class TestCrossDomainE2E:
         # Create an API key
         resp = await http_client.post(
             "/v1/auth/keys",
-            json={"name": "Job List Key", "scopes": ["*"]},
+            json={"name": "Generation List Key", "scopes": ["*"]},
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
@@ -791,7 +791,7 @@ class TestCrossDomainE2E:
         # Create an API key
         resp = await http_client.post(
             "/v1/auth/keys",
-            json={"name": "Job Create Key", "scopes": ["*"]},
+            json={"name": "Generation Create Key", "scopes": ["*"]},
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201

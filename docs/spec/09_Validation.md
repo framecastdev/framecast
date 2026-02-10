@@ -206,26 +206,26 @@ for generation lifecycle events.
 ### Valid Webhook Events
 
 ```
-- generation.queued       : Job entered queue
-- generation.started      : Job processing began
-- generation.progress     : Job progress update (throttled to max 1/sec per job)
-- generation.completed    : Job finished successfully
-- generation.failed       : Job failed
-- job.canceled     : Job was canceled
+- generation.queued       : Generation entered queue
+- generation.started      : Generation processing began
+- generation.progress     : Generation progress update (throttled to max 1/sec per generation)
+- generation.completed    : Generation finished successfully
+- generation.failed       : Generation failed
+- generation.canceled     : Generation was canceled
 ```
 
 ### Payload Schemas
 
-#### job.queued / job.started
+#### generation.queued / generation.started
 
-Sent when a job enters the queue or starts processing.
+Sent when a generation enters the queue or starts processing.
 
 ```json
 {
-  "event": "job.queued",
+  "event": "generation.queued",
   "timestamp": "2025-01-29T12:00:00Z",
   "delivery_id": "uuid",
-  "job": {
+  "generation": {
     "id": "uuid",
     "owner": "framecast:team:tm_xyz",
     "project_id": "uuid or null",
@@ -238,26 +238,26 @@ Sent when a job enters the queue or starts processing.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | string | Event type: "job.queued" or "job.started" |
+| `event` | string | Event type: "generation.queued" or "generation.started" |
 | `timestamp` | string | ISO 8601 timestamp when event occurred |
 | `delivery_id` | string | Unique UUID for this webhook delivery (for deduplication) |
-| `job.id` | string | Unique job identifier |
-| `job.owner` | string | URN of job owner (user or team) |
-| `job.project_id` | string or null | Associated project ID if applicable |
-| `job.triggered_by` | string | User ID who triggered the job |
-| `job.status` | string | Current job status ("queued" or "started") |
-| `job.created_at` | string | ISO 8601 timestamp when job was created |
+| `generation.id` | string | Unique generation identifier |
+| `generation.owner` | string | URN of generation owner (user or team) |
+| `generation.project_id` | string or null | Associated project ID if applicable |
+| `generation.triggered_by` | string | User ID who triggered the generation |
+| `generation.status` | string | Current generation status ("queued" or "started") |
+| `generation.created_at` | string | ISO 8601 timestamp when generation was created |
 
-#### job.progress
+#### generation.progress
 
-Sent periodically during job processing (throttled to max 1 per second per job).
+Sent periodically during generation processing (throttled to max 1 per second per generation).
 
 ```json
 {
-  "event": "job.progress",
+  "event": "generation.progress",
   "timestamp": "2025-01-29T12:02:00Z",
   "delivery_id": "uuid",
-  "job": {
+  "generation": {
     "id": "uuid",
     "status": "processing",
     "progress": {
@@ -273,27 +273,27 @@ Sent periodically during job processing (throttled to max 1 per second per job).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | string | Event type: "job.progress" |
+| `event` | string | Event type: "generation.progress" |
 | `timestamp` | string | ISO 8601 timestamp when event occurred |
 | `delivery_id` | string | Unique UUID for this webhook delivery |
-| `job.id` | string | Unique job identifier |
-| `job.status` | string | Current job status ("processing") |
-| `job.progress.phase` | string | Current processing phase (e.g., "generating", "encoding") |
-| `job.progress.percent` | number | Overall completion percentage (0-100) |
-| `job.progress.scenes_total` | number | Total number of scenes to process |
-| `job.progress.scenes_completed` | number | Number of scenes successfully processed |
-| `job.progress.current_scene` | string | ID of scene currently being processed |
+| `generation.id` | string | Unique generation identifier |
+| `generation.status` | string | Current generation status ("processing") |
+| `generation.progress.phase` | string | Current processing phase (e.g., "generating", "encoding") |
+| `generation.progress.percent` | number | Overall completion percentage (0-100) |
+| `generation.progress.scenes_total` | number | Total number of scenes to process |
+| `generation.progress.scenes_completed` | number | Number of scenes successfully processed |
+| `generation.progress.current_scene` | string | ID of scene currently being processed |
 
-#### job.completed
+#### generation.completed
 
-Sent when a job finishes successfully.
+Sent when a generation finishes successfully.
 
 ```json
 {
-  "event": "job.completed",
+  "event": "generation.completed",
   "timestamp": "2025-01-29T12:05:00Z",
   "delivery_id": "uuid",
-  "job": {
+  "generation": {
     "id": "uuid",
     "owner": "framecast:team:tm_xyz",
     "project_id": "uuid or null",
@@ -314,32 +314,32 @@ Sent when a job finishes successfully.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | string | Event type: "job.completed" |
+| `event` | string | Event type: "generation.completed" |
 | `timestamp` | string | ISO 8601 timestamp when event occurred |
 | `delivery_id` | string | Unique UUID for this webhook delivery |
-| `job.id` | string | Unique job identifier |
-| `job.owner` | string | URN of job owner |
-| `job.project_id` | string or null | Associated project ID if applicable |
-| `job.status` | string | Current job status ("completed") |
-| `job.output.video_url` | string | Presigned S3 URL to final video (expires in 1 hour) |
-| `job.output.thumbnail_url` | string | Presigned S3 URL to thumbnail (expires in 1 hour) |
-| `job.output.duration` | number | Video duration in seconds |
-| `job.output.resolution` | string | Video resolution (e.g., "1920x1080") |
-| `job.output.size_bytes` | number | Final video file size in bytes |
-| `job.credits_charged` | number | Total credits charged for this job |
-| `job.started_at` | string | ISO 8601 timestamp when processing started |
-| `job.completed_at` | string | ISO 8601 timestamp when processing completed |
+| `generation.id` | string | Unique generation identifier |
+| `generation.owner` | string | URN of generation owner |
+| `generation.project_id` | string or null | Associated project ID if applicable |
+| `generation.status` | string | Current generation status ("completed") |
+| `generation.output.video_url` | string | Presigned S3 URL to final video (expires in 1 hour) |
+| `generation.output.thumbnail_url` | string | Presigned S3 URL to thumbnail (expires in 1 hour) |
+| `generation.output.duration` | number | Video duration in seconds |
+| `generation.output.resolution` | string | Video resolution (e.g., "1920x1080") |
+| `generation.output.size_bytes` | number | Final video file size in bytes |
+| `generation.credits_charged` | number | Total credits charged for this generation |
+| `generation.started_at` | string | ISO 8601 timestamp when processing started |
+| `generation.completed_at` | string | ISO 8601 timestamp when processing completed |
 
-#### job.failed
+#### generation.failed
 
-Sent when a job fails during processing.
+Sent when a generation fails during processing.
 
 ```json
 {
-  "event": "job.failed",
+  "event": "generation.failed",
   "timestamp": "2025-01-29T12:05:00Z",
   "delivery_id": "uuid",
-  "job": {
+  "generation": {
     "id": "uuid",
     "status": "failed",
     "failure_type": "system",
@@ -362,32 +362,32 @@ Sent when a job fails during processing.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | string | Event type: "job.failed" |
+| `event` | string | Event type: "generation.failed" |
 | `timestamp` | string | ISO 8601 timestamp when event occurred |
 | `delivery_id` | string | Unique UUID for this webhook delivery |
-| `job.id` | string | Unique job identifier |
-| `job.status` | string | Current job status ("failed") |
-| `job.failure_type` | string | Type of failure: "system", "timeout", "validation", or "user_error" |
-| `job.error.code` | string | Machine-readable error code |
-| `job.error.message` | string | Human-readable error description |
-| `job.error.scene_id` | string | Scene ID that caused failure (if applicable) |
-| `job.progress.phase` | string | Processing phase where failure occurred |
-| `job.progress.percent` | number | Completion percentage at time of failure (0-100) |
-| `job.progress.scenes_completed` | number | Number of scenes successfully processed before failure |
-| `job.credits_charged` | number | Credits charged before failure |
-| `job.credits_refunded` | number | Credits refunded based on failure type and progress |
-| `job.completed_at` | string | ISO 8601 timestamp when job terminated |
+| `generation.id` | string | Unique generation identifier |
+| `generation.status` | string | Current generation status ("failed") |
+| `generation.failure_type` | string | Type of failure: "system", "timeout", "validation", or "user_error" |
+| `generation.error.code` | string | Machine-readable error code |
+| `generation.error.message` | string | Human-readable error description |
+| `generation.error.scene_id` | string | Scene ID that caused failure (if applicable) |
+| `generation.progress.phase` | string | Processing phase where failure occurred |
+| `generation.progress.percent` | number | Completion percentage at time of failure (0-100) |
+| `generation.progress.scenes_completed` | number | Number of scenes successfully processed before failure |
+| `generation.credits_charged` | number | Credits charged before failure |
+| `generation.credits_refunded` | number | Credits refunded based on failure type and progress |
+| `generation.completed_at` | string | ISO 8601 timestamp when generation terminated |
 
-#### job.canceled
+#### generation.canceled
 
-Sent when a job is explicitly canceled by the user or system.
+Sent when a generation is explicitly canceled by the user or system.
 
 ```json
 {
-  "event": "job.canceled",
+  "event": "generation.canceled",
   "timestamp": "2025-01-29T12:03:00Z",
   "delivery_id": "uuid",
-  "job": {
+  "generation": {
     "id": "uuid",
     "status": "canceled",
     "canceled_by": "uuid",
@@ -403,16 +403,16 @@ Sent when a job is explicitly canceled by the user or system.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | string | Event type: "job.canceled" |
+| `event` | string | Event type: "generation.canceled" |
 | `timestamp` | string | ISO 8601 timestamp when event occurred |
 | `delivery_id` | string | Unique UUID for this webhook delivery |
-| `job.id` | string | Unique job identifier |
-| `job.status` | string | Current job status ("canceled") |
-| `job.canceled_by` | string | User ID who canceled the job |
-| `job.progress.percent` | number | Completion percentage at cancellation time (0-100) |
-| `job.credits_charged` | number | Credits charged before cancellation |
-| `job.credits_refunded` | number | Partial refund based on progress (with 10% cancellation fee) |
-| `job.completed_at` | string | ISO 8601 timestamp when cancellation took effect |
+| `generation.id` | string | Unique generation identifier |
+| `generation.status` | string | Current generation status ("canceled") |
+| `generation.canceled_by` | string | User ID who canceled the generation |
+| `generation.progress.percent` | number | Completion percentage at cancellation time (0-100) |
+| `generation.credits_charged` | number | Credits charged before cancellation |
+| `generation.credits_refunded` | number | Partial refund based on progress (with 10% cancellation fee) |
+| `generation.completed_at` | string | ISO 8601 timestamp when cancellation took effect |
 
 ### HTTP Headers
 
@@ -495,14 +495,14 @@ Framecast webhook delivery provides the following guarantees:
 
 - Best-effort timeliness: Events are delivered within 30 seconds of occurrence (best effort, not guaranteed).
 
-- No ordering guarantee: For concurrent events, delivery order is not guaranteed. Clients SHOULD use timestamps and job status to order events.
+- No ordering guarantee: For concurrent events, delivery order is not guaranteed. Clients SHOULD use timestamps and generation status to order events.
 ```
 
 **Implementation Notes:**
 
 - **Deduplication:** Store received delivery_ids and ignore duplicate events
 - **Idempotency:** Design webhook handlers to be idempotent (safe to call multiple times)
-- **Ordering:** Use job status and timestamps to reconstruct correct state rather than relying on event order
+- **Ordering:** Use generation status and timestamps to reconstruct correct state rather than relying on event order
 - **Retry Logic:** The API will retry failed deliveries with exponential backoff for 24 hours
 - **Timeouts:** Your webhook endpoint should respond within 5 seconds with HTTP 2xx status
 

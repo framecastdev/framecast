@@ -215,12 +215,12 @@ const WELCOME_SPEC: Spec = {
 
 ---
 
-## Appendix C: Job Progress Schema (JSONB)
+## Appendix C: Generation Progress Schema (JSONB)
 
-Schema for tracking job rendering progress across phases with scene-level detail and previews.
+Schema for tracking generation rendering progress across phases with scene-level detail and previews.
 
 ```typescript
-interface JobProgress {
+interface GenerationProgress {
   phase: 'queued' | 'initializing' | 'generating' | 'stitching' | 'finalizing';
   percent: number;  // 0-100
 
@@ -240,12 +240,12 @@ interface JobProgress {
 
 ---
 
-## Appendix D: Job Output Schema (JSONB)
+## Appendix D: Generation Output Schema (JSONB)
 
-Schema for final job output including video, clips, metadata, and resolution information.
+Schema for final generation output including video, clips, metadata, and resolution information.
 
 ```typescript
-interface JobOutput {
+interface GenerationOutput {
   video_url: string;
 
   scene_clips?: Array<{
@@ -273,7 +273,7 @@ interface JobOutput {
 
 ## Appendix E: Estimate Response Schema
 
-Schema for job estimation responses providing cost and timing forecasts.
+Schema for generation estimation responses providing cost and timing forecasts.
 
 ```typescript
 interface EstimateResponse {
@@ -313,8 +313,8 @@ based on user feedback and platform maturity.
 |---------|-------------|-----------|
 | SymbolTemplate | Team-level reusable symbols | Simplify v1; inline symbols sufficient |
 | TransitionPreset (shared) | Team-level reusable transitions | Simplify v1; inline presets sufficient |
-| ProjectVersion | Full edit history | job.spec_snapshot covers rendered versions |
-| Job Priority | Queue priority levels | Single queue for v1 |
+| ProjectVersion | Full edit history | generation.spec_snapshot covers rendered versions |
+| Generation Priority | Queue priority levels | Single queue for v1 |
 | Spec Templates | System-provided starter templates | WELCOME_SPEC covers onboarding |
 | AssetFile orphan cleanup | Automatic cleanup of unreferenced assets | Explicit asset management for v1 |
 | Free tier | Zero-cost access | Credits-based from start |
@@ -328,7 +328,7 @@ based on user feedback and platform maturity.
 | Status | Count | Features |
 |--------|-------|----------|
 | Supported (v0.4.1) | 2 | Team Creation, Credit Refunds |
-| Deferred | 11 | SymbolTemplate, TransitionPreset (shared), ProjectVersion, Job Priority, Spec Templates, AssetFile orphan cleanup, Free tier, TTS Integration, AI Music Generation, Voice Cloning, Ownership Transfer |
+| Deferred | 11 | SymbolTemplate, TransitionPreset (shared), ProjectVersion, Generation Priority, Spec Templates, AssetFile orphan cleanup, Free tier, TTS Integration, AI Music Generation, Voice Cloning, Ownership Transfer |
 
 ### Rationale for Deferral
 
@@ -338,9 +338,9 @@ These features are deferred to maintain focus on core functionality in v1:
   Inline definitions provide sufficient capability;
   shared templates can be implemented once teams stabilize
 - **History and Versioning** (ProjectVersion):
-  Current `job.spec_snapshot` mechanism provides rendered version tracking;
+  Current `generation.spec_snapshot` mechanism provides rendered version tracking;
   full edit history deferred for UI/UX simplification
-- **Queue Management** (Job Priority):
+- **Queue Management** (Generation Priority):
   Single FIFO queue adequate for launch;
   priority queues deferred pending user demand and performance metrics
 - **Content Generation** (TTS, AI Music, Voice Cloning):
