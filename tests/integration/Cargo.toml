@@ -34,6 +34,9 @@ framecast-conversations = { workspace = true }
 framecast-llm = { workspace = true, features = ["test-support"] }
 framecast-email = { workspace = true }
 framecast-common = { workspace = true }
+framecast-jobs = { workspace = true }
+framecast-inngest = { workspace = true }
+framecast-runpod = { workspace = true }
 
 # === Authentication Testing ===
 jsonwebtoken = { workspace = true }
