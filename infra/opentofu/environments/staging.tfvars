@@ -12,6 +12,9 @@ lambda_timeout     = 30
 # S3 configuration
 outputs_expiration_days = 60
 
+# CORS (staging frontend)
+cors_allow_origins = ["https://staging.framecast.app"]
+
 # Monitoring (enabled for staging)
 enable_monitoring = true
 

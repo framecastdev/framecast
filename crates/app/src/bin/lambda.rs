@@ -2,10 +2,10 @@
 
 use lambda_http::{run, Error};
 use sqlx::PgPool;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use framecast_app::create_app;
+use framecast_app::{body_limit_layer, build_cors_layer, create_app};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -30,9 +30,13 @@ async fn main() -> Result<(), Error> {
         .await
         .map_err(|e| Error::from(format!("App initialization error: {}", e)))?;
 
+    let cors_origins = std::env::var("CORS_ALLOWED_ORIGINS")
+        .map_err(|_| Error::from("CORS_ALLOWED_ORIGINS environment variable is required"))?;
+
     let app = app
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive());
+        .layer(build_cors_layer(&cors_origins))
+        .layer(body_limit_layer());
 
     info!("Framecast API Lambda ready to serve requests");
 
