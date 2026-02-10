@@ -103,12 +103,12 @@ class TestRenderFlowE2E:
         )
         assert resp.status_code == 404
 
-    async def test_rf05_render_storyboard_rejected(
+    async def test_rf05_render_storyboard_creates_video(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-05: Render storyboard -> 400/422 (only characters are renderable)."""
+        """RF-05: Render storyboard -> 201, returns job + pending video artifact."""
         owner = seed_users.owner
 
         storyboard = await create_storyboard(http_client, owner.auth_headers())
@@ -116,7 +116,11 @@ class TestRenderFlowE2E:
             f"/v1/artifacts/{storyboard['id']}/render",
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422]
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["job"]["status"] == "queued"
+        assert body["artifact"]["kind"] == "video"
+        assert body["artifact"]["status"] == "pending"
 
     async def test_rf06_render_no_auth_returns_401(
         self,

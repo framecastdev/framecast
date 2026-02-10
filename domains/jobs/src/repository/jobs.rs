@@ -144,6 +144,14 @@ impl JobRepository {
 
     /// Delete a job by ID
     pub async fn delete(&self, id: Uuid) -> Result<bool> {
+        // Clear artifact references (source_job_consistency CHECK requires
+        // source_job_id IS NOT NULL when source = 'job', so clear both)
+        sqlx::query(
+            "UPDATE artifacts SET source_job_id = NULL, source = 'conversation' WHERE source_job_id = $1",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
         // Delete job events first (FK constraint)
         sqlx::query("DELETE FROM job_events WHERE job_id = $1")
             .bind(id)
