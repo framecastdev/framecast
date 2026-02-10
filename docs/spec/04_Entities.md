@@ -163,7 +163,7 @@ Derived:
 
 ```
 Entity: Project
-Description: A storyboard project containing spec and rendering jobs
+Description: A storyboard project containing spec and rendering generations
 
 Attributes:
   id            : UUID PK
@@ -185,22 +185,22 @@ Triggers:
   - ON UPDATE: SET updated_at = now()
 ```
 
-## 4.7 Job
+## 4.7 Generation
 
 ```
-Entity: Job
-Description: A video generation job, either ephemeral or project-based
+Entity: Generation
+Description: A video generation, either ephemeral or project-based
 
 Attributes:
   id              : UUID PK
   owner           : URN (determines visibility and storage quota)
-  triggered_by    : UUID FK Ã¢â€ â€™ User (who created the job)
+  triggered_by    : UUID FK Ã¢â€ â€™ User (who created the generation)
   project_id      : UUID? FK Ã¢â€ â€™ Project (ON DELETE SET NULL)
-                    -- NULL for ephemeral jobs
-                    -- Set for project-based jobs
+                    -- NULL for ephemeral generations
+                    -- Set for project-based generations
   status          : {queued | processing | completed | failed | canceled}
                     DEFAULT queued
-  spec_snapshot   : JSONB (immutable copy of spec at job creation)
+  spec_snapshot   : JSONB (immutable copy of spec at generation creation)
   options         : JSONB DEFAULT {}
   progress        : JSONB DEFAULT {}
   output          : JSONB? (set on completion)
@@ -211,7 +211,7 @@ Attributes:
                     -- Set when status becomes 'failed' or 'canceled'
                     -- system: Infrastructure/service error (refundable)
                     -- validation: Spec issue detected during generation
-                    -- timeout: Job exceeded max processing time
+                    -- timeout: Generation exceeded max processing time
                     -- canceled: User-initiated cancellation
   credits_refunded : Integer DEFAULT 0
                     -- Credits returned to owner on failure/cancel
@@ -231,9 +231,9 @@ Indexes:
 
 Constraints:
   - (project_id IS NOT NULL) Ã¢â€ â€™ (owner STARTS WITH 'framecast:team:')
-    (project jobs are always team-owned)
+    (project generations are always team-owned)
   - status Ã¢Ë†Ë† {completed, failed, canceled} Ã¢â€ â€™ completed_at IS NOT NULL
-    (terminal jobs have completion timestamp)
+    (terminal generations have completion timestamp)
 
 Triggers:
   - ON UPDATE: SET updated_at = now()
@@ -244,39 +244,39 @@ Derived:
   net_credits Ã¢â€°Â¡ credits_charged - credits_refunded
 ```
 
-## 4.8 JobEvent
+## 4.8 GenerationEvent
 
 ```
-Entity: JobEvent
-Description: Progress events emitted during job execution (for SSE)
+Entity: GenerationEvent
+Description: Progress events emitted during generation execution (for SSE)
 
 Attributes:
   id            : UUID PK
-  job_id        : UUID FK Ã¢â€ â€™ Job (ON DELETE CASCADE)
-  sequence      : BigInt (monotonically increasing per job)         // Ã¢â€ Â NEW in v0.4.0
+  generation_id : UUID FK Ã¢â€ â€™ Generation (ON DELETE CASCADE)
+  sequence      : BigInt (monotonically increasing per generation)         // Ã¢â€ Â NEW in v0.4.0
   event_type    : {queued | started | progress | scene_complete | completed | failed | canceled}
   payload       : JSONB
   created_at    : Timestamp DEFAULT now()
 
 Indexes:
-  - INDEX(job_id, created_at ASC)
-  - INDEX(job_id, sequence ASC)                                      // Ã¢â€ Â NEW in v0.4.0
+  - INDEX(generation_id, created_at ASC)
+  - INDEX(generation_id, sequence ASC)                                      // Ã¢â€ Â NEW in v0.4.0
 
 Retention:
   - DELETE WHERE created_at < now() - INTERVAL '7 days'
 
 SSE Protocol:                                                        // Ã¢â€ Â NEW in v0.4.0
   Event Format:
-    id: {job_id}:{sequence}
+    id: {generation_id}:{sequence}
     event: {event_type}
     data: {payload as JSON}
 
   Reconnection:
     - Client sends Last-Event-ID header on reconnect
-    - Server parses job_id and sequence from Last-Event-ID
-    - Server replays events WHERE job_id = :job_id AND sequence > :sequence
+    - Server parses generation_id and sequence from Last-Event-ID
+    - Server replays events WHERE generation_id = :generation_id AND sequence > :sequence
     - If sequence not found (expired), return HTTP 410 Gone
-    - Client should then GET /v1/jobs/:id to fetch current state
+    - Client should then GET /v1/generations/:id to fetch current state
 ```
 
 ## 4.9 AssetFile
@@ -331,7 +331,7 @@ Attributes:
   team_id           : UUID FK Ã¢â€ â€™ Team (ON DELETE CASCADE)
   created_by        : UUID FK Ã¢â€ â€™ User
   url               : URL (max 2048)
-  events            : String[] (e.g., ['job.completed', 'job.failed'])
+  events            : String[] (e.g., ['generation.completed', 'generation.failed'])
   secret            : String (32 bytes, for HMAC signing)
   is_active         : Boolean DEFAULT true
   last_triggered_at : Timestamp?
@@ -357,7 +357,7 @@ Description: Record of webhook delivery attempts
 Attributes:
   id              : UUID PK
   webhook_id      : UUID FK Ã¢â€ â€™ Webhook (ON DELETE CASCADE)
-  job_id          : UUID? FK Ã¢â€ â€™ Job (ON DELETE SET NULL)
+  generation_id   : UUID? FK Ã¢â€ â€™ Generation (ON DELETE SET NULL)
   event_type      : String
   status          : {pending | retrying | delivered | failed} DEFAULT pending
   payload         : JSONB
@@ -500,7 +500,7 @@ Constraints:
 
 ```
 Entity: Artifact
-Description: A creative output — storyboard spec, uploaded media, or job output.
+Description: A creative output — storyboard spec, uploaded media, or generation output.
              Replaces AssetFile as the unified entity for all creative content.
 
 Attributes:
@@ -510,14 +510,14 @@ Attributes:
   project_id      : UUID? FK → Project (ON DELETE CASCADE)
   kind            : {storyboard | image | audio | video | character}
   status          : {pending | ready | failed} DEFAULT pending
-  source          : {upload | conversation | job} DEFAULT upload
+  source          : {upload | conversation | generation} DEFAULT upload
   filename        : String? (max 255, required for media)
   s3_key          : String? (unique, required for media)
   content_type    : String? (MIME type, required for media)
   size_bytes      : BigInt? (required for media, max 50MB)
   spec            : JSONB? (required for storyboard)
   conversation_id : UUID? FK → Conversation (ON DELETE SET NULL)
-  source_job_id   : UUID? FK → Job (ON DELETE SET NULL)
+  source_generation_id : UUID? FK → Generation (ON DELETE SET NULL)
   metadata        : JSONB DEFAULT {}
   created_at      : Timestamp DEFAULT now()
   updated_at      : Timestamp DEFAULT now()
@@ -536,7 +536,7 @@ Constraints:
   - Media kinds (image/audio/video) require filename, s3_key, content_type, size_bytes
   - Storyboard kind requires spec
   - source=conversation requires conversation_id
-  - source=job requires source_job_id
+  - source=generation requires source_generation_id
   - project_id IS NOT NULL → owner STARTS WITH 'framecast:team:'
   - size_bytes > 0 AND size_bytes ≤ 50MB (when set)
   - content_type ∈ allowed list per kind

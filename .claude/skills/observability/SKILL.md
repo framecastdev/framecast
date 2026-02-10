@@ -37,8 +37,8 @@ Every log entry must include:
     "environment": "production",
     "user_id": "usr_123",
     "team_id": "tm_456",
-    "job_id": "job_789",
-    "message": "Job status changed",
+    "generation_id": "gen_789",
+    "message": "Generation status changed",
     "data": { "old_status": "processing", "new_status": "completed" }
 }
 ```
@@ -50,21 +50,21 @@ use tracing::{info, instrument, Span};
 
 #[instrument(
     skip(ctx),
-    fields(user_id = %user.id, job_id = %job_id)
+    fields(user_id = %user.id, generation_id = %generation_id)
 )]
-pub async fn cancel_job(ctx: &AppContext, user: &User, job_id: Uuid) -> Result<Job> {
-    info!("Attempting to cancel job");
+pub async fn cancel_generation(ctx: &AppContext, user: &User, generation_id: Uuid) -> Result<Generation> {
+    info!("Attempting to cancel generation");
 
-    let job = ctx.job_repo.find(job_id).await?;
-    Span::current().record("job_status", &job.status.as_str());
+    let generation = ctx.generation_repo.find(generation_id).await?;
+    Span::current().record("generation_status", &generation.status.as_str());
 
-    if job.is_terminal() {
-        info!(current_status = %job.status, "Job already terminal");
-        return Err(JobError::AlreadyTerminal(job.status));
+    if generation.is_terminal() {
+        info!(current_status = %generation.status, "Generation already terminal");
+        return Err(GenerationError::AlreadyTerminal(generation.status));
     }
 
-    let canceled = ctx.job_service.cancel(job).await?;
-    info!(credits_refunded = canceled.credits_refunded, "Job canceled");
+    let canceled = ctx.generation_service.cancel(generation).await?;
+    info!(credits_refunded = canceled.credits_refunded, "Generation canceled");
 
     Ok(canceled)
 }
@@ -77,16 +77,16 @@ pub async fn cancel_job(ctx: &AppContext, user: &User, job_id: Uuid) -> Result<J
 api_requests_total{endpoint, method, status}
 api_request_duration_seconds{endpoint, method}
 
-# Jobs
-jobs_created_total{owner_type}
-jobs_completed_total{status}
-job_duration_seconds{status}
-job_credits_charged_total
-job_credits_refunded_total{failure_type}
+# Generations
+generations_created_total{owner_type}
+generations_completed_total{status}
+generation_duration_seconds{status}
+generation_credits_charged_total
+generation_credits_refunded_total{failure_type}
 
 # Queue
-jobs_queued_current
-jobs_processing_current
+generations_queued_current
+generations_processing_current
 
 # External Services
 anthropic_requests_total{status}
@@ -139,8 +139,8 @@ GET /debug/status
         "memory_used_mb": 32000,
         "utilization_percent": 85
     },
-    "current_job": {
-        "job_id": "job_xyz",
+    "current_generation": {
+        "generation_id": "gen_xyz",
         "progress_percent": 45
     }
 }
@@ -157,7 +157,7 @@ GET /debug/workflow
 GET /debug/logs?lines=100&level=debug
 GET /debug/queue
 GET /debug/memory
-GET /debug/artifacts?job_id=job_xyz
+GET /debug/artifacts?generation_id=gen_xyz
 ```
 
 ## Error Response Format
@@ -167,15 +167,15 @@ All errors include debugging info:
 ```json
 {
     "error": {
-        "code": "JOB_ALREADY_TERMINAL",
-        "message": "Cannot cancel job that is already completed",
+        "code": "GENERATION_ALREADY_TERMINAL",
+        "message": "Cannot cancel generation that is already completed",
         "request_id": "req_abc123",
         "trace_id": "trace_xyz789",
         "details": {
-            "job_id": "job_456",
+            "generation_id": "gen_456",
             "current_status": "completed"
         },
-        "help": "Jobs can only be canceled while queued or processing"
+        "help": "Generations can only be canceled while queued or processing"
     }
 }
 ```

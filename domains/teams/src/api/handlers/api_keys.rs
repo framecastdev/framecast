@@ -29,8 +29,8 @@ use crate::api::middleware::TeamsState;
 /// All scopes allowed by the spec (§9.3)
 pub const ALLOWED_SCOPES: &[&str] = &[
     "generate",
-    "jobs:read",
-    "jobs:write",
+    "generations:read",
+    "generations:write",
     "assets:read",
     "assets:write",
     "projects:read",
@@ -45,8 +45,8 @@ pub const ALLOWED_SCOPES: &[&str] = &[
 /// Scopes available to Starter-tier users
 pub const STARTER_ALLOWED_SCOPES: &[&str] = &[
     "generate",
-    "jobs:read",
-    "jobs:write",
+    "generations:read",
+    "generations:write",
     "assets:read",
     "assets:write",
 ];
@@ -495,7 +495,7 @@ mod tests {
         let result = validate_scopes(&["generate".to_string()], &AuthTier::Starter);
         assert!(result.is_ok());
 
-        let result = validate_scopes(&["jobs:read".to_string()], &AuthTier::Starter);
+        let result = validate_scopes(&["generations:read".to_string()], &AuthTier::Starter);
         assert!(result.is_ok());
     }
 

@@ -1197,8 +1197,8 @@ dependencies = [
  "framecast-auth",
  "framecast-conversations",
  "framecast-email",
+ "framecast-generations",
  "framecast-inngest",
- "framecast-jobs",
  "framecast-llm",
  "framecast-runpod",
  "framecast-teams",
@@ -1310,6 +1310,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "framecast-generations"
+version = "0.0.1-SNAPSHOT"
+dependencies = [
+ "async-stream",
+ "axum",
+ "chrono",
+ "framecast-auth",
+ "framecast-common",
+ "framecast-inngest",
+ "framecast-runpod",
+ "futures-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "framecast-inngest"
 version = "0.0.1-SNAPSHOT"
 dependencies = [
@@ -1338,8 +1361,8 @@ dependencies = [
  "framecast-common",
  "framecast-conversations",
  "framecast-email",
+ "framecast-generations",
  "framecast-inngest",
- "framecast-jobs",
  "framecast-llm",
  "framecast-runpod",
  "framecast-teams",
@@ -1351,29 +1374,6 @@ dependencies = [
  "test-log",
  "tokio",
  "tower 0.5.3",
- "uuid",
-]
-
-[[package]]
-name = "framecast-jobs"
-version = "0.0.1-SNAPSHOT"
-dependencies = [
- "async-stream",
- "axum",
- "chrono",
- "framecast-auth",
- "framecast-common",
- "framecast-inngest",
- "framecast-runpod",
- "futures-core",
- "regex",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
- "tokio-stream",
- "tokio-test",
- "tracing",
  "uuid",
 ]
 

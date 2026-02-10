@@ -174,24 +174,25 @@ class TestCharacterFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CF08: POST /v1/artifacts/:id/render -> 201, returns job + pending image artifact."""
+        """CF08: POST /v1/generations -> 201, returns generation + pending image artifact."""
         invitee = seed_users.invitee
 
         character = await create_character(http_client, invitee.auth_headers())
         character_id = character["id"]
 
         resp = await http_client.post(
-            f"/v1/artifacts/{character_id}/render",
+            "/v1/generations",
+            json={"artifact_id": character_id},
             headers=invitee.auth_headers(),
         )
         assert resp.status_code == 201, f"render failed: {resp.status_code} {resp.text}"
         result = resp.json()
-        # New response shape: {"job": {...}, "artifact": {...}}
-        assert "job" in result, (
-            f"Expected 'job' in render response, got keys: {list(result.keys())}"
+        # New response shape: {"generation": {...}, "artifact": {...}}
+        assert "generation" in result, (
+            f"Expected 'generation' in render response, got keys: {list(result.keys())}"
         )
         assert "artifact" in result, "Expected 'artifact' in render response"
-        assert result["job"]["status"] == "queued"
+        assert result["generation"]["status"] == "queued"
         assert result["artifact"]["kind"] == "image"
         assert result["artifact"]["status"] == "pending"
 
@@ -200,21 +201,22 @@ class TestCharacterFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CF09: Render storyboard -> 201, returns job + pending video artifact."""
+        """CF09: Render storyboard -> 201, returns generation + pending video artifact."""
         invitee = seed_users.invitee
 
         storyboard = await create_storyboard(http_client, invitee.auth_headers())
         storyboard_id = storyboard["id"]
 
         resp = await http_client.post(
-            f"/v1/artifacts/{storyboard_id}/render",
+            "/v1/generations",
+            json={"artifact_id": storyboard_id},
             headers=invitee.auth_headers(),
         )
         assert resp.status_code == 201, (
             f"Expected 201 for storyboard render, got {resp.status_code} {resp.text}"
         )
         result = resp.json()
-        assert result["job"]["status"] == "queued"
+        assert result["generation"]["status"] == "queued"
         assert result["artifact"]["kind"] == "video"
         assert result["artifact"]["status"] == "pending"
 
@@ -228,7 +230,8 @@ class TestCharacterFlowE2E:
 
         fake_id = str(uuid.uuid4())
         resp = await http_client.post(
-            f"/v1/artifacts/{fake_id}/render",
+            "/v1/generations",
+            json={"artifact_id": fake_id},
             headers=invitee.auth_headers(),
         )
         assert resp.status_code == 404
@@ -241,6 +244,7 @@ class TestCharacterFlowE2E:
         """CF11: Render no auth -> 401."""
         fake_id = str(uuid.uuid4())
         resp = await http_client.post(
-            f"/v1/artifacts/{fake_id}/render",
+            "/v1/generations",
+            json={"artifact_id": fake_id},
         )
         assert resp.status_code == 401

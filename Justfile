@@ -340,7 +340,7 @@ mutants *args="":
 
 # Run mutation testing on domain crates only (most valuable)
 mutants-domain *args="":
-    cargo mutants --jobs 4 -p framecast-teams -p framecast-jobs -p framecast-artifacts -p framecast-conversations {{args}}
+    cargo mutants --jobs 4 -p framecast-teams -p framecast-generations -p framecast-artifacts -p framecast-conversations {{args}}
 
 # Quick check — only test missed mutants from last run
 mutants-check *args="":
@@ -352,7 +352,7 @@ mutants-check *args="":
 ci-mutants shard="":
     #!/usr/bin/env bash
     set -euo pipefail
-    PKGS="-p framecast-teams -p framecast-common -p framecast-artifacts -p framecast-conversations -p framecast-jobs"
+    PKGS="-p framecast-teams -p framecast-common -p framecast-artifacts -p framecast-conversations -p framecast-generations"
     if [ -n "{{shard}}" ]; then
       cargo mutants --in-place --shard "{{shard}}" --baseline skip $PKGS
     else

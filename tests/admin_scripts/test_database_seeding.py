@@ -99,7 +99,7 @@ class SeedingTestFramework:
             "teams",
             "memberships",
             "projects",
-            "jobs",
+            "generations",
             "api_keys",
             "system_assets",
         ]
@@ -172,11 +172,11 @@ class SeedingTestFramework:
         )
 
         # Check: All URN patterns are valid
-        invalid_job_urns = await self.conn.fetchval("""
-            SELECT COUNT(*) FROM jobs
+        invalid_generation_urns = await self.conn.fetchval("""
+            SELECT COUNT(*) FROM generations
             WHERE owner NOT SIMILAR TO 'framecast:(user|team):[a-zA-Z0-9_-]+'
         """)
-        checks["valid_urns"] = invalid_job_urns == 0
+        checks["valid_urns"] = invalid_generation_urns == 0
 
         return checks
 
@@ -214,7 +214,7 @@ async def test_seed_happy_01_complete_test_data_creation(seeding_framework):
     assert final_counts["teams"] >= 2, "Should create at least 2 test teams"
     assert final_counts["memberships"] >= 3, "Should create team memberships"
     assert final_counts["projects"] >= 2, "Should create test projects"
-    assert final_counts["jobs"] >= 2, "Should create test jobs"
+    assert final_counts["generations"] >= 2, "Should create test generations"
     assert final_counts["api_keys"] >= 2, "Should create test API keys"
     assert final_counts["system_assets"] >= 3, "Should create system assets"
 
@@ -393,12 +393,12 @@ async def test_seed_integration_01_seed_then_query(seeding_framework):
             t.name,
             COUNT(DISTINCT m.user_id) as member_count,
             COUNT(DISTINCT p.id) as project_count,
-            COUNT(DISTINCT j.id) as job_count,
-            SUM(j.credits_charged) as total_credits_used
+            COUNT(DISTINCT g.id) as generation_count,
+            SUM(g.credits_charged) as total_credits_used
         FROM teams t
         LEFT JOIN memberships m ON t.id = m.team_id
         LEFT JOIN projects p ON t.id = p.team_id
-        LEFT JOIN jobs j ON j.owner LIKE 'framecast:team:' || t.id::text
+        LEFT JOIN generations g ON g.owner LIKE 'framecast:team:' || t.id::text
         WHERE t.slug = 'acme-studios-test'
         GROUP BY t.id, t.name
     """)

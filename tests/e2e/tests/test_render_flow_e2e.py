@@ -2,7 +2,7 @@
 
 Tests the render orchestration flow end-to-end (30 stories):
   - Render creation (RF-01 through RF-06)
-  - Job callbacks and state transitions (RF-07 through RF-15)
+  - Generation callbacks and state transitions (RF-07 through RF-15)
   - Artifact status updates (RF-16 through RF-20)
   - Error handling (RF-21 through RF-25)
   - Mock render integration (RF-26 through RF-30)
@@ -18,12 +18,12 @@ import httpx  # noqa: E402
 import pytest  # noqa: E402
 from conftest import (  # noqa: E402
     SeededUsers,
-    complete_job,
+    complete_generation,
     configure_mock_render,
     create_character,
-    create_render_job,
+    create_generation_from_artifact,
     create_storyboard,
-    fail_job,
+    fail_generation,
     get_mock_render_history,
     reset_mock_render,
     trigger_callback,
@@ -38,56 +38,56 @@ class TestRenderFlowE2E:
     # Render Creation (RF-01 through RF-06)
     # -------------------------------------------------------------------
 
-    async def test_rf01_render_character_returns_job_and_artifact(
+    async def test_rf01_render_character_returns_generation_and_artifact(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-01: POST /v1/artifacts/:id/render returns job + artifact."""
+        """RF-01: POST /v1/generations returns generation + artifact."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
 
-        assert "job" in result
+        assert "generation" in result
         assert "artifact" in result
-        assert result["job"]["status"] == "queued"
+        assert result["generation"]["status"] == "queued"
         assert result["artifact"]["kind"] == "image"
         assert result["artifact"]["status"] == "pending"
 
-    async def test_rf02_render_job_has_correct_owner(
+    async def test_rf02_generation_has_correct_owner(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-02: Render job owner matches the requesting user."""
+        """RF-02: Generation owner matches the requesting user."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
 
         expected_urn = f"framecast:user:{owner.user_id}"
-        assert result["job"]["owner"] == expected_urn
+        assert result["generation"]["owner"] == expected_urn
 
-    async def test_rf03_render_artifact_linked_to_job(
+    async def test_rf03_render_artifact_linked_to_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-03: Output artifact has source=job and source_job_id matching."""
+        """RF-03: Output artifact has source=generation and source_generation_id matching."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
 
-        assert result["artifact"]["source"] == "job"
-        assert result["artifact"]["source_job_id"] == result["job"]["id"]
+        assert result["artifact"]["source"] == "generation"
+        assert result["artifact"]["source_generation_id"] == result["generation"]["id"]
 
     async def test_rf04_render_nonexistent_artifact_returns_404(
         self,
@@ -99,7 +99,9 @@ class TestRenderFlowE2E:
 
         fake_id = str(uuid.uuid4())
         resp = await http_client.post(
-            f"/v1/artifacts/{fake_id}/render", headers=owner.auth_headers()
+            "/v1/generations",
+            json={"artifact_id": fake_id},
+            headers=owner.auth_headers(),
         )
         assert resp.status_code == 404
 
@@ -108,17 +110,18 @@ class TestRenderFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-05: Render storyboard -> 201, returns job + pending video artifact."""
+        """RF-05: Render storyboard -> 201, returns generation + pending video artifact."""
         owner = seed_users.owner
 
         storyboard = await create_storyboard(http_client, owner.auth_headers())
         resp = await http_client.post(
-            f"/v1/artifacts/{storyboard['id']}/render",
+            "/v1/generations",
+            json={"artifact_id": storyboard["id"]},
             headers=owner.auth_headers(),
         )
         assert resp.status_code == 201
         body = resp.json()
-        assert body["job"]["status"] == "queued"
+        assert body["generation"]["status"] == "queued"
         assert body["artifact"]["kind"] == "video"
         assert body["artifact"]["status"] == "pending"
 
@@ -129,11 +132,14 @@ class TestRenderFlowE2E:
     ):
         """RF-06: Render without auth -> 401."""
         fake_id = str(uuid.uuid4())
-        resp = await http_client.post(f"/v1/artifacts/{fake_id}/render")
+        resp = await http_client.post(
+            "/v1/generations",
+            json={"artifact_id": fake_id},
+        )
         assert resp.status_code == 401
 
     # -------------------------------------------------------------------
-    # Job Callbacks and State Transitions (RF-07 through RF-15)
+    # Generation Callbacks and State Transitions (RF-07 through RF-15)
     # -------------------------------------------------------------------
 
     async def test_rf07_started_callback_transitions_to_processing(
@@ -141,20 +147,22 @@ class TestRenderFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-07: Started callback transitions job from queued to processing."""
+        """RF-07: Started callback transitions generation from queued to processing."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
-        resp = await trigger_callback(http_client, job_id, "started")
+        resp = await trigger_callback(http_client, generation_id, "started")
         assert resp.status_code == 200
 
-        # Verify job is now processing
-        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        # Verify generation is now processing
+        resp = await http_client.get(
+            f"/v1/generations/{generation_id}", headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
         assert resp.json()["status"] == "processing"
 
@@ -163,124 +171,134 @@ class TestRenderFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-08: Completed callback transitions job to completed."""
+        """RF-08: Completed callback transitions generation to completed."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
-        await complete_job(http_client, job_id)
+        await complete_generation(http_client, generation_id)
 
-        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        resp = await http_client.get(
+            f"/v1/generations/{generation_id}", headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
-        job = resp.json()
-        assert job["status"] == "completed"
-        assert job["completed_at"] is not None
+        gen = resp.json()
+        assert gen["status"] == "completed"
+        assert gen["completed_at"] is not None
 
     async def test_rf09_failed_callback_transitions_to_failed(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-09: Failed callback transitions job to failed."""
+        """RF-09: Failed callback transitions generation to failed."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
-        await fail_job(http_client, job_id)
+        await fail_generation(http_client, generation_id)
 
-        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        resp = await http_client.get(
+            f"/v1/generations/{generation_id}", headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
-        job = resp.json()
-        assert job["status"] == "failed"
-        assert job["failure_type"] == "system"
+        gen = resp.json()
+        assert gen["status"] == "failed"
+        assert gen["failure_type"] == "system"
 
     async def test_rf10_progress_callback_updates_progress(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-10: Progress callback updates job progress_percent."""
+        """RF-10: Progress callback updates generation progress_percent."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
-        # Start the job
-        resp = await trigger_callback(http_client, job_id, "started")
+        # Start the generation
+        resp = await trigger_callback(http_client, generation_id, "started")
         assert resp.status_code == 200
 
         # Send progress update
         resp = await trigger_callback(
-            http_client, job_id, "progress", progress_percent=50.0
+            http_client, generation_id, "progress", progress_percent=50.0
         )
         assert resp.status_code == 200
 
         # Verify progress
-        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        resp = await http_client.get(
+            f"/v1/generations/{generation_id}", headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
         assert resp.json()["progress"]["percent"] == 50.0
 
-    async def test_rf11_completed_job_has_output(
+    async def test_rf11_completed_generation_has_output(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-11: Completed job stores output data."""
+        """RF-11: Completed generation stores output data."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
         output = {"url": "https://example.com/render.png", "width": 1024}
-        await complete_job(http_client, job_id, output=output)
+        await complete_generation(http_client, generation_id, output=output)
 
-        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        resp = await http_client.get(
+            f"/v1/generations/{generation_id}", headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
-        job = resp.json()
-        assert job["output"]["url"] == "https://example.com/render.png"
+        gen = resp.json()
+        assert gen["output"]["url"] == "https://example.com/render.png"
 
-    async def test_rf12_failed_job_has_error(
+    async def test_rf12_failed_generation_has_error(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-12: Failed job stores error data."""
+        """RF-12: Failed generation stores error data."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
         error = {"message": "GPU OOM", "code": "OUT_OF_MEMORY"}
-        await fail_job(http_client, job_id, error=error)
+        await fail_generation(http_client, generation_id, error=error)
 
-        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        resp = await http_client.get(
+            f"/v1/generations/{generation_id}", headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
-        job = resp.json()
-        assert job["error"]["message"] == "GPU OOM"
+        gen = resp.json()
+        assert gen["error"]["message"] == "GPU OOM"
 
-    async def test_rf13_callback_on_nonexistent_job_returns_404(
+    async def test_rf13_callback_on_nonexistent_generation_returns_404(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-13: Callback on nonexistent job -> 404."""
+        """RF-13: Callback on nonexistent generation -> 404."""
         fake_id = str(uuid.uuid4())
         resp = await trigger_callback(http_client, fake_id, "started")
         assert resp.status_code == 404
@@ -294,14 +312,14 @@ class TestRenderFlowE2E:
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
-        await complete_job(http_client, job_id)
+        generation_id = result["generation"]["id"]
+        await complete_generation(http_client, generation_id)
 
-        # Sending started callback on completed job is invalid
-        resp = await trigger_callback(http_client, job_id, "started")
+        # Sending started callback on completed generation is invalid
+        resp = await trigger_callback(http_client, generation_id, "started")
         assert resp.status_code == 409
 
     async def test_rf15_completed_callback_sets_completed_at(
@@ -313,40 +331,42 @@ class TestRenderFlowE2E:
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
-        await complete_job(http_client, job_id)
+        await complete_generation(http_client, generation_id)
 
-        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        resp = await http_client.get(
+            f"/v1/generations/{generation_id}", headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
-        job = resp.json()
-        assert job["completed_at"] is not None
-        assert job["created_at"] <= job["completed_at"]
+        gen = resp.json()
+        assert gen["completed_at"] is not None
+        assert gen["created_at"] <= gen["completed_at"]
 
     # -------------------------------------------------------------------
     # Artifact Status Updates (RF-16 through RF-20)
     # -------------------------------------------------------------------
 
-    async def test_rf16_artifact_pending_before_job_completion(
+    async def test_rf16_artifact_pending_before_generation_completion(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-16: Output artifact stays pending while job is processing."""
+        """RF-16: Output artifact stays pending while generation is processing."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
         artifact_id = result["artifact"]["id"]
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
-        # Start job (processing)
-        await trigger_callback(http_client, job_id, "started")
+        # Start generation (processing)
+        await trigger_callback(http_client, generation_id, "started")
 
         # Artifact should still be pending
         resp = await http_client.get(
@@ -355,22 +375,22 @@ class TestRenderFlowE2E:
         assert resp.status_code == 200
         assert resp.json()["status"] == "pending"
 
-    async def test_rf17_artifact_ready_after_job_completion(
+    async def test_rf17_artifact_ready_after_generation_completion(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-17: Output artifact becomes ready after job completion."""
+        """RF-17: Output artifact becomes ready after generation completion."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
         artifact_id = result["artifact"]["id"]
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
-        await complete_job(http_client, job_id)
+        await complete_generation(http_client, generation_id)
 
         resp = await http_client.get(
             f"/v1/artifacts/{artifact_id}", headers=owner.auth_headers()
@@ -378,22 +398,22 @@ class TestRenderFlowE2E:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ready"
 
-    async def test_rf18_artifact_failed_after_job_failure(
+    async def test_rf18_artifact_failed_after_generation_failure(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-18: Output artifact becomes failed after job failure."""
+        """RF-18: Output artifact becomes failed after generation failure."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
         artifact_id = result["artifact"]["id"]
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
-        await fail_job(http_client, job_id)
+        await fail_generation(http_client, generation_id)
 
         resp = await http_client.get(
             f"/v1/artifacts/{artifact_id}", headers=owner.auth_headers()
@@ -410,7 +430,7 @@ class TestRenderFlowE2E:
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
         artifact_id = result["artifact"]["id"]
@@ -434,15 +454,15 @@ class TestRenderFlowE2E:
         character = await create_character(http_client, owner.auth_headers())
         character_id = character["id"]
 
-        result1 = await create_render_job(
+        result1 = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character_id
         )
-        result2 = await create_render_job(
+        result2 = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character_id
         )
 
         assert result1["artifact"]["id"] != result2["artifact"]["id"]
-        assert result1["job"]["id"] != result2["job"]["id"]
+        assert result1["generation"]["id"] != result2["generation"]["id"]
 
     # -------------------------------------------------------------------
     # Error Handling (RF-21 through RF-25)
@@ -459,19 +479,20 @@ class TestRenderFlowE2E:
 
         character = await create_character(http_client, owner.auth_headers())
         resp = await http_client.post(
-            f"/v1/artifacts/{character['id']}/render",
+            "/v1/generations",
+            json={"artifact_id": character["id"]},
             headers=invitee.auth_headers(),
         )
         assert resp.status_code in [403, 404]
 
-    async def test_rf22_callback_missing_job_id_returns_400(
+    async def test_rf22_callback_missing_generation_id_returns_400(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-22: Callback without job_id -> 400/422."""
+        """RF-22: Callback without generation_id -> 400/422."""
         resp = await http_client.post(
-            "/internal/jobs/callback",
+            "/internal/generations/callback",
             json={"event": "started"},
         )
         assert resp.status_code in [400, 422]
@@ -484,8 +505,8 @@ class TestRenderFlowE2E:
         """RF-23: Callback without event -> 400/422."""
         fake_id = str(uuid.uuid4())
         resp = await http_client.post(
-            "/internal/jobs/callback",
-            json={"job_id": fake_id},
+            "/internal/generations/callback",
+            json={"generation_id": fake_id},
         )
         assert resp.status_code in [400, 422]
 
@@ -498,14 +519,14 @@ class TestRenderFlowE2E:
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
         resp = await http_client.post(
-            "/internal/jobs/callback",
-            json={"job_id": job_id, "event": "invalid_event_name"},
+            "/internal/generations/callback",
+            json={"generation_id": generation_id, "event": "invalid_event_name"},
         )
         assert resp.status_code in [400, 422]
 
@@ -518,20 +539,20 @@ class TestRenderFlowE2E:
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
         # Start first
-        resp = await trigger_callback(http_client, job_id, "started")
+        resp = await trigger_callback(http_client, generation_id, "started")
         assert resp.status_code == 200
 
         # Send failed without failure_type
         resp = await http_client.post(
-            "/internal/jobs/callback",
+            "/internal/generations/callback",
             json={
-                "job_id": job_id,
+                "generation_id": generation_id,
                 "event": "failed",
                 "error": {"message": "Something broke"},
             },
@@ -575,7 +596,9 @@ class TestRenderFlowE2E:
         await configure_mock_render(http_client, outcome="complete", delay_ms=50)
 
         character = await create_character(http_client, owner.auth_headers())
-        await create_render_job(http_client, owner.auth_headers(), character["id"])
+        await create_generation_from_artifact(
+            http_client, owner.auth_headers(), character["id"]
+        )
 
         history = await get_mock_render_history(http_client)
         assert len(history) >= 1
@@ -585,27 +608,29 @@ class TestRenderFlowE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """RF-29: Configure mock render to fail and verify job fails."""
+        """RF-29: Configure mock render to fail and verify generation fails."""
         owner = seed_users.owner
         await reset_mock_render(http_client)
         await configure_mock_render(http_client, outcome="fail", delay_ms=50)
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
-        # Wait briefly and check job status — mock should auto-fail
+        # Wait briefly and check generation status -- mock should auto-fail
         import asyncio
 
         await asyncio.sleep(1.0)
 
-        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        resp = await http_client.get(
+            f"/v1/generations/{generation_id}", headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
-        job = resp.json()
-        # Job should be failed if mock auto-triggers, or still queued if manual
-        assert job["status"] in ["failed", "queued", "processing"]
+        gen = resp.json()
+        # Generation should be failed if mock auto-triggers, or still queued if manual
+        assert gen["status"] in ["failed", "queued", "processing"]
 
     async def test_rf30_configure_mock_render_with_progress_steps(
         self,
@@ -623,10 +648,10 @@ class TestRenderFlowE2E:
         )
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
 
-        # Verify job was created successfully
-        assert result["job"]["status"] == "queued"
+        # Verify generation was created successfully
+        assert result["generation"]["status"] == "queued"
         assert result["artifact"]["status"] == "pending"

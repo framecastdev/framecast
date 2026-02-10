@@ -69,10 +69,10 @@ class TestApiKeysE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """AK3: POST with scopes=["generate","jobs:read"] -> scopes persisted."""
+        """AK3: POST with scopes=["generate","generations:read"] -> scopes persisted."""
         owner = seed_users.owner
 
-        scopes = ["generate", "jobs:read"]
+        scopes = ["generate", "generations:read"]
         resp = await http_client.post(
             "/v1/auth/keys",
             json={"name": "Scoped Key", "scopes": scopes},
@@ -272,7 +272,13 @@ class TestApiKeysE2E:
         """AK11: Starter creates key with each allowed scope -> 201."""
         invitee = seed_users.invitee  # starter
 
-        allowed = ["generate", "jobs:read", "jobs:write", "assets:read", "assets:write"]
+        allowed = [
+            "generate",
+            "generations:read",
+            "generations:write",
+            "assets:read",
+            "assets:write",
+        ]
         for scope in allowed:
             resp = await http_client.post(
                 "/v1/auth/keys",
@@ -647,10 +653,10 @@ class TestApiKeysE2E:
         "scopes",
         [
             ["generate"],
-            ["jobs:read", "jobs:write"],
+            ["generations:read", "generations:write"],
             ["generate", "assets:read", "assets:write"],
         ],
-        ids=["single-scope", "jobs-pair", "generate-plus-assets"],
+        ids=["single-scope", "generations-pair", "generate-plus-assets"],
     )
     async def test_starter_valid_scopes_always_succeed(
         self,

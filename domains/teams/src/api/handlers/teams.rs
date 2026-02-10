@@ -394,14 +394,14 @@ pub async fn delete_team(
         ));
     }
 
-    // Business rule: Cannot delete if there are active jobs
-    let active_jobs_count = crate::count_active_jobs_for_team_tx(&mut tx, team_id)
+    // Business rule: Cannot delete if there are active generations
+    let active_generations_count = crate::count_active_generations_for_team_tx(&mut tx, team_id)
         .await
-        .map_err(|e| Error::Internal(format!("Failed to count active jobs: {}", e)))?;
+        .map_err(|e| Error::Internal(format!("Failed to count active generations: {}", e)))?;
 
-    if active_jobs_count > 0 {
+    if active_generations_count > 0 {
         return Err(Error::Conflict(
-            "Cannot delete team with active jobs".to_string(),
+            "Cannot delete team with active generations".to_string(),
         ));
     }
 

@@ -409,8 +409,8 @@ INV-X7: âˆ€ a âˆˆ Artifact :
         (Conversation-sourced artifacts must reference a conversation)
 
 INV-X8: âˆ€ a âˆˆ Artifact :
-        (a.source = 'job') â†' a.source_job_id IS NOT NULL
-        (Job-sourced artifacts must reference a job)
+        (a.source = 'generation') â†' a.source_generation_id IS NOT NULL
+        (Generation-sourced artifacts must reference a generation)
 ```
 
 ## 6.14 Temporal Invariants

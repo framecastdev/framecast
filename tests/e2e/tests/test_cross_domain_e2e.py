@@ -30,11 +30,11 @@ import jwt  # noqa: E402
 import pytest  # noqa: E402
 from conftest import (  # noqa: E402
     SeededUsers,
-    complete_job,
+    complete_generation,
     create_character,
     create_conversation,
-    create_ephemeral_job,
-    create_render_job,
+    create_ephemeral_generation,
+    create_generation_from_artifact,
     create_storyboard,
     send_message,
 )
@@ -664,48 +664,48 @@ class TestCrossDomainE2E:
     # Jobs Cross-Domain (XD31-XD35)
     # -----------------------------------------------------------------------
 
-    async def test_xd31_render_creates_job_and_artifact(
+    async def test_xd31_render_creates_generation_and_artifact(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """XD31: Rendering artifact creates both job and output artifact."""
+        """XD31: Rendering artifact creates both generation and output artifact."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
 
-        # Verify response contains both job and artifact
-        assert "job" in result
+        # Verify response contains both generation and artifact
+        assert "generation" in result
         assert "artifact" in result
-        job = result["job"]
+        gen = result["generation"]
         artifact = result["artifact"]
 
-        # Job is queued, linked to artifact
-        assert job["status"] == "queued"
-        assert job["id"] is not None
+        # Generation is queued, linked to artifact
+        assert gen["status"] == "queued"
+        assert gen["id"] is not None
 
-        # Artifact is pending image with source=job
+        # Artifact is pending image with source=generation
         assert artifact["kind"] == "image"
         assert artifact["status"] == "pending"
-        assert artifact["source"] == "job"
-        assert artifact["source_job_id"] == job["id"]
+        assert artifact["source"] == "generation"
+        assert artifact["source_generation_id"] == gen["id"]
 
-    async def test_xd32_job_completion_updates_artifact_status(
+    async def test_xd32_generation_completion_updates_artifact_status(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """XD32: Job completion updates artifact status to ready (cross-domain write)."""
+        """XD32: Generation completion updates artifact status to ready (cross-domain write)."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character["id"]
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
         artifact_id = result["artifact"]["id"]
 
         # Verify artifact is pending before completion
@@ -715,8 +715,8 @@ class TestCrossDomainE2E:
         assert resp.status_code == 200
         assert resp.json()["status"] == "pending"
 
-        # Complete the job
-        await complete_job(http_client, job_id)
+        # Complete the generation
+        await complete_generation(http_client, generation_id)
 
         # Verify artifact status updated to ready
         resp = await http_client.get(
@@ -725,20 +725,20 @@ class TestCrossDomainE2E:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ready"
 
-    async def test_xd33_deleting_source_artifact_doesnt_break_job(
+    async def test_xd33_deleting_source_artifact_doesnt_break_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """XD33: Deleting source artifact doesn't break the job."""
+        """XD33: Deleting source artifact doesn't break the generation."""
         owner = seed_users.owner
 
         character = await create_character(http_client, owner.auth_headers())
         character_id = character["id"]
-        result = await create_render_job(
+        result = await create_generation_from_artifact(
             http_client, owner.auth_headers(), character_id
         )
-        job_id = result["job"]["id"]
+        generation_id = result["generation"]["id"]
 
         # Delete the source character artifact
         resp = await http_client.delete(
@@ -746,17 +746,19 @@ class TestCrossDomainE2E:
         )
         assert resp.status_code == 204
 
-        # Job should still be accessible
-        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        # Generation should still be accessible
+        resp = await http_client.get(
+            f"/v1/generations/{generation_id}", headers=owner.auth_headers()
+        )
         assert resp.status_code == 200
         assert resp.json()["status"] == "queued"
 
-    async def test_xd34_api_key_can_list_jobs(
+    async def test_xd34_api_key_can_list_generations(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """XD34: API key with appropriate scope can list jobs."""
+        """XD34: API key with appropriate scope can list generations."""
         owner = seed_users.owner
 
         # Create an API key
@@ -769,21 +771,21 @@ class TestCrossDomainE2E:
         raw_key = resp.json()["raw_key"]
         api_headers = {"Authorization": f"Bearer {raw_key}"}
 
-        # Create a job via JWT first
-        await create_ephemeral_job(http_client, owner.auth_headers())
+        # Create a generation via JWT first
+        await create_ephemeral_generation(http_client, owner.auth_headers())
 
-        # List jobs via API key
-        resp = await http_client.get("/v1/jobs", headers=api_headers)
+        # List generations via API key
+        resp = await http_client.get("/v1/generations", headers=api_headers)
         assert resp.status_code == 200
-        jobs = resp.json()
-        assert len(jobs) >= 1
+        generations = resp.json()
+        assert len(generations) >= 1
 
-    async def test_xd35_api_key_can_create_ephemeral_job(
+    async def test_xd35_api_key_can_create_ephemeral_generation(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """XD35: API key with appropriate scope can create ephemeral job."""
+        """XD35: API key with appropriate scope can create ephemeral generation."""
         owner = seed_users.owner
 
         # Create an API key
@@ -796,7 +798,7 @@ class TestCrossDomainE2E:
         raw_key = resp.json()["raw_key"]
         api_headers = {"Authorization": f"Bearer {raw_key}"}
 
-        # Create ephemeral job via API key
-        job = await create_ephemeral_job(http_client, api_headers)
-        assert job["status"] == "queued"
-        assert job["owner"] == f"framecast:user:{owner.user_id}"
+        # Create ephemeral generation via API key
+        gen = await create_ephemeral_generation(http_client, api_headers)
+        assert gen["status"] == "queued"
+        assert gen["owner"] == f"framecast:user:{owner.user_id}"

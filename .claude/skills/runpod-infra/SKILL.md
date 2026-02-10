@@ -96,12 +96,12 @@ exec python main.py --listen 0.0.0.0 --port 8188
 The pod MUST expose these endpoints for E2E debugging:
 
 ```
-GET /debug/status     - Pod health, GPU info, current job
+GET /debug/status     - Pod health, GPU info, current generation
 GET /debug/workflow   - Current workflow state, node progress
 GET /debug/logs       - Recent ComfyUI logs
 GET /debug/queue      - ComfyUI internal queue
 GET /debug/memory     - GPU/system memory breakdown
-GET /debug/artifacts  - Intermediate outputs for a job
+GET /debug/artifacts  - Intermediate outputs for a generation
 ```
 
 ## Just Targets

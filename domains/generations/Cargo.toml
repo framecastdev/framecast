@@ -1,5 +1,5 @@
 [package]
-name = "framecast-jobs"
+name = "framecast-generations"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-description = "Jobs domain: jobs, job events, usage"
+description = "Generations domain: AI content generation instances, events, usage"
 
 [dependencies]
 # Shared crates

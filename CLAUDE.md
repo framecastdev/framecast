@@ -96,11 +96,11 @@ Only implement custom solutions if you cannot find a third-party library that pr
 
 ```bash
 # Example breakdown
-Phase: Job Management System
-├── Task 1: Job entity and database schema    → branch: feature/job-schema
-├── Task 2: Job creation API endpoint         → branch: feature/job-create-api
-├── Task 3: Job status tracking              → branch: feature/job-status
-└── Task 4: Job cancellation logic           → branch: feature/job-cancel
+Phase: Generation Management System
+├── Task 1: Generation entity and database schema    → branch: feature/generation-schema
+├── Task 2: Generation creation API endpoint         → branch: feature/generation-create-api
+├── Task 3: Generation status tracking              → branch: feature/generation-status
+└── Task 4: Generation cancellation logic           → branch: feature/generation-cancel
 ```
 
 - Phase: High-level milestone
@@ -204,7 +204,7 @@ just check        # Run all quality checks (fmt, clippy, tests, pre-commit)
 
 # Running specific tests
 just test teams               # Test specific crate
-just test "job"               # Test matching pattern
+just test "generation"         # Test matching pattern
 
 # E2E tests (Python)
 just test-e2e                  # Run all E2E tests (requires local services)
@@ -248,7 +248,7 @@ just infra-plan dev           # Plan changes for environment
 | API         | 3000  | Framecast API server       |
 | PostgreSQL  | 5432  | Database                   |
 | LocalStack  | 4566  | AWS S3/Lambda emulation    |
-| Inngest     | 8288  | Job orchestration UI       |
+| Inngest     | 8288  | Generation orchestration UI|
 
 Additional commands:
 
@@ -267,8 +267,8 @@ domains/                   # Domain-driven vertical slices
 ├── teams/                 # framecast-teams: Users, Teams, Memberships, Invitations, ApiKeys
 ├── artifacts/             # framecast-artifacts: Artifacts, SystemAssets
 ├── conversations/         # framecast-conversations: Conversations, Messages
+├── generations/           # framecast-generations: Generations, GenerationEvents (fully implemented)
 ├── projects/              # framecast-projects: Projects, AssetFiles (domain only — no API)
-├── jobs/                  # framecast-jobs: Jobs, JobEvents (fully implemented)
 └── webhooks/              # framecast-webhooks: Webhooks, WebhookDeliveries (domain only — no API)
 
 crates/                    # Shared infrastructure
@@ -309,18 +309,18 @@ domains/teams/src/
              ↑                │          ↑
   framecast-projects          │    framecast-runpod
              ↑                │       ↑    ↑
-  framecast-jobs ─────────────┤───────┘    │
+  framecast-generations ──────┤───────┘    │
              ↑                │            │
   framecast-webhooks ─────────┘            │
              ↑                             │
   framecast-auth (reads teams/artifacts/etc tables via CQRS)
              ↑
-  framecast-app → teams + artifacts + conversations + jobs + auth + email + llm
+  framecast-app → teams + artifacts + conversations + generations + auth + email + llm
 ```
 
 - Each domain owns entities + repositories + API handlers (vertical slice)
 - `framecast-teams` has no domain dependencies (only `common` + `email`)
-- `framecast-app` composes teams, artifacts, conversations, and jobs routers
+- `framecast-app` composes teams, artifacts, conversations, and generations routers
 - `crates/auth` handles JWT + API key authentication with CQRS read models
 - Cross-domain reads use CQRS: query other domain's tables directly (same DB)
 
@@ -338,7 +338,7 @@ The app crate composes them via `Router::merge()` with `.with_state()`.
 **Repository Pattern:** Per-domain repository structs (e.g. `TeamsRepositories`) with per-entity repos.
 Cross-domain queries read tables directly (CQRS read-side).
 
-**State Machines:** Job/Project/Invitation/Artifact/Conversation states defined in each domain's
+**State Machines:** Generation/Project/Invitation/Artifact/Conversation states defined in each domain's
 `domain/state.rs` with explicit transitions. Shared `StateError` in `framecast-common`.
 
 **Mutation Testing:** `cargo-mutants` validates test effectiveness on domain/common crates.
@@ -378,8 +378,8 @@ framecast/
 │   ├── teams/              # Users, Teams, Memberships, Invitations
 │   ├── artifacts/          # Artifacts, SystemAssets
 │   ├── conversations/      # Conversations, Messages
+│   ├── generations/        # Generations, GenerationEvents (fully implemented)
 │   ├── projects/           # Projects, AssetFiles (stub)
-│   ├── jobs/               # Jobs, JobEvents (stub)
 │   └── webhooks/           # Webhooks, WebhookDeliveries (stub)
 ├── crates/
 │   ├── app/                # Composition root, Lambda + local binaries
@@ -406,7 +406,7 @@ framecast/
 
 Consult these for proven patterns when facing implementation challenges
 (Rust + Lambda, database schemas, testing patterns,
-ComfyUI/RunPod integration, Inngest job orchestration).
+ComfyUI/RunPod integration, Inngest generation orchestration).
 
 ---
 
@@ -417,7 +417,7 @@ The `docs/spec/` directory contains the formal API specification (v0.0.1-SNAPSHO
 | File | Purpose |
 |------|---------|
 | `04_Entities.md` | Database entities, field definitions |
-| `05_Relationships_States.md` | State machines (Job, Project, Invitation) |
+| `05_Relationships_States.md` | State machines (Generation, Project, Invitation) |
 | `06_Invariants.md` | Business rules that MUST be enforced |
 | `07_Operations.md` | API endpoint specifications |
 | `08_Permissions.md` | Role-based access control matrix |
@@ -426,17 +426,17 @@ The `docs/spec/` directory contains the formal API specification (v0.0.1-SNAPSHO
 
 **User Tiers:** Visitor → Starter → Creator
 
-**Core Entities:** User, Team, Membership, Project, Job, AssetFile, Webhook, ApiKey
+**Core Entities:** User, Team, Membership, Project, Generation, AssetFile, Webhook, ApiKey
 
-**Job States:** `queued → processing → completed/failed/canceled`
+**Generation States:** `queued → processing → completed/failed/canceled`
 
 ### Key Invariants
 
 - Every team has ≥1 owner (INV-T2)
 - Only creators can have team memberships (INV-M4)
-- Max 1 active job per project (INV-J12)
+- Max 1 active generation per project (INV-G12)
 - Credits cannot go negative (INV-U5, INV-T6)
-- Max 5 concurrent jobs per team (CARD-5)
+- Max 5 concurrent generations per team (CARD-5)
 
 ---
 

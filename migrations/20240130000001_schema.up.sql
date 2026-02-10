@@ -22,14 +22,14 @@ CREATE TYPE invitation_role AS ENUM ('admin', 'member', 'viewer');
 -- Project status enum
 CREATE TYPE project_status AS ENUM ('draft', 'rendering', 'completed', 'archived');
 
--- Job status enum
-CREATE TYPE job_status AS ENUM ('queued', 'processing', 'completed', 'failed', 'canceled');
+-- Generation status enum
+CREATE TYPE generation_status AS ENUM ('queued', 'processing', 'completed', 'failed', 'canceled');
 
--- Job failure type enum
-CREATE TYPE job_failure_type AS ENUM ('system', 'validation', 'timeout', 'canceled');
+-- Generation failure type enum
+CREATE TYPE generation_failure_type AS ENUM ('system', 'validation', 'timeout', 'canceled');
 
--- Job event type enum
-CREATE TYPE job_event_type AS ENUM ('queued', 'started', 'progress', 'scene_complete', 'completed', 'failed', 'canceled');
+-- Generation event type enum
+CREATE TYPE generation_event_type AS ENUM ('queued', 'started', 'progress', 'scene_complete', 'completed', 'failed', 'canceled');
 
 -- Asset status enum
 CREATE TYPE asset_status AS ENUM ('pending', 'ready', 'failed');
@@ -41,7 +41,7 @@ CREATE TYPE webhook_delivery_status AS ENUM ('pending', 'retrying', 'delivered',
 CREATE TYPE system_asset_category AS ENUM ('sfx', 'ambient', 'music', 'transition');
 
 -- Valid webhook events
-CREATE TYPE webhook_event_type AS ENUM ('job.queued', 'job.started', 'job.progress', 'job.completed', 'job.failed', 'job.canceled');
+CREATE TYPE webhook_event_type AS ENUM ('generation.queued', 'generation.started', 'generation.progress', 'generation.completed', 'generation.failed', 'generation.canceled');
 
 -- ============================================================================
 -- TABLES
@@ -176,13 +176,13 @@ CREATE INDEX idx_projects_created_by ON projects(created_by);
 CREATE INDEX idx_projects_status ON projects(status);
 CREATE INDEX idx_projects_team_updated ON projects(team_id, updated_at DESC);
 
--- Job table
-CREATE TABLE jobs (
+-- Generation table
+CREATE TABLE generations (
     id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     owner              VARCHAR(500) NOT NULL, -- URN format
     triggered_by       UUID NOT NULL REFERENCES users(id),
     project_id         UUID REFERENCES projects(id) ON DELETE SET NULL,
-    status             job_status NOT NULL DEFAULT 'queued',
+    status             generation_status NOT NULL DEFAULT 'queued',
     spec_snapshot      JSONB NOT NULL,
     options            JSONB NOT NULL DEFAULT '{}',
     progress           JSONB NOT NULL DEFAULT '{}',
@@ -190,7 +190,7 @@ CREATE TABLE jobs (
     output_size_bytes  BIGINT,
     error              JSONB,
     credits_charged    INTEGER NOT NULL DEFAULT 0 CHECK (credits_charged >= 0),
-    failure_type       job_failure_type,
+    failure_type       generation_failure_type,
     credits_refunded   INTEGER NOT NULL DEFAULT 0 CHECK (credits_refunded >= 0),
     idempotency_key    VARCHAR(255),
     started_at         TIMESTAMPTZ,
@@ -200,11 +200,11 @@ CREATE TABLE jobs (
 
     -- Constraints
     CONSTRAINT refund_not_exceeding_charge CHECK (credits_refunded <= credits_charged),
-    CONSTRAINT terminal_jobs_have_completion CHECK (
+    CONSTRAINT terminal_generations_have_completion CHECK (
         (status IN ('completed', 'failed', 'canceled') AND completed_at IS NOT NULL) OR
         status NOT IN ('completed', 'failed', 'canceled')
     ),
-    CONSTRAINT project_jobs_team_owned CHECK (
+    CONSTRAINT project_generations_team_owned CHECK (
         (project_id IS NULL) OR
         (project_id IS NOT NULL AND owner LIKE 'framecast:team:%')
     ),
@@ -214,31 +214,31 @@ CREATE TABLE jobs (
     )
 );
 
--- Indexes for jobs
-CREATE INDEX idx_jobs_owner ON jobs(owner);
-CREATE INDEX idx_jobs_triggered_by ON jobs(triggered_by);
-CREATE INDEX idx_jobs_project_id ON jobs(project_id);
-CREATE INDEX idx_jobs_status ON jobs(status);
-CREATE INDEX idx_jobs_created_at ON jobs(created_at DESC);
-CREATE UNIQUE INDEX idx_jobs_idempotency ON jobs(triggered_by, idempotency_key)
+-- Indexes for generations
+CREATE INDEX idx_generations_owner ON generations(owner);
+CREATE INDEX idx_generations_triggered_by ON generations(triggered_by);
+CREATE INDEX idx_generations_project_id ON generations(project_id);
+CREATE INDEX idx_generations_status ON generations(status);
+CREATE INDEX idx_generations_created_at ON generations(created_at DESC);
+CREATE UNIQUE INDEX idx_generations_idempotency ON generations(triggered_by, idempotency_key)
     WHERE idempotency_key IS NOT NULL;
 
--- JobEvent table
-CREATE TABLE job_events (
-    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    job_id     UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    sequence   BIGINT NOT NULL,
-    event_type job_event_type NOT NULL,
-    payload    JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+-- GenerationEvent table
+CREATE TABLE generation_events (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    generation_id   UUID NOT NULL REFERENCES generations(id) ON DELETE CASCADE,
+    sequence        BIGINT NOT NULL,
+    event_type      generation_event_type NOT NULL,
+    payload         JSONB NOT NULL DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     -- Constraints
-    CONSTRAINT unique_job_sequence UNIQUE (job_id, sequence)
+    CONSTRAINT unique_generation_sequence UNIQUE (generation_id, sequence)
 );
 
--- Indexes for job_events
-CREATE INDEX idx_job_events_job_created ON job_events(job_id, created_at ASC);
-CREATE INDEX idx_job_events_job_sequence ON job_events(job_id, sequence ASC);
+-- Indexes for generation_events
+CREATE INDEX idx_generation_events_generation_created ON generation_events(generation_id, created_at ASC);
+CREATE INDEX idx_generation_events_generation_sequence ON generation_events(generation_id, sequence ASC);
 
 -- AssetFile table
 CREATE TABLE asset_files (
@@ -297,7 +297,7 @@ CREATE INDEX idx_webhooks_team_active ON webhooks(team_id, is_active);
 CREATE TABLE webhook_deliveries (
     id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     webhook_id       UUID NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
-    job_id           UUID REFERENCES jobs(id) ON DELETE SET NULL,
+    generation_id    UUID REFERENCES generations(id) ON DELETE SET NULL,
     event_type       VARCHAR(50) NOT NULL,
     status           webhook_delivery_status NOT NULL DEFAULT 'pending',
     payload          JSONB NOT NULL,
@@ -386,8 +386,8 @@ CREATE TRIGGER trigger_projects_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER trigger_jobs_updated_at
-    BEFORE UPDATE ON jobs
+CREATE TRIGGER trigger_generations_updated_at
+    BEFORE UPDATE ON generations
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
@@ -565,8 +565,8 @@ COMMENT ON TABLE memberships IS 'User-team associations with roles';
 COMMENT ON TABLE invitations IS 'Pending team invitations';
 COMMENT ON TABLE api_keys IS 'API authentication keys';
 COMMENT ON TABLE projects IS 'Storyboard projects containing specs';
-COMMENT ON TABLE jobs IS 'Video generation jobs (ephemeral or project-based)';
-COMMENT ON TABLE job_events IS 'Job progress events for SSE streaming';
+COMMENT ON TABLE generations IS 'AI content generation instances (ephemeral or project-based)';
+COMMENT ON TABLE generation_events IS 'Generation progress events for SSE streaming';
 COMMENT ON TABLE asset_files IS 'User-uploaded reference files';
 COMMENT ON TABLE webhooks IS 'HTTP callback registrations';
 COMMENT ON TABLE webhook_deliveries IS 'Webhook delivery attempt records';

@@ -5,7 +5,7 @@ use framecast_common::{Error, Result};
 use framecast_runpod::mock::MockOutcome;
 use serde::{Deserialize, Serialize};
 
-use crate::api::middleware::JobsState;
+use crate::api::middleware::GenerationsState;
 
 /// Request to configure mock render behavior
 #[derive(Debug, Deserialize)]
@@ -20,7 +20,7 @@ pub struct ConfigureMockRequest {
 /// Response for mock history
 #[derive(Debug, Serialize)]
 pub struct MockHistoryEntry {
-    pub job_id: uuid::Uuid,
+    pub generation_id: uuid::Uuid,
     pub spec_snapshot: serde_json::Value,
     pub options: serde_json::Value,
     pub callback_url: String,
@@ -28,7 +28,7 @@ pub struct MockHistoryEntry {
 
 /// Configure mock render behavior
 pub async fn configure_mock(
-    State(state): State<JobsState>,
+    State(state): State<GenerationsState>,
     Json(req): Json<ConfigureMockRequest>,
 ) -> Result<StatusCode> {
     let behavior = state
@@ -71,7 +71,9 @@ pub async fn configure_mock(
 }
 
 /// Get mock render request history
-pub async fn get_history(State(state): State<JobsState>) -> Result<Json<Vec<MockHistoryEntry>>> {
+pub async fn get_history(
+    State(state): State<GenerationsState>,
+) -> Result<Json<Vec<MockHistoryEntry>>> {
     let history = state
         .mock_render_history
         .as_ref()
@@ -82,7 +84,7 @@ pub async fn get_history(State(state): State<JobsState>) -> Result<Json<Vec<Mock
         .map_err(|e| Error::Internal(format!("Failed to lock mock history: {}", e)))?
         .iter()
         .map(|r| MockHistoryEntry {
-            job_id: r.job_id,
+            generation_id: r.generation_id,
             spec_snapshot: r.spec_snapshot.clone(),
             options: r.options.clone(),
             callback_url: r.callback_url.clone(),
@@ -93,7 +95,7 @@ pub async fn get_history(State(state): State<JobsState>) -> Result<Json<Vec<Mock
 }
 
 /// Reset mock render behavior and history
-pub async fn reset_mock(State(state): State<JobsState>) -> Result<StatusCode> {
+pub async fn reset_mock(State(state): State<GenerationsState>) -> Result<StatusCode> {
     let behavior = state
         .mock_render_behavior
         .as_ref()

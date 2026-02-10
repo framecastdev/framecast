@@ -178,7 +178,7 @@ async def seed_users(test_config: E2EConfig):
 
         # Cleanup: TRUNCATE bypasses FK constraints and INV-T2 trigger
         await conn.execute(
-            "TRUNCATE jobs, job_events, message_artifacts, messages, artifacts, conversations, "
+            "TRUNCATE generations, generation_events, message_artifacts, messages, artifacts, conversations, "
             "api_keys, invitations, memberships, teams, users CASCADE"
         )
     finally:
@@ -449,7 +449,7 @@ def generate_jit_credentials_no_email() -> tuple[str, dict[str, str]]:
     return user_id, headers
 
 
-async def create_ephemeral_job(
+async def create_ephemeral_generation(
     client: httpx.AsyncClient,
     headers: dict[str, str],
     spec: dict[str, Any] | None = None,
@@ -457,7 +457,7 @@ async def create_ephemeral_job(
     idempotency_key: str | None = None,
     owner: str | None = None,
 ) -> dict[str, Any]:
-    """Create an ephemeral job and return the response JSON."""
+    """Create an ephemeral generation and return the response JSON."""
     data: dict[str, Any] = {
         "spec": spec if spec is not None else {"prompt": "A brave warrior"}
     }
@@ -467,29 +467,33 @@ async def create_ephemeral_job(
         data["idempotency_key"] = idempotency_key
     if owner is not None:
         data["owner"] = owner
-    resp = await client.post("/v1/generate", json=data, headers=headers)
+    resp = await client.post("/v1/generations", json=data, headers=headers)
     assert resp.status_code in [200, 201], (
-        f"create_ephemeral_job failed: {resp.status_code} {resp.text}"
+        f"create_ephemeral_generation failed: {resp.status_code} {resp.text}"
     )
     return resp.json()
 
 
-async def create_render_job(
+async def create_generation_from_artifact(
     client: httpx.AsyncClient,
     headers: dict[str, str],
     artifact_id: str,
 ) -> dict[str, Any]:
-    """Render an artifact and return the response JSON (job + artifact)."""
-    resp = await client.post(f"/v1/artifacts/{artifact_id}/render", headers=headers)
+    """Generate from an artifact and return the response JSON (generation + artifact)."""
+    resp = await client.post(
+        "/v1/generations",
+        json={"artifact_id": artifact_id},
+        headers=headers,
+    )
     assert resp.status_code == 201, (
-        f"create_render_job failed: {resp.status_code} {resp.text}"
+        f"create_generation_from_artifact failed: {resp.status_code} {resp.text}"
     )
     return resp.json()
 
 
 async def trigger_callback(
     client: httpx.AsyncClient,
-    job_id: str,
+    generation_id: str,
     event: str,
     output: dict[str, Any] | None = None,
     error: dict[str, Any] | None = None,
@@ -497,8 +501,8 @@ async def trigger_callback(
     progress_percent: float | None = None,
     output_size_bytes: int | None = None,
 ) -> httpx.Response:
-    """Send a job callback event (internal endpoint, no auth)."""
-    payload: dict[str, Any] = {"job_id": job_id, "event": event}
+    """Send a generation callback event (internal endpoint, no auth)."""
+    payload: dict[str, Any] = {"generation_id": generation_id, "event": event}
     if output is not None:
         payload["output"] = output
     if output_size_bytes is not None:
@@ -509,22 +513,22 @@ async def trigger_callback(
         payload["failure_type"] = failure_type
     if progress_percent is not None:
         payload["progress_percent"] = progress_percent
-    return await client.post("/internal/jobs/callback", json=payload)
+    return await client.post("/internal/generations/callback", json=payload)
 
 
-async def complete_job(
+async def complete_generation(
     client: httpx.AsyncClient,
-    job_id: str,
+    generation_id: str,
     output: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Send started + completed callbacks. Returns the final job response."""
-    resp = await trigger_callback(client, job_id, "started")
+    """Send started + completed callbacks. Returns the final generation response."""
+    resp = await trigger_callback(client, generation_id, "started")
     assert resp.status_code == 200, (
         f"started callback failed: {resp.status_code} {resp.text}"
     )
     resp = await trigger_callback(
         client,
-        job_id,
+        generation_id,
         "completed",
         output=output or {"url": "https://example.com/output.png"},
         output_size_bytes=12345,
@@ -535,20 +539,20 @@ async def complete_job(
     return resp.json()
 
 
-async def fail_job(
+async def fail_generation(
     client: httpx.AsyncClient,
-    job_id: str,
+    generation_id: str,
     error: dict[str, Any] | None = None,
     failure_type: str = "system",
 ) -> dict[str, Any]:
-    """Send started + failed callbacks. Returns the final job response."""
-    resp = await trigger_callback(client, job_id, "started")
+    """Send started + failed callbacks. Returns the final generation response."""
+    resp = await trigger_callback(client, generation_id, "started")
     assert resp.status_code == 200, (
         f"started callback failed: {resp.status_code} {resp.text}"
     )
     resp = await trigger_callback(
         client,
-        job_id,
+        generation_id,
         "failed",
         error=error or {"message": "Something went wrong"},
         failure_type=failure_type,
@@ -609,11 +613,11 @@ __all__ = [
     "create_character",
     "generate_jit_credentials",
     "generate_jit_credentials_no_email",
-    "create_ephemeral_job",
-    "create_render_job",
+    "create_ephemeral_generation",
+    "create_generation_from_artifact",
     "trigger_callback",
-    "complete_job",
-    "fail_job",
+    "complete_generation",
+    "fail_generation",
     "configure_mock_render",
     "reset_mock_render",
     "get_mock_render_history",
