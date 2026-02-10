@@ -8,6 +8,7 @@ use framecast_common::{compute_hash_prefix, verify_key_hash};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::claims::SupabaseClaims;
 use crate::config::AuthConfig;
 use crate::context::AuthContext;
 use crate::error::AuthError;
@@ -192,16 +193,51 @@ impl AuthBackend {
         Ok(None)
     }
 
+    /// Provision a new user from JWT claims (JIT user provisioning).
+    ///
+    /// Called on first authenticated request when the user doesn't exist in the DB.
+    /// Uses `ON CONFLICT DO NOTHING` to handle concurrent first-requests safely.
+    async fn provision_user_from_jwt(
+        &self,
+        user_id: Uuid,
+        claims: &SupabaseClaims,
+    ) -> Result<AuthIdentity, AuthError> {
+        let email = claims.email.as_deref().ok_or(AuthError::MissingEmail)?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO users (id, email, tier, credits, ephemeral_storage_bytes, created_at, updated_at)
+            VALUES ($1, $2, 'starter', 0, 0, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(user_id)
+        .bind(email)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, user_id = %user_id, "Failed to provision user");
+            AuthError::UserProvisionFailed
+        })?;
+
+        tracing::info!(user_id = %user_id, email = %email, "JIT user provisioned");
+
+        self.find_user(user_id).await?.ok_or_else(|| {
+            tracing::error!(user_id = %user_id, "User not found after provisioning");
+            AuthError::UserProvisionFailed
+        })
+    }
+
     /// Shared JWT authentication logic used by both `AuthUser` and `AnyAuth`.
     pub(crate) async fn authenticate_jwt(&self, token: &str) -> Result<AuthContext, AuthError> {
         let claims = crate::jwt::validate_jwt_token(token, &self.config)?;
 
         let user_id = Uuid::parse_str(&claims.sub).map_err(|_| AuthError::InvalidUserId)?;
 
-        let user = self
-            .find_user(user_id)
-            .await?
-            .ok_or(AuthError::UserNotFound)?;
+        let user = match self.find_user(user_id).await? {
+            Some(user) => user,
+            None => self.provision_user_from_jwt(user_id, &claims).await?,
+        };
 
         let memberships = if user.tier == AuthTier::Creator {
             self.find_memberships(user_id).await?

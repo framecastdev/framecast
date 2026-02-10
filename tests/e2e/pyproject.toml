@@ -47,6 +47,7 @@ markers = [
     "messages: message send/list tests",
     "cross_domain: cross-domain interaction tests",
     "journey: full user journey tests spanning multiple domains",
+    "jit: just-in-time user provisioning tests",
 ]
 
 [tool.coverage.run]
