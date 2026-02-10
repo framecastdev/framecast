@@ -233,6 +233,9 @@ class TestUserJourneyE2E:
             f"/v1/artifacts/{character_id}/render", headers=api_headers
         )
         assert resp.status_code == 201
+        result = resp.json()
+        assert result["artifact"]["kind"] == "image"
+        assert result["artifact"]["status"] == "pending"
 
         # 6. List artifacts -> character + image
         resp = await http_client.get("/v1/artifacts", headers=api_headers)
@@ -691,6 +694,9 @@ class TestUserJourneyE2E:
             headers=invitee.auth_headers(),
         )
         assert resp.status_code == 201
+        result = resp.json()
+        assert result["artifact"]["kind"] == "image"
+        assert result["artifact"]["status"] == "pending"
 
         # 9. Wildcard API key now succeeds
         resp = await http_client.post(

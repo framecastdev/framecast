@@ -240,6 +240,7 @@ pub async fn create_ephemeral_job(
         ctx.user.id,
         None,
         req.spec.clone(),
+        req.options.clone(),
         0, // credits deferred
         req.idempotency_key,
     )?;
@@ -439,6 +440,7 @@ pub async fn clone_job(
         ctx.user.id,
         None,
         original.spec_snapshot.0,
+        Some(original.options.0.clone()),
         0, // credits deferred
         None,
     )?;
@@ -463,7 +465,7 @@ pub async fn clone_job(
             "job_id": created_job.id,
             "owner": created_job.owner,
             "spec_snapshot": created_job.spec_snapshot.0,
-            "options": original.options.0
+            "options": created_job.options.0
         }),
         user: None,
         id: None,
@@ -618,6 +620,7 @@ pub async fn render_artifact(
         ctx.user.id,
         None,
         spec,
+        None,
         0, // credits deferred
         None,
     )?;
