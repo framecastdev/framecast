@@ -58,17 +58,20 @@ locals {
 
   # Lambda environment variables
   lambda_environment = {
-    DATABASE_URL        = var.database_url
-    JWT_SECRET          = var.jwt_secret
-    SUPABASE_URL        = var.supabase_url
-    SUPABASE_ANON_KEY   = var.supabase_anon_key
-    ANTHROPIC_API_KEY   = var.anthropic_api_key
-    INNGEST_EVENT_KEY   = var.inngest_event_key
-    INNGEST_SIGNING_KEY = var.inngest_signing_key
-    RUNPOD_API_KEY      = var.runpod_api_key
-    RUNPOD_ENDPOINT_ID  = var.runpod_endpoint_id
-    S3_BUCKET_OUTPUTS   = module.s3.outputs_bucket_name
-    S3_BUCKET_ASSETS    = module.s3.assets_bucket_name
+    DATABASE_URL      = var.database_url
+    JWT_SECRET        = var.jwt_secret
+    JWT_ISSUER        = var.jwt_issuer
+    JWT_AUDIENCE      = var.jwt_audience
+    APP_BASE_URL      = var.app_base_url
+    FROM_EMAIL        = var.from_email
+    EMAIL_ENABLED     = var.email_enabled
+    EMAIL_PROVIDER    = var.email_provider
+    LLM_PROVIDER      = var.llm_provider
+    ANTHROPIC_API_KEY = var.anthropic_api_key
+    ANTHROPIC_MODEL   = var.anthropic_model
+    LLM_MAX_TOKENS    = var.llm_max_tokens
+    S3_BUCKET_OUTPUTS = module.s3.outputs_bucket_name
+    S3_BUCKET_ASSETS  = module.s3.assets_bucket_name
     # For LocalStack, set the endpoint URL
     AWS_ENDPOINT_URL = var.localstack_enabled ? var.localstack_endpoint : ""
   }
@@ -130,6 +133,7 @@ module "api_gateway" {
   environment          = var.environment
   lambda_invoke_arn    = module.lambda.invoke_arn
   lambda_function_name = module.lambda.function_name
+  cors_allow_origins   = var.cors_allow_origins
   tags                 = local.common_tags
 }
 

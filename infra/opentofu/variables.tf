@@ -46,18 +46,46 @@ variable "jwt_secret" {
   sensitive   = true
 }
 
-variable "supabase_url" {
-  description = "Supabase project URL (optional)"
+variable "jwt_issuer" {
+  description = "JWT issuer claim (optional)"
   type        = string
-  default     = ""
-  sensitive   = true
+  default     = "framecast"
 }
 
-variable "supabase_anon_key" {
-  description = "Supabase anonymous key (optional)"
+variable "jwt_audience" {
+  description = "JWT audience claim (optional)"
   type        = string
-  default     = ""
-  sensitive   = true
+  default     = "framecast-api"
+}
+
+variable "app_base_url" {
+  description = "Application base URL for links in emails"
+  type        = string
+  default     = "https://framecast.app"
+}
+
+variable "from_email" {
+  description = "Sender email address"
+  type        = string
+  default     = "invitations@framecast.app"
+}
+
+variable "email_enabled" {
+  description = "Enable email sending"
+  type        = string
+  default     = "true"
+}
+
+variable "email_provider" {
+  description = "Email provider (ses or mock)"
+  type        = string
+  default     = "ses"
+}
+
+variable "llm_provider" {
+  description = "LLM provider (anthropic or mock)"
+  type        = string
+  default     = "anthropic"
 }
 
 variable "anthropic_api_key" {
@@ -67,31 +95,16 @@ variable "anthropic_api_key" {
   sensitive   = true
 }
 
-variable "inngest_event_key" {
-  description = "Inngest event key (optional)"
+variable "anthropic_model" {
+  description = "Anthropic model name"
   type        = string
-  default     = ""
-  sensitive   = true
+  default     = "claude-sonnet-4-20250514"
 }
 
-variable "inngest_signing_key" {
-  description = "Inngest signing key (optional)"
+variable "llm_max_tokens" {
+  description = "LLM max tokens per response"
   type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "runpod_api_key" {
-  description = "RunPod API key (optional)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "runpod_endpoint_id" {
-  description = "RunPod endpoint ID (optional)"
-  type        = string
-  default     = ""
+  default     = "4096"
 }
 
 # ==============================================================================
@@ -124,6 +137,16 @@ variable "alarm_sns_topic_arn" {
   description = "SNS topic ARN for alarm notifications (optional)"
   type        = string
   default     = ""
+}
+
+# ==============================================================================
+# API GATEWAY
+# ==============================================================================
+
+variable "cors_allow_origins" {
+  description = "CORS allowed origins (restrict in production)"
+  type        = list(string)
+  default     = ["*"]
 }
 
 # ==============================================================================
