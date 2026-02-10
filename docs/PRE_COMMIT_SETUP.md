@@ -105,7 +105,7 @@ We enforce [Conventional Commits](https://www.conventionalcommits.org/):
 git commit -m "feat: add user authentication endpoint"
 git commit -m "fix: resolve database connection timeout"
 git commit -m "docs: update API documentation"
-git commit -m "test: add integration tests for job processing"
+git commit -m "test: add integration tests for generation processing"
 ```
 
 ## Custom Validations

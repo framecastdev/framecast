@@ -1,9 +1,10 @@
 //! Generation callback handler for render service postbacks
 
 use axum::{extract::State, Json};
-use framecast_common::{Error, Result};
+use framecast_common::{Error, Result, ValidatedJson};
 use serde::Deserialize;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::api::middleware::GenerationsState;
 use crate::domain::entities::{GenerationEventType, GenerationFailureType};
@@ -15,7 +16,7 @@ use crate::repository::transactions::{
 use super::generations::GenerationResponse;
 
 /// Callback payload from render service
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct GenerationCallbackPayload {
     pub generation_id: Uuid,
     pub event: String,
@@ -29,7 +30,7 @@ pub struct GenerationCallbackPayload {
 /// Handle generation callback from render service (internal, no auth)
 pub async fn generation_callback(
     State(state): State<GenerationsState>,
-    Json(payload): Json<GenerationCallbackPayload>,
+    ValidatedJson(payload): ValidatedJson<GenerationCallbackPayload>,
 ) -> Result<Json<GenerationResponse>> {
     let mut generation = state
         .repos

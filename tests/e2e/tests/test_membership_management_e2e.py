@@ -361,8 +361,8 @@ class TestMembershipManagementE2E:
             json={"role": "owner"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for admin promoting to owner, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for admin promoting to owner, got {resp.status_code} {resp.text}"
         )
 
     async def test_m12_admin_cannot_demote_owner(
@@ -384,8 +384,8 @@ class TestMembershipManagementE2E:
             json={"role": "admin"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for admin demoting owner, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for admin demoting owner, got {resp.status_code} {resp.text}"
         )
 
     async def test_m13_admin_cannot_remove_owner(
@@ -406,8 +406,8 @@ class TestMembershipManagementE2E:
             f"/v1/teams/{team_id}/members/{owner.user_id}",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for admin removing owner, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for admin removing owner, got {resp.status_code} {resp.text}"
         )
 
     async def test_m14_member_cannot_change_roles(
@@ -597,8 +597,8 @@ class TestMembershipManagementE2E:
         resp = await http_client.post(
             f"/v1/teams/{team_id}/leave", headers=owner.auth_headers()
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for last owner leaving with members, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for last owner leaving with members, got {resp.status_code} {resp.text}"
         )
 
     async def test_m22_last_owner_can_leave_if_sole_member(
@@ -656,8 +656,8 @@ class TestMembershipManagementE2E:
             f"/v1/teams/{team_id}/members/{owner.user_id}",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for removing last owner, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for removing last owner, got {resp.status_code} {resp.text}"
         )
 
     async def test_m24_demoting_last_owner_blocked(
@@ -682,8 +682,8 @@ class TestMembershipManagementE2E:
             json={"role": "admin"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for demoting last owner, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for demoting last owner, got {resp.status_code} {resp.text}"
         )
 
     async def test_m25_demoting_owner_ok_if_another_exists(
@@ -771,8 +771,8 @@ class TestMembershipManagementE2E:
             f"/v1/teams/{fake_team_id}/members/{owner.user_id}",
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 403, 404], (
-            f"Expected 400/403/404 for nonexistent team, got {resp.status_code}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for nonexistent team, got {resp.status_code}"
         )
 
     async def test_m28_update_role_of_non_member(

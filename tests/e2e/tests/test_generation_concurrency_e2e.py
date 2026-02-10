@@ -59,8 +59,8 @@ class TestGenerationConcurrencyE2E:
             json={"spec": {"prompt": "Second generation"}},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 409, 429], (
-            f"Expected 400/409/429 for starter concurrency limit, got {resp.status_code}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for starter concurrency limit, got {resp.status_code}"
         )
 
     async def test_gc03_starter_can_create_after_completion(
@@ -154,8 +154,8 @@ class TestGenerationConcurrencyE2E:
             json={"spec": {"prompt": "Generation 6"}},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 409, 429], (
-            f"Expected 400/409/429 for creator concurrency limit, got {resp.status_code}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for creator concurrency limit, got {resp.status_code}"
         )
 
     async def test_gc08_creator_can_create_after_completing_one(

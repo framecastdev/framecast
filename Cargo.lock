@@ -1330,6 +1330,7 @@ dependencies = [
  "tokio-test",
  "tracing",
  "uuid",
+ "validator",
 ]
 
 [[package]]

@@ -523,8 +523,8 @@ class TestMultiUserScenariosE2E:
             f"/v1/invitations/{inv_id}/accept",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 404, 409], (
-            f"Expected failure for accepting invitation of deleted team, got {resp.status_code}"
+        assert resp.status_code == 404, (
+            f"Expected 404 for accepting invitation of deleted team, got {resp.status_code}"
         )
 
     async def test_mu14_leave_team_lose_team_key_access(

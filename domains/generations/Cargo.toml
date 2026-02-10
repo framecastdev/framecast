@@ -28,6 +28,9 @@ axum.workspace = true
 # Database mapping
 sqlx.workspace = true
 
+# Validation
+validator.workspace = true
+
 # Regex for validation
 regex = "1.0"
 

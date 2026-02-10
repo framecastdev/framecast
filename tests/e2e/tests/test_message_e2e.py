@@ -209,7 +209,7 @@ class TestMessageE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """MS11: Send to archived conversation -> 400/422."""
+        """MS11: Send to archived conversation -> 400."""
         owner = seed_users.owner
 
         conv = await create_conversation(http_client, owner.auth_headers())
@@ -227,8 +227,8 @@ class TestMessageE2E:
             json={"content": "Hello"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for archived conv, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for archived conv, got {resp.status_code} {resp.text}"
         )
 
     async def test_ms12_send_empty_content(
@@ -236,7 +236,7 @@ class TestMessageE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """MS12: Empty content -> 400/422."""
+        """MS12: Empty content -> 400."""
         owner = seed_users.owner
 
         conv = await create_conversation(http_client, owner.auth_headers())
@@ -246,8 +246,8 @@ class TestMessageE2E:
             json={"content": ""},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for empty content, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for empty content, got {resp.status_code} {resp.text}"
         )
 
     async def test_ms13_send_whitespace_only_content(
@@ -255,7 +255,7 @@ class TestMessageE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """MS13: Whitespace-only content -> 400/422."""
+        """MS13: Whitespace-only content -> 400."""
         owner = seed_users.owner
 
         conv = await create_conversation(http_client, owner.auth_headers())
@@ -265,8 +265,8 @@ class TestMessageE2E:
             json={"content": "   \t\n  "},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for whitespace content, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for whitespace content, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------

@@ -574,7 +574,7 @@ class TestCrossDomainE2E:
             json={"content": ""},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422]
+        assert resp.status_code == 400
         body = resp.json()
         assert "error" in body
         assert "code" in body["error"]

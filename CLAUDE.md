@@ -170,6 +170,30 @@ in the current layer. Add it when it's actually implemented.
 YAGNI: code that does nothing today is noise — it creates unused API surface,
 confuses mutation testing, and misleads readers about what the code actually does.
 
+### Rule 13: ValidatedJson for All JSON Request Bodies
+
+**NEVER** use axum's plain `Json<T>` extractor in handler function signatures.
+Always use `ValidatedJson<T>` from `framecast_common`. Plain `Json<T>` returns
+**422** on deserialization errors; `ValidatedJson<T>` normalizes all input
+errors (deserialization + validation) to **400**.
+
+```rust
+// ✅ CORRECT — ValidatedJson returns 400 for all input errors
+use framecast_common::ValidatedJson;
+
+pub async fn my_handler(
+    ValidatedJson(req): ValidatedJson<MyRequest>,
+) -> Result<Json<MyResponse>> { ... }
+
+// ❌ FORBIDDEN — Plain Json returns 422 for deserialization errors
+pub async fn my_handler(
+    Json(req): Json<MyRequest>,
+) -> Result<Json<MyResponse>> { ... }
+```
+
+The request struct must derive `Validate` (from the `validator` crate).
+If no validation rules are needed, a bare `#[derive(Validate)]` is sufficient.
+
 ### Compliance Check
 
 Before executing ANY command, ask yourself:
@@ -188,6 +212,7 @@ Before executing ANY command, ask yourself:
 - Am I working on main branch? → STOP, create feature branch
 - Am I about to run tests/clippy/fmt/checks locally? → STOP, let CI do it
 - Am I adding placeholder code? → STOP, YAGNI — add it when it's needed
+- Am I using plain `Json<T>` in a handler? → STOP, use `ValidatedJson<T>` (400, not 422)
 </law>
 
 ---
@@ -267,16 +292,16 @@ domains/                   # Domain-driven vertical slices
 ├── teams/                 # framecast-teams: Users, Teams, Memberships, Invitations, ApiKeys
 ├── artifacts/             # framecast-artifacts: Artifacts, SystemAssets
 ├── conversations/         # framecast-conversations: Conversations, Messages
-├── generations/           # framecast-generations: Generations, GenerationEvents (fully implemented)
-├── projects/              # framecast-projects: Projects, AssetFiles (domain only — no API)
-└── webhooks/              # framecast-webhooks: Webhooks, WebhookDeliveries (domain only — no API)
+└── generations/           # framecast-generations: Generations, GenerationEvents (fully implemented)
 
 crates/                    # Shared infrastructure
 ├── app/                   # framecast-app: Composition root, Lambda + local binaries
 ├── auth/                  # framecast-auth: AuthBackend, extractors, CQRS read models
-├── llm/                   # framecast-llm: LLM provider abstraction (Anthropic, mock)
+├── common/                # framecast-common: Shared error types, URN parsing, StateError
 ├── email/                 # framecast-email: AWS SES email service
-└── common/                # framecast-common: Shared error types, URN parsing, StateError
+├── inngest/               # framecast-inngest: Inngest event orchestration
+├── llm/                   # framecast-llm: LLM provider abstraction (Anthropic, mock)
+└── runpod/                # framecast-runpod: RunPod GPU compute render service
 ```
 
 Each domain crate owns its full vertical slice:
@@ -306,13 +331,11 @@ domains/teams/src/
   framecast-artifacts    │    │    └──── framecast-llm
              ↑           │    │
   framecast-conversations┘    │    framecast-inngest
-             ↑                │          ↑
-  framecast-projects          │    framecast-runpod
-             ↑                │       ↑    ↑
-  framecast-generations ──────┤───────┘    │
-             ↑                │            │
-  framecast-webhooks ─────────┘            │
-             ↑                             │
+                              │          ↑
+                              │    framecast-runpod
+                              │       ↑
+  framecast-generations ──────┤───────┘
+             ↑                │
   framecast-auth (reads teams/artifacts/etc tables via CQRS)
              ↑
   framecast-app → teams + artifacts + conversations + generations + auth + email + llm
@@ -338,7 +361,7 @@ The app crate composes them via `Router::merge()` with `.with_state()`.
 **Repository Pattern:** Per-domain repository structs (e.g. `TeamsRepositories`) with per-entity repos.
 Cross-domain queries read tables directly (CQRS read-side).
 
-**State Machines:** Generation/Project/Invitation/Artifact/Conversation states defined in each domain's
+**State Machines:** Generation/Invitation/Artifact/Conversation states defined in each domain's
 `domain/state.rs` with explicit transitions. Shared `StateError` in `framecast-common`.
 
 **Mutation Testing:** `cargo-mutants` validates test effectiveness on domain/common crates.
@@ -378,15 +401,15 @@ framecast/
 │   ├── teams/              # Users, Teams, Memberships, Invitations
 │   ├── artifacts/          # Artifacts, SystemAssets
 │   ├── conversations/      # Conversations, Messages
-│   ├── generations/        # Generations, GenerationEvents (fully implemented)
-│   ├── projects/           # Projects, AssetFiles (stub)
-│   └── webhooks/           # Webhooks, WebhookDeliveries (stub)
+│   └── generations/        # Generations, GenerationEvents (fully implemented)
 ├── crates/
 │   ├── app/                # Composition root, Lambda + local binaries
 │   ├── auth/               # JWT/API key authentication (IV)
-│   ├── llm/                # LLM provider abstraction (IV)
+│   ├── common/             # Shared error types, URN, StateError
 │   ├── email/              # AWS SES email service (IV)
-│   └── common/             # Shared error types, URN, StateError
+│   ├── inngest/            # Inngest event orchestration (IV)
+│   ├── llm/                # LLM provider abstraction (IV)
+│   └── runpod/             # RunPod GPU compute render service (IV)
 ├── tests/
 │   ├── integration/        # Rust integration tests
 │   └── e2e/                # Python E2E tests

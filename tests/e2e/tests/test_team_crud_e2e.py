@@ -409,8 +409,8 @@ class TestTeamCrudE2E:
         resp = await http_client.delete(
             f"/v1/teams/{team_id}", headers=owner.auth_headers()
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for deleting team with members, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for deleting team with members, got {resp.status_code} {resp.text}"
         )
 
     async def test_t17_get_nonexistent_team_404(
@@ -425,8 +425,8 @@ class TestTeamCrudE2E:
         resp = await http_client.get(
             f"/v1/teams/{fake_id}", headers=owner.auth_headers()
         )
-        assert resp.status_code in [403, 404], (
-            f"Expected 403/404 for nonexistent team, got {resp.status_code}"
+        assert resp.status_code == 404, (
+            f"Expected 404 for nonexistent team, got {resp.status_code}"
         )
 
     async def test_t18_update_nonexistent_team_404(
@@ -443,8 +443,8 @@ class TestTeamCrudE2E:
             json={"name": "Nope"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [403, 404], (
-            f"Expected 403/404 for nonexistent team update, got {resp.status_code}"
+        assert resp.status_code == 404, (
+            f"Expected 404 for nonexistent team update, got {resp.status_code}"
         )
 
     # -----------------------------------------------------------------------
@@ -618,7 +618,7 @@ class TestTeamCrudE2E:
             json={"name": name},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [201, 400, 409, 422], (
+        assert resp.status_code in [201, 400, 409], (
             f"Unexpected status {resp.status_code} for name={name!r}: {resp.text}"
         )
 

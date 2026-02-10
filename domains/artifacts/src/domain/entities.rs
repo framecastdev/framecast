@@ -121,7 +121,7 @@ impl std::fmt::Display for ArtifactSource {
     }
 }
 
-/// Artifact entity — a creative output (storyboard spec, uploaded media, or job output)
+/// Artifact entity — a creative output (storyboard spec, uploaded media, or generation output)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Artifact {
     pub id: Uuid,

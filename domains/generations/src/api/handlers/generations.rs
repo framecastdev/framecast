@@ -8,11 +8,12 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use framecast_auth::AnyAuth;
-use framecast_common::{Error, Pagination, Result, Urn};
+use framecast_common::{Error, Pagination, Result, Urn, ValidatedJson};
 use framecast_inngest::InngestEvent;
 use framecast_runpod::RenderRequest;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::api::middleware::GenerationsState;
 use crate::domain::entities::{
@@ -85,7 +86,7 @@ pub struct ListGenerationsParams {
 /// Two modes:
 /// - **From existing artifact**: provide `artifact_id` (and optionally `options`)
 /// - **From raw spec (ephemeral)**: provide `spec` (and optionally `owner`, `options`, `idempotency_key`)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct CreateGenerationRequest {
     /// Mode 1: generate from an existing artifact
     pub artifact_id: Option<Uuid>,
@@ -200,7 +201,7 @@ pub async fn get_generation(
 pub async fn create_generation(
     AnyAuth(ctx): AnyAuth,
     State(state): State<GenerationsState>,
-    Json(req): Json<CreateGenerationRequest>,
+    ValidatedJson(req): ValidatedJson<CreateGenerationRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>)> {
     match (req.artifact_id, req.spec.clone()) {
         (Some(artifact_id), None) => {

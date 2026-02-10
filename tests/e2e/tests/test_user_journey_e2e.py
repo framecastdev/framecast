@@ -638,8 +638,8 @@ class TestUserJourneyE2E:
             json={"name": "Denied Key", "scopes": ["*"]},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for starter wildcard scope, got {resp.status_code}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for starter wildcard scope, got {resp.status_code}"
         )
 
         # 3. Team creation denied for starter

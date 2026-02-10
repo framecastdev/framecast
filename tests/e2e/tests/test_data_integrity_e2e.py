@@ -301,7 +301,7 @@ class TestDataIntegrityE2E:
             f"/v1/invitations/{inv_id}/accept",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 404, 409]
+        assert resp.status_code == 404
 
     async def test_d10_user_deletion_cascades_api_keys(
         self,
@@ -331,4 +331,4 @@ class TestDataIntegrityE2E:
                 "/v1/account",
                 headers={"Authorization": f"Bearer {raw_key}"},
             )
-            assert resp.status_code in [401, 404]
+            assert resp.status_code == 401

@@ -302,8 +302,8 @@ class TestInvitationLifecycleE2E:
             f"/v1/invitations/{inv_id}/accept",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for accepting revoked, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for accepting revoked, got {resp.status_code} {resp.text}"
         )
 
     async def test_i11_accept_declined_invitation_fails(
@@ -331,8 +331,8 @@ class TestInvitationLifecycleE2E:
             f"/v1/invitations/{inv_id}/accept",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for accepting declined, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for accepting declined, got {resp.status_code} {resp.text}"
         )
 
     async def test_i12_decline_revoked_invitation_fails(
@@ -360,8 +360,8 @@ class TestInvitationLifecycleE2E:
             f"/v1/invitations/{inv_id}/decline",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for declining revoked, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for declining revoked, got {resp.status_code} {resp.text}"
         )
 
     async def test_i13_accept_already_accepted_fails(
@@ -389,8 +389,8 @@ class TestInvitationLifecycleE2E:
             f"/v1/invitations/{inv_id}/accept",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for double accept, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for double accept, got {resp.status_code} {resp.text}"
         )
 
     async def test_i14_revoke_already_accepted_fails(
@@ -418,8 +418,8 @@ class TestInvitationLifecycleE2E:
             f"/v1/teams/{team_id}/invitations/{inv_id}",
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for revoking accepted, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for revoking accepted, got {resp.status_code} {resp.text}"
         )
 
     async def test_i15_resend_revoked_invitation_fails(
@@ -447,8 +447,8 @@ class TestInvitationLifecycleE2E:
             f"/v1/teams/{team_id}/invitations/{inv_id}/resend",
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 404, 409], (
-            f"Expected 400/404/409 for resending revoked, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for resending revoked, got {resp.status_code} {resp.text}"
         )
 
     async def test_i16_resend_accepted_invitation_fails(
@@ -476,8 +476,8 @@ class TestInvitationLifecycleE2E:
             f"/v1/teams/{team_id}/invitations/{inv_id}/resend",
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for resending accepted, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for resending accepted, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------
@@ -692,8 +692,8 @@ class TestInvitationLifecycleE2E:
             json={"email": "random@test.com", "role": "member"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [401, 403], (
-            f"Expected 401/403 for non-member inviting, got {resp.status_code}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for non-member inviting, got {resp.status_code}"
         )
 
     async def test_i24_wrong_user_cannot_accept(
@@ -714,8 +714,8 @@ class TestInvitationLifecycleE2E:
             f"/v1/invitations/{inv_id}/accept",
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for wrong user accepting, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for wrong user accepting, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------
@@ -738,8 +738,8 @@ class TestInvitationLifecycleE2E:
             json={"email": owner.email, "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for self-invite, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for self-invite, got {resp.status_code} {resp.text}"
         )
 
     async def test_i26_cannot_invite_existing_member(
@@ -788,8 +788,8 @@ class TestInvitationLifecycleE2E:
             json={"email": "newuser@test.com", "role": "owner"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for owner-role invitation, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for owner-role invitation, got {resp.status_code} {resp.text}"
         )
 
     async def test_i28_accept_respects_max_memberships(

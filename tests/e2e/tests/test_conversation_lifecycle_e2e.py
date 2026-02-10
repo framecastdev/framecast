@@ -419,12 +419,12 @@ class TestConversationLifecycleE2E:
         )
         assert resp.status_code == 401
 
-    async def test_cv21_create_missing_model_returns_422(
+    async def test_cv21_create_missing_model_returns_400(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CV21: POST missing model -> 422."""
+        """CV21: POST missing model -> 400."""
         owner = seed_users.owner
 
         resp = await http_client.post(
@@ -432,16 +432,16 @@ class TestConversationLifecycleE2E:
             json={},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for missing model, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for missing model, got {resp.status_code} {resp.text}"
         )
 
-    async def test_cv22_model_101_chars_returns_422(
+    async def test_cv22_model_101_chars_returns_400(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CV22: Model 101 chars -> 422."""
+        """CV22: Model 101 chars -> 400."""
         owner = seed_users.owner
 
         resp = await http_client.post(
@@ -449,16 +449,16 @@ class TestConversationLifecycleE2E:
             json={"model": "a" * 101},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for model too long, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for model too long, got {resp.status_code} {resp.text}"
         )
 
-    async def test_cv23_title_201_chars_returns_422(
+    async def test_cv23_title_201_chars_returns_400(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CV23: Title 201 chars -> 422."""
+        """CV23: Title 201 chars -> 400."""
         owner = seed_users.owner
 
         resp = await http_client.post(
@@ -466,16 +466,16 @@ class TestConversationLifecycleE2E:
             json={"model": "test-model", "title": "a" * 201},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for title too long, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for title too long, got {resp.status_code} {resp.text}"
         )
 
-    async def test_cv24_system_prompt_10001_chars_returns_422(
+    async def test_cv24_system_prompt_10001_chars_returns_400(
         self,
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """CV24: System prompt 10001 chars -> 422."""
+        """CV24: System prompt 10001 chars -> 400."""
         owner = seed_users.owner
 
         resp = await http_client.post(
@@ -483,6 +483,6 @@ class TestConversationLifecycleE2E:
             json={"model": "test-model", "system_prompt": "a" * 10001},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 422], (
-            f"Expected 400/422 for prompt too long, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for prompt too long, got {resp.status_code} {resp.text}"
         )

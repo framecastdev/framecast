@@ -112,7 +112,7 @@ mod test_create_conversation {
     }
 
     #[tokio::test]
-    async fn test_create_missing_model_returns_422() {
+    async fn test_create_missing_model_returns_400() {
         let app = ConversationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
@@ -120,17 +120,13 @@ mod test_create_conversation {
         let req = authed_request(Method::POST, "/v1/conversations", &jwt, Some(json!({})));
 
         let resp = app.test_router().oneshot(req).await.unwrap();
-        // Missing required field -> 422 or 400
-        assert!(
-            resp.status() == StatusCode::UNPROCESSABLE_ENTITY
-                || resp.status() == StatusCode::BAD_REQUEST
-        );
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
 
     #[tokio::test]
-    async fn test_create_model_101_chars_returns_422() {
+    async fn test_create_model_101_chars_returns_400() {
         let app = ConversationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
@@ -150,7 +146,7 @@ mod test_create_conversation {
     }
 
     #[tokio::test]
-    async fn test_create_title_201_chars_returns_422() {
+    async fn test_create_title_201_chars_returns_400() {
         let app = ConversationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
@@ -170,7 +166,7 @@ mod test_create_conversation {
     }
 
     #[tokio::test]
-    async fn test_create_system_prompt_10001_returns_422() {
+    async fn test_create_system_prompt_10001_returns_400() {
         let app = ConversationsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Starter).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();

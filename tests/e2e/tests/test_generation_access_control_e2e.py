@@ -142,7 +142,7 @@ class TestGenerationAccessControlE2E:
         resp = await http_client.get(
             f"/v1/generations/{gen['id']}", headers=invitee.auth_headers()
         )
-        assert resp.status_code in [403, 404]
+        assert resp.status_code == 404
 
     async def test_ga07_other_user_cannot_cancel_generation(
         self,
@@ -157,7 +157,7 @@ class TestGenerationAccessControlE2E:
         resp = await http_client.post(
             f"/v1/generations/{gen['id']}/cancel", headers=invitee.auth_headers()
         )
-        assert resp.status_code in [403, 404]
+        assert resp.status_code == 404
 
     async def test_ga08_other_user_cannot_delete_generation(
         self,
@@ -174,7 +174,7 @@ class TestGenerationAccessControlE2E:
         resp = await http_client.delete(
             f"/v1/generations/{gen['id']}", headers=invitee.auth_headers()
         )
-        assert resp.status_code in [403, 404]
+        assert resp.status_code == 404
 
     async def test_ga09_other_user_generations_not_in_list(
         self,
@@ -207,7 +207,7 @@ class TestGenerationAccessControlE2E:
         resp = await http_client.post(
             f"/v1/generations/{gen['id']}/clone", headers=invitee.auth_headers()
         )
-        assert resp.status_code in [403, 404]
+        assert resp.status_code == 404
 
     # -------------------------------------------------------------------
     # Team-Scoped Generations (GA-11 through GA-15)
@@ -355,7 +355,7 @@ class TestGenerationAccessControlE2E:
         resp = await http_client.get(
             f"/v1/generations/{gen['id']}", headers=invitee.auth_headers()
         )
-        assert resp.status_code in [403, 404]
+        assert resp.status_code == 404
 
     async def test_ga15_starter_cannot_create_team_scoped_generation(
         self,
@@ -383,7 +383,7 @@ class TestGenerationAccessControlE2E:
             json={"spec": {"prompt": "test"}, "owner": team_urn},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403]
+        assert resp.status_code == 403
 
     # -------------------------------------------------------------------
     # Auth Method Variations (GA-16 through GA-20)

@@ -302,8 +302,8 @@ class TestApiKeysE2E:
             json={"name": "Denied Key", "scopes": ["team:read"]},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for starter team:read, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for starter team:read scope, got {resp.status_code} {resp.text}"
         )
 
     async def test_ak13_starter_denied_team_admin_scope(
@@ -319,8 +319,8 @@ class TestApiKeysE2E:
             json={"name": "Denied Key", "scopes": ["team:admin"]},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for starter team:admin, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for starter team:admin scope, got {resp.status_code} {resp.text}"
         )
 
     async def test_ak14_starter_denied_wildcard_scope(
@@ -336,8 +336,8 @@ class TestApiKeysE2E:
             json={"name": "Denied Key", "scopes": ["*"]},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for starter wildcard, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for starter wildcard scope, got {resp.status_code} {resp.text}"
         )
 
     async def test_ak15_starter_denied_projects_read_scope(
@@ -353,8 +353,8 @@ class TestApiKeysE2E:
             json={"name": "Denied Key", "scopes": ["projects:read"]},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for starter projects:read, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for starter projects:read scope, got {resp.status_code} {resp.text}"
         )
 
     async def test_ak16_creator_can_use_all_scopes(
@@ -387,9 +387,9 @@ class TestApiKeysE2E:
             json={"name": "No Scopes Key"},
             headers=invitee.auth_headers(),
         )
-        # If default scope is * and starter can't use *, this should fail
-        assert resp.status_code in [400, 403, 422], (
-            f"Expected rejection for starter default scopes, got {resp.status_code} {resp.text}"
+        # Default scope is ["*"] — starter can't use wildcard → Authorization error
+        assert resp.status_code == 403, (
+            f"Expected 403 for starter default scopes, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------
@@ -414,8 +414,8 @@ class TestApiKeysE2E:
             },
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for starter team-scoped key, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for starter team-scoped key, got {resp.status_code} {resp.text}"
         )
 
     async def test_ak19_creator_can_create_team_scoped_key(
@@ -464,8 +464,8 @@ class TestApiKeysE2E:
             },
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 403, 404], (
-            f"Expected 400/403/404 for non-member team key, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for non-member team key, got {resp.status_code} {resp.text}"
         )
 
     # -----------------------------------------------------------------------
@@ -533,8 +533,8 @@ class TestApiKeysE2E:
         resp = await http_client.delete(
             f"/v1/auth/keys/{key_id}", headers=owner.auth_headers()
         )
-        assert resp.status_code in [400, 404, 409], (
-            f"Expected 400/404/409 for double revoke, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for double revoke, got {resp.status_code} {resp.text}"
         )
 
     async def test_ak23_update_revoked_key_rejected(
@@ -565,8 +565,8 @@ class TestApiKeysE2E:
             json={"name": "Updated After Revoke"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 404, 409], (
-            f"Expected 400/404/409 for updating revoked key, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for updating revoked key, got {resp.status_code} {resp.text}"
         )
 
     async def test_ak24_expired_key_cannot_be_used(
@@ -641,8 +641,8 @@ class TestApiKeysE2E:
         resp = await http_client.get(
             f"/v1/auth/keys/{key_id}", headers=invitee.auth_headers()
         )
-        assert resp.status_code in [403, 404], (
-            f"Expected 403/404 for accessing other user's key, got {resp.status_code}"
+        assert resp.status_code == 404, (
+            f"Expected 404 for accessing other user's key, got {resp.status_code}"
         )
 
     # -----------------------------------------------------------------------
