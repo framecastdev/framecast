@@ -30,7 +30,11 @@ import jwt  # noqa: E402
 import pytest  # noqa: E402
 from conftest import (  # noqa: E402
     SeededUsers,
+    complete_job,
+    create_character,
     create_conversation,
+    create_ephemeral_job,
+    create_render_job,
     create_storyboard,
     send_message,
 )
@@ -655,3 +659,144 @@ class TestCrossDomainE2E:
             headers={"Authorization": f"Bearer {expired_token}"},
         )
         assert resp.status_code == 401
+
+    # -----------------------------------------------------------------------
+    # Jobs Cross-Domain (XD31-XD35)
+    # -----------------------------------------------------------------------
+
+    async def test_xd31_render_creates_job_and_artifact(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+    ):
+        """XD31: Rendering artifact creates both job and output artifact."""
+        owner = seed_users.owner
+
+        character = await create_character(http_client, owner.auth_headers())
+        result = await create_render_job(
+            http_client, owner.auth_headers(), character["id"]
+        )
+
+        # Verify response contains both job and artifact
+        assert "job" in result
+        assert "artifact" in result
+        job = result["job"]
+        artifact = result["artifact"]
+
+        # Job is queued, linked to artifact
+        assert job["status"] == "queued"
+        assert job["id"] is not None
+
+        # Artifact is pending image with source=job
+        assert artifact["kind"] == "image"
+        assert artifact["status"] == "pending"
+        assert artifact["source"] == "job"
+        assert artifact["source_job_id"] == job["id"]
+
+    async def test_xd32_job_completion_updates_artifact_status(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+    ):
+        """XD32: Job completion updates artifact status to ready (cross-domain write)."""
+        owner = seed_users.owner
+
+        character = await create_character(http_client, owner.auth_headers())
+        result = await create_render_job(
+            http_client, owner.auth_headers(), character["id"]
+        )
+        job_id = result["job"]["id"]
+        artifact_id = result["artifact"]["id"]
+
+        # Verify artifact is pending before completion
+        resp = await http_client.get(
+            f"/v1/artifacts/{artifact_id}", headers=owner.auth_headers()
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "pending"
+
+        # Complete the job
+        await complete_job(http_client, job_id)
+
+        # Verify artifact status updated to ready
+        resp = await http_client.get(
+            f"/v1/artifacts/{artifact_id}", headers=owner.auth_headers()
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ready"
+
+    async def test_xd33_deleting_source_artifact_doesnt_break_job(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+    ):
+        """XD33: Deleting source artifact doesn't break the job."""
+        owner = seed_users.owner
+
+        character = await create_character(http_client, owner.auth_headers())
+        character_id = character["id"]
+        result = await create_render_job(
+            http_client, owner.auth_headers(), character_id
+        )
+        job_id = result["job"]["id"]
+
+        # Delete the source character artifact
+        resp = await http_client.delete(
+            f"/v1/artifacts/{character_id}", headers=owner.auth_headers()
+        )
+        assert resp.status_code == 204
+
+        # Job should still be accessible
+        resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "queued"
+
+    async def test_xd34_api_key_can_list_jobs(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+    ):
+        """XD34: API key with appropriate scope can list jobs."""
+        owner = seed_users.owner
+
+        # Create an API key
+        resp = await http_client.post(
+            "/v1/auth/keys",
+            json={"name": "Job List Key", "scopes": ["*"]},
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 201
+        raw_key = resp.json()["raw_key"]
+        api_headers = {"Authorization": f"Bearer {raw_key}"}
+
+        # Create a job via JWT first
+        await create_ephemeral_job(http_client, owner.auth_headers())
+
+        # List jobs via API key
+        resp = await http_client.get("/v1/jobs", headers=api_headers)
+        assert resp.status_code == 200
+        jobs = resp.json()
+        assert len(jobs) >= 1
+
+    async def test_xd35_api_key_can_create_ephemeral_job(
+        self,
+        http_client: httpx.AsyncClient,
+        seed_users: SeededUsers,
+    ):
+        """XD35: API key with appropriate scope can create ephemeral job."""
+        owner = seed_users.owner
+
+        # Create an API key
+        resp = await http_client.post(
+            "/v1/auth/keys",
+            json={"name": "Job Create Key", "scopes": ["*"]},
+            headers=owner.auth_headers(),
+        )
+        assert resp.status_code == 201
+        raw_key = resp.json()["raw_key"]
+        api_headers = {"Authorization": f"Bearer {raw_key}"}
+
+        # Create ephemeral job via API key
+        job = await create_ephemeral_job(http_client, api_headers)
+        assert job["status"] == "queued"
+        assert job["owner"] == f"framecast:user:{owner.user_id}"
