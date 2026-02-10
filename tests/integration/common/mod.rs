@@ -198,7 +198,7 @@ impl TestApp {
         // This is test-only cleanup, so we can bypass the INV-T1 constraint
         // Using runtime query to avoid sqlx offline mode issues in tests
         sqlx::query(
-            "TRUNCATE TABLE message_artifacts, messages, artifacts, conversations, \
+            "TRUNCATE TABLE jobs, job_events, message_artifacts, messages, artifacts, conversations, \
              api_keys, invitations, memberships, teams, users CASCADE",
         )
         .execute(&self.pool)
@@ -511,12 +511,71 @@ async fn create_test_user_in_db(pool: &PgPool, tier: UserTier) -> Result<User> {
 /// Shared helper: truncate all tables
 async fn cleanup_all(pool: &PgPool) -> Result<()> {
     sqlx::query(
-        "TRUNCATE TABLE message_artifacts, messages, artifacts, conversations, \
+        "TRUNCATE TABLE jobs, job_events, message_artifacts, messages, artifacts, conversations, \
          api_keys, invitations, memberships, teams, users CASCADE",
     )
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Test application for the Jobs domain
+pub struct JobsTestApp {
+    pub state: framecast_jobs::JobsState,
+    pub config: TestConfig,
+    pub pool: PgPool,
+    pub mock_inngest: Arc<framecast_inngest::mock::MockInngestService>,
+}
+
+impl JobsTestApp {
+    pub async fn new() -> Result<Self> {
+        let config = TestConfig::from_env();
+        let pool = sqlx::PgPool::connect(&config.database_url).await?;
+        sqlx::migrate!("../../migrations").run(&pool).await?;
+
+        let repos = framecast_jobs::JobsRepositories::new(pool.clone());
+        let auth_config = AuthConfig {
+            jwt_secret: config.jwt_secret.clone(),
+            issuer: Some("framecast-test".to_string()),
+            audience: Some("authenticated".to_string()),
+        };
+        let auth_backend = AuthBackend::new(pool.clone(), auth_config);
+
+        let mock_inngest = Arc::new(framecast_inngest::mock::MockInngestService::new());
+        let mock_render =
+            framecast_runpod::mock::MockRenderService::new("http://localhost:3000".to_string());
+        let mock_render_behavior = Some(mock_render.behavior().clone());
+        let mock_render_history = Some(mock_render.history().clone());
+
+        let state = framecast_jobs::JobsState {
+            repos,
+            auth: auth_backend,
+            inngest: mock_inngest.clone(),
+            render: Arc::new(mock_render),
+            callback_base_url: "http://localhost:3000".to_string(),
+            mock_render_behavior,
+            mock_render_history,
+        };
+
+        Ok(Self {
+            state,
+            config,
+            pool,
+            mock_inngest,
+        })
+    }
+
+    pub async fn create_test_user(&self, tier: UserTier) -> Result<User> {
+        create_test_user_in_db(&self.pool, tier).await
+    }
+
+    pub async fn cleanup(&self) -> Result<()> {
+        cleanup_all(&self.pool).await
+    }
+
+    pub fn test_router(&self) -> Router {
+        framecast_jobs::routes().with_state(self.state.clone())
+    }
 }
 
 pub mod email_mock;

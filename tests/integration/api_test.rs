@@ -9,6 +9,7 @@ mod auth;
 mod common;
 mod conversations;
 mod invariants;
+mod jobs;
 mod memberships;
 mod messages;
 mod system_assets;
