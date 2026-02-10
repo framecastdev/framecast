@@ -72,8 +72,8 @@ impl From<Job> for JobResponse {
 #[derive(Debug, Deserialize)]
 pub struct ListJobsParams {
     pub status: Option<JobStatus>,
-    #[serde(flatten)]
-    pub pagination: Pagination,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 /// Request for creating an ephemeral job
@@ -138,14 +138,18 @@ pub async fn list_jobs(
 ) -> Result<Json<Vec<JobResponse>>> {
     let owner_urns = ctx.accessible_owner_urns();
 
+    let pagination = Pagination {
+        offset: params.offset,
+        limit: params.limit,
+    };
     let jobs = state
         .repos
         .jobs
         .list_by_owners(
             &owner_urns,
             params.status.as_ref(),
-            params.pagination.limit(),
-            params.pagination.offset(),
+            pagination.limit(),
+            pagination.offset(),
         )
         .await?;
 
