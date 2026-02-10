@@ -242,9 +242,9 @@ mod tests {
 
         let urns = ctx.accessible_owner_urns();
         assert_eq!(urns.len(), 3);
-        assert_eq!(urns[0], format!("urn:framecast:user:{}", user_id));
-        assert_eq!(urns[1], format!("urn:framecast:team:{}", team_a));
-        assert_eq!(urns[2], format!("urn:framecast:team:{}", team_b));
+        assert_eq!(urns[0], format!("framecast:user:{}", user_id));
+        assert_eq!(urns[1], format!("framecast:team:{}", team_a));
+        assert_eq!(urns[2], format!("framecast:team:{}", team_b));
     }
 
     #[test]
@@ -256,7 +256,7 @@ mod tests {
 
         let urns = ctx.accessible_owner_urns();
         assert_eq!(urns.len(), 1);
-        assert_eq!(urns[0], format!("urn:framecast:user:{}", user_id));
+        assert_eq!(urns[0], format!("framecast:user:{}", user_id));
     }
 
     // Test no API key means full access (has_scope returns true)
