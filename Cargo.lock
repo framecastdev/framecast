@@ -1307,6 +1307,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "framecast-inngest"
+version = "0.0.1-SNAPSHOT"
+dependencies = [
+ "async-trait",
+ "framecast-common",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+]
+
+[[package]]
 name = "framecast-integration-tests"
 version = "0.0.1-SNAPSHOT"
 dependencies = [

@@ -3,6 +3,7 @@ members = [
     "crates/app",
     "crates/auth",
     "crates/email",
+    "crates/inngest",
     "crates/llm",
     "crates/common",
     "domains/teams",
@@ -89,6 +90,7 @@ async-trait = "0.1"
 framecast-auth = { path = "crates/auth" }
 framecast-common = { path = "crates/common" }
 framecast-email = { path = "crates/email" }
+framecast-inngest = { path = "crates/inngest" }
 framecast-llm = { path = "crates/llm" }
 framecast-app = { path = "crates/app" }
 
