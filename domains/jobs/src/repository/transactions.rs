@@ -4,14 +4,16 @@ use crate::domain::entities::{Job, JobEventRecord, JobEventType};
 use sqlx::{Postgres, Transaction};
 
 /// Count active (non-terminal) jobs for an owner within a transaction.
-/// Uses `FOR UPDATE` to lock matching rows and prevent concurrent inserts
-/// from bypassing the concurrency limit (CARD-5 / CARD-6).
+/// Uses a subquery with `FOR UPDATE` to lock matching rows and prevent
+/// concurrent inserts from bypassing the concurrency limit (CARD-5 / CARD-6).
+/// Note: `FOR UPDATE` cannot be combined directly with aggregate functions
+/// in PostgreSQL, so we lock rows in the subquery and count in the outer query.
 pub async fn count_active_for_owner_tx(
     tx: &mut Transaction<'_, Postgres>,
     owner: &str,
 ) -> Result<i64, sqlx::Error> {
     let count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM jobs WHERE owner = $1 AND status IN ('queued', 'processing') FOR UPDATE",
+        "SELECT COUNT(*) FROM (SELECT id FROM jobs WHERE owner = $1 AND status IN ('queued', 'processing') FOR UPDATE) AS locked",
     )
     .bind(owner)
     .fetch_one(&mut **tx)
