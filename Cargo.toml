@@ -5,6 +5,7 @@ members = [
     "crates/email",
     "crates/inngest",
     "crates/llm",
+    "crates/runpod",
     "crates/common",
     "domains/teams",
     "domains/projects",
@@ -92,6 +93,7 @@ framecast-common = { path = "crates/common" }
 framecast-email = { path = "crates/email" }
 framecast-inngest = { path = "crates/inngest" }
 framecast-llm = { path = "crates/llm" }
+framecast-runpod = { path = "crates/runpod" }
 framecast-app = { path = "crates/app" }
 
 # === Domain Crates ===
