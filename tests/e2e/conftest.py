@@ -411,6 +411,44 @@ async def create_character(
     return resp.json()
 
 
+def generate_jit_credentials(
+    email: str | None = None,
+) -> tuple[str, str, dict[str, str]]:
+    """Generate auth credentials for a user that does NOT exist in the database.
+
+    Returns (user_id, email, auth_headers) for use in JIT provisioning tests.
+    The JWT is valid but the user has no DB row — the API should auto-create it.
+    """
+    user_id = str(uuid.uuid4())
+    user_email = email or f"jit-{user_id[:8]}@test.com"
+    persona = UserPersona(
+        user_id=user_id,
+        email=user_email,
+        name="JIT User",
+        tier="starter",
+    )
+    return user_id, user_email, persona.auth_headers()
+
+
+def generate_jit_credentials_no_email() -> tuple[str, dict[str, str]]:
+    """Generate auth credentials with a JWT that has no email claim.
+
+    Returns (user_id, auth_headers) where the JWT omits the email field.
+    """
+    user_id = str(uuid.uuid4())
+    payload = {
+        "sub": user_id,
+        "aud": "authenticated",
+        "role": "authenticated",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 3600,
+    }
+    secret = os.environ.get("JWT_SECRET", "test-e2e-secret-key-for-ci-only-0")
+    token = jwt.encode(payload, secret, algorithm="HS256")
+    headers = {"Authorization": f"Bearer {token}"}
+    return user_id, headers
+
+
 # Export commonly used fixtures and utilities
 __all__ = [
     "E2EConfig",
@@ -428,4 +466,6 @@ __all__ = [
     "send_message",
     "create_storyboard",
     "create_character",
+    "generate_jit_credentials",
+    "generate_jit_credentials_no_email",
 ]

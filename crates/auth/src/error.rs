@@ -19,6 +19,10 @@ pub enum AuthError {
     MembershipsLoadError,
     AuthenticationFailed,
     InvalidUserId,
+    /// JWT token missing required email claim
+    MissingEmail,
+    /// Failed to create user account during JIT provisioning
+    UserProvisionFailed,
     /// User tier insufficient for this operation (spec 9.1)
     InsufficientTier,
 }
@@ -69,6 +73,16 @@ impl IntoResponse for AuthError {
                 "INVALID_TOKEN",
                 "Invalid user ID in token",
             ),
+            AuthError::MissingEmail => (
+                StatusCode::UNAUTHORIZED,
+                "MISSING_EMAIL",
+                "JWT token missing required email claim",
+            ),
+            AuthError::UserProvisionFailed => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "USER_PROVISION_FAILED",
+                "Failed to create user account",
+            ),
             AuthError::InsufficientTier => (
                 StatusCode::FORBIDDEN,
                 "INSUFFICIENT_TIER",
@@ -112,6 +126,11 @@ mod tests {
                 StatusCode::INTERNAL_SERVER_ERROR,
             ),
             (AuthError::InvalidUserId, StatusCode::UNAUTHORIZED),
+            (AuthError::MissingEmail, StatusCode::UNAUTHORIZED),
+            (
+                AuthError::UserProvisionFailed,
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
             (AuthError::InsufficientTier, StatusCode::FORBIDDEN),
         ];
 

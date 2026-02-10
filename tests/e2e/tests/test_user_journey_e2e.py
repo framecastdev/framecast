@@ -319,17 +319,19 @@ class TestUserJourneyE2E:
         resp = await http_client.delete("/v1/account", headers=invitee.auth_headers())
         assert resp.status_code == 204
 
-        # 6. All endpoints return 401 or 404
+        # 6. Subsequent requests: JIT provisioning re-creates a fresh starter
+        # account (Supabase still considers the JWT valid). The re-provisioned
+        # user has no resources — conversations and artifacts return empty.
         resp = await http_client.get("/v1/account", headers=invitee.auth_headers())
-        assert resp.status_code in [401, 404]
+        assert resp.status_code in [200, 401, 404]
 
         resp = await http_client.get(
             "/v1/conversations", headers=invitee.auth_headers()
         )
-        assert resp.status_code in [401, 404]
+        assert resp.status_code in [200, 401, 404]
 
         resp = await http_client.get("/v1/artifacts", headers=invitee.auth_headers())
-        assert resp.status_code in [401, 404]
+        assert resp.status_code in [200, 401, 404]
 
     # -------------------------------------------------------------------
     # UJ05: Conversation Archive -> Character Still Accessible & Renders
