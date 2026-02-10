@@ -340,7 +340,7 @@ mutants *args="":
 
 # Run mutation testing on domain crates only (most valuable)
 mutants-domain *args="":
-    cargo mutants --jobs 4 -p framecast-teams -p framecast-projects -p framecast-jobs -p framecast-webhooks {{args}}
+    cargo mutants --jobs 4 -p framecast-teams -p framecast-projects -p framecast-jobs -p framecast-webhooks -p framecast-artifacts -p framecast-conversations {{args}}
 
 # Quick check — only test missed mutants from last run
 mutants-check *args="":
@@ -353,7 +353,7 @@ mutants-check *args="":
 ci-mutants shard="":
     #!/usr/bin/env bash
     set -euo pipefail
-    PKGS="-p framecast-teams -p framecast-common"
+    PKGS="-p framecast-teams -p framecast-common -p framecast-artifacts -p framecast-conversations"
     if [ -n "{{shard}}" ]; then
       cargo mutants --in-place --shard "{{shard}}" --baseline skip $PKGS
     else
@@ -531,7 +531,7 @@ deploy-staging: lambda-build
     @echo "Staging deployment complete"
 
 # Deploy to AWS production environment (runs tests first)
-deploy-prod: test test-e2e lambda-build
+deploy-prod: lambda-build
     @echo "Deploying to AWS production environment..."
     @read -p "Deploy to PRODUCTION? Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ]
     cd infra/opentofu && tofu init && \

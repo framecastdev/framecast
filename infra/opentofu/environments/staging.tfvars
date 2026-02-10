@@ -20,10 +20,4 @@ enable_monitoring = true
 # ==============================================================================
 # export TF_VAR_database_url="postgresql://..."
 # export TF_VAR_jwt_secret="..."
-# export TF_VAR_supabase_url="https://..."
-# export TF_VAR_supabase_anon_key="..."
 # export TF_VAR_anthropic_api_key="..."
-# export TF_VAR_inngest_event_key="..."
-# export TF_VAR_inngest_signing_key="..."
-# export TF_VAR_runpod_api_key="..."
-# export TF_VAR_runpod_endpoint_id="..."

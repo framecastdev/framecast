@@ -397,17 +397,6 @@ jobs:
       EMAIL_PROVIDER: ses
       FROM_EMAIL: invitations@framecast.app
       EMAIL_ENABLED: "true"
-      # Required by Config::from_env() but unused in E2E context
-      SUPABASE_URL: http://localhost:54321
-      SUPABASE_ANON_KEY: test-anon-key
-      SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
-      ANTHROPIC_API_KEY: test-anthropic-key
-      INNGEST_EVENT_KEY: test-inngest-key
-      INNGEST_SIGNING_KEY: test-inngest-signing-key
-      RUNPOD_API_KEY: test-runpod-key
-      RUNPOD_ENDPOINT_ID: test-endpoint-id
-      S3_BUCKET_OUTPUTS: framecast-outputs-dev
-      S3_BUCKET_ASSETS: framecast-assets-dev
 
     steps:
       - name: Checkout
