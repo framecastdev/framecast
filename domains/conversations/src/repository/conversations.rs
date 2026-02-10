@@ -68,7 +68,7 @@ impl ConversationRepository {
                            status, message_count, last_message_at,
                            created_at, updated_at
                     FROM conversations
-                    WHERE user_id = $1
+                    WHERE user_id = $1 AND status = 'active'
                     ORDER BY last_message_at DESC NULLS LAST, created_at DESC
                     LIMIT $2 OFFSET $3
                     "#,

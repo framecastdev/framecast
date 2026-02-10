@@ -1,0 +1,4 @@
+[advisories]
+# rsa 0.9.10 timing sidechannel (Marvin Attack) — transitive dep from jsonwebtoken;
+# no patched version available yet
+ignore = ["RUSTSEC-2023-0071"]

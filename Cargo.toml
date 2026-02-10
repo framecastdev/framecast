@@ -72,7 +72,7 @@ aws-sdk-ses = "1.96"
 aws-credential-types = "1.2"
 
 # === Validation & Time ===
-validator = { version = "0.18", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 regex = "1.10"
 
 # === Mutation Testing ===
