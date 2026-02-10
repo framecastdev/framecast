@@ -1144,4 +1144,356 @@ mod tests {
         // Valid period
         assert!(Usage::new(owner, "2025-01".to_string()).is_ok());
     }
+
+    // ====================================================================
+    // Mutation-targeted tests — each kills a specific surviving mutant
+    // ====================================================================
+
+    #[test]
+    fn test_job_status_valid_transitions_returns_correct_values() {
+        // Kills: replace valid_transitions → vec![] and vec![Default::default()]
+        let queued = JobStatus::Queued.valid_transitions();
+        assert_eq!(queued.len(), 2);
+        assert!(queued.contains(&JobStatus::Processing));
+        assert!(queued.contains(&JobStatus::Canceled));
+
+        let processing = JobStatus::Processing.valid_transitions();
+        assert_eq!(processing.len(), 3);
+        assert!(processing.contains(&JobStatus::Completed));
+        assert!(processing.contains(&JobStatus::Failed));
+        assert!(processing.contains(&JobStatus::Canceled));
+
+        assert!(JobStatus::Completed.valid_transitions().is_empty());
+        assert!(JobStatus::Failed.valid_transitions().is_empty());
+        assert!(JobStatus::Canceled.valid_transitions().is_empty());
+    }
+
+    #[test]
+    fn test_is_ephemeral_false_when_project_id_present() {
+        // Kills: replace is_ephemeral → true
+        let team_id = Uuid::new_v4();
+        let job = Job::new(
+            Urn::team(team_id),
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            json!({}),
+            None,
+            100,
+            None,
+        )
+        .unwrap();
+        assert!(!job.is_ephemeral());
+    }
+
+    #[test]
+    fn test_net_credits_exact_value() {
+        // Kills: replace net_credits → 0, 1, -1, and operator mutations (+ instead of -, / instead of -)
+        let user_id = Uuid::new_v4();
+        let mut job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            200,
+            None,
+        )
+        .unwrap();
+        job.credits_refunded = 50;
+        assert_eq!(job.net_credits(), 150);
+
+        // Also verify with different values to catch constant replacements
+        job.credits_charged = 300;
+        job.credits_refunded = 100;
+        assert_eq!(job.net_credits(), 200);
+    }
+
+    #[test]
+    fn test_can_transition_valid_and_invalid() {
+        // Kills: replace can_transition → true, replace can_transition → false
+        let user_id = Uuid::new_v4();
+        let job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            100,
+            None,
+        )
+        .unwrap();
+
+        // Queued job can transition with WorkerPicksUp
+        assert!(job.can_transition(&JobEvent::WorkerPicksUp));
+        // Queued job cannot transition with Success
+        assert!(!job.can_transition(&JobEvent::Success));
+    }
+
+    #[test]
+    fn test_validate_credits_refunded_equals_charged_is_ok() {
+        // Kills: replace > with >= in credits_refunded > credits_charged check (line 332)
+        let user_id = Uuid::new_v4();
+        let mut job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            100,
+            None,
+        )
+        .unwrap();
+        job.credits_refunded = 100; // Equal, not greater — should pass
+        assert!(job.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_negative_credits_refunded_only() {
+        // Kills: replace || with && in credits_refunded < 0 || credits_charged < 0 (line 339)
+        let user_id = Uuid::new_v4();
+        let mut job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            100,
+            None,
+        )
+        .unwrap();
+        job.credits_refunded = -1;
+        assert!(job.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_zero_credits_is_ok() {
+        // Kills: replace < with <= in credits check (line 339) — 0 should pass
+        let user_id = Uuid::new_v4();
+        let mut job =
+            Job::new(Urn::user(user_id), user_id, None, json!({}), None, 0, None).unwrap();
+        job.credits_refunded = 0;
+        assert!(job.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_non_terminal_without_completed_at_is_ok() {
+        // Kills: replace && with || in terminal + completed_at check (line 346)
+        let user_id = Uuid::new_v4();
+        let job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            100,
+            None,
+        )
+        .unwrap();
+        // Queued (non-terminal), no completed_at — should be valid
+        assert!(job.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_failed_job_without_failure_type() {
+        // Kills: delete match arm Failed|Canceled, None in failure type check (line 373)
+        let user_id = Uuid::new_v4();
+        let mut job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            100,
+            None,
+        )
+        .unwrap();
+        job.status = JobStatus::Failed;
+        job.error = Some(Json(json!({"msg": "err"})));
+        job.completed_at = Some(Utc::now());
+        job.failure_type = None; // Missing — should fail
+        assert!(job.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_canceled_job_without_failure_type() {
+        // Also catches the Failed|Canceled match arm deletion
+        let user_id = Uuid::new_v4();
+        let mut job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            100,
+            None,
+        )
+        .unwrap();
+        job.status = JobStatus::Canceled;
+        job.completed_at = Some(Utc::now());
+        job.failure_type = None; // Missing — should fail
+        assert!(job.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_completed_with_failure_type() {
+        // Kills: delete match arm Completed, Some(_) (line 378)
+        let user_id = Uuid::new_v4();
+        let mut job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            100,
+            None,
+        )
+        .unwrap();
+        job.status = JobStatus::Completed;
+        job.output = Some(Json(json!({"url": "x"})));
+        job.completed_at = Some(Utc::now());
+        job.failure_type = Some(JobFailureType::System); // Should not have this
+        assert!(job.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_cancellation_at_exact_10_percent_boundary() {
+        // Kills: replace < with <= or == in actual_charge < min_charge (line 400)
+        let user_id = Uuid::new_v4();
+        let mut job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            100,
+            None,
+        )
+        .unwrap();
+        job.status = JobStatus::Canceled;
+        job.completed_at = Some(Utc::now());
+        job.failure_type = Some(JobFailureType::Canceled);
+
+        // Exactly 10% charge (90 refunded of 100) — should pass
+        job.credits_refunded = 90;
+        assert!(job.validate().is_ok());
+
+        // 9% charge (91 refunded of 100) — violates 10% minimum
+        job.credits_refunded = 91;
+        assert!(job.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_cancellation_min_charge_arithmetic() {
+        // Kills: arithmetic mutations in min_charge = (credits_charged * 10) / 100 (line 398)
+        let user_id = Uuid::new_v4();
+        let mut job = Job::new(
+            Urn::user(user_id),
+            user_id,
+            None,
+            json!({}),
+            None,
+            200,
+            None,
+        )
+        .unwrap();
+        job.status = JobStatus::Canceled;
+        job.completed_at = Some(Utc::now());
+        job.failure_type = Some(JobFailureType::Canceled);
+
+        // min_charge = (200 * 10) / 100 = 20, so refunded must be <= 180
+        job.credits_refunded = 180;
+        assert!(job.validate().is_ok());
+
+        job.credits_refunded = 181; // charge = 19 < 20 minimum
+        assert!(job.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_net_credits_exact_value() {
+        // Kills: replace Usage::net_credits → 0, and operator mutation (- → +)
+        let owner = Urn::user(Uuid::new_v4());
+        let mut usage = Usage::new(owner, "2025-01".to_string()).unwrap();
+        usage.credits_used = 300;
+        usage.credits_refunded = 80;
+        assert_eq!(usage.net_credits(), 220);
+    }
+
+    #[test]
+    fn test_usage_validate_rejects_negative_renders_count_alone() {
+        // Kills: replace || with && in negative count check (line 484)
+        let owner = Urn::user(Uuid::new_v4());
+        let mut usage = Usage::new(owner, "2025-01".to_string()).unwrap();
+        usage.renders_count = -1;
+        assert!(usage.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_validate_rejects_negative_credits_used_alone() {
+        // Kills: individual condition in || chain (line 484)
+        let owner = Urn::user(Uuid::new_v4());
+        let mut usage = Usage::new(owner, "2025-01".to_string()).unwrap();
+        usage.credits_used = -1;
+        assert!(usage.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_validate_rejects_negative_api_calls_alone() {
+        // Kills: individual condition in || chain (line 484)
+        let owner = Urn::user(Uuid::new_v4());
+        let mut usage = Usage::new(owner, "2025-01".to_string()).unwrap();
+        usage.api_calls = -1;
+        assert!(usage.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_validate_zero_counts_are_ok() {
+        // Kills: replace < with <= in negative count checks (line 484)
+        let owner = Urn::user(Uuid::new_v4());
+        let usage = Usage::new(owner, "2025-01".to_string()).unwrap();
+        // All counts start at 0 — should be valid
+        assert!(usage.validate().is_ok());
+    }
+
+    #[test]
+    fn test_usage_validate_bad_period_format_right_length() {
+        // Kills: delete ! in !regex.is_match (line 477), replace != with == (line 469)
+        let owner = Urn::user(Uuid::new_v4());
+        let mut usage = Usage::new(owner.clone(), "2025-01".to_string()).unwrap();
+
+        // 7 chars but invalid format
+        usage.period = "abcdefg".to_string();
+        assert!(usage.validate().is_err());
+
+        // 7 chars, looks like date but invalid month
+        usage.period = "2025-00".to_string();
+        assert!(usage.validate().is_err());
+
+        usage.period = "2025-13".to_string();
+        assert!(usage.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_validate_wrong_length_period() {
+        // Kills: replace != with == on period.len() != 7 (line 469)
+        let owner = Urn::user(Uuid::new_v4());
+        let mut usage = Usage::new(owner, "2025-01".to_string()).unwrap();
+
+        usage.period = "2025-1".to_string(); // 6 chars
+        assert!(usage.validate().is_err());
+
+        usage.period = "2025-011".to_string(); // 8 chars
+        assert!(usage.validate().is_err());
+    }
+
+    #[test]
+    fn test_usage_validate_returns_err_not_ok() {
+        // Kills: replace Usage::validate → Ok(())
+        let owner = Urn::user(Uuid::new_v4());
+        let mut usage = Usage::new(owner, "2025-01".to_string()).unwrap();
+        usage.renders_count = -5;
+        usage.credits_used = -10;
+        usage.api_calls = -1;
+        let result = usage.validate();
+        assert!(result.is_err());
+    }
 }
