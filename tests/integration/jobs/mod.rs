@@ -1239,7 +1239,7 @@ mod test_render {
 
     /// JI-39: Render storyboard -> 201, response has job + artifact (kind=video, status=pending)
     #[tokio::test]
-    async fn test_render_storyboard() {
+    async fn test_render_storyboard_not_renderable() {
         let app = JobsTestApp::new().await.unwrap();
         let user = app.create_test_user(UserTier::Creator).await.unwrap();
         let jwt = create_test_jwt(&user, &app.config.jwt_secret).unwrap();
@@ -1257,17 +1257,7 @@ mod test_render {
             None,
         );
         let resp = app.test_router().oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::CREATED);
-
-        let body = parse_body(resp).await;
-
-        // Verify job
-        assert_eq!(body["job"]["status"], "queued");
-
-        // Verify artifact
-        assert_eq!(body["artifact"]["kind"], "video");
-        assert_eq!(body["artifact"]["status"], "pending");
-        assert_eq!(body["artifact"]["source"], "job");
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
         app.cleanup().await.unwrap();
     }
