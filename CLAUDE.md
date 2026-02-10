@@ -264,29 +264,31 @@ Additional commands:
 
 ```
 domains/                   # Domain-driven vertical slices
-├── teams/                 # framecast-teams: Users, Teams, Memberships, Invitations, ApiKeys, Auth
+├── teams/                 # framecast-teams: Users, Teams, Memberships, Invitations, ApiKeys
+├── artifacts/             # framecast-artifacts: Artifacts, SystemAssets
+├── conversations/         # framecast-conversations: Conversations, Messages
 ├── projects/              # framecast-projects: Projects, AssetFiles (stub)
 ├── jobs/                  # framecast-jobs: Jobs, JobEvents (stub)
 └── webhooks/              # framecast-webhooks: Webhooks, WebhookDeliveries (stub)
 
 crates/                    # Shared infrastructure
 ├── app/                   # framecast-app: Composition root, Lambda + local binaries
+├── auth/                  # framecast-auth: AuthBackend, extractors, CQRS read models
+├── llm/                   # framecast-llm: LLM provider abstraction (Anthropic, mock)
 ├── email/                 # framecast-email: AWS SES email service
-└── common/                # framecast-common: Shared error types, URN parsing
+└── common/                # framecast-common: Shared error types, URN parsing, StateError
 ```
 
 Each domain crate owns its full vertical slice:
 
 ```
 domains/teams/src/
-├── api/                   # Routes, handlers, middleware (axum)
-│   ├── middleware.rs       # AuthUser, ApiKeyUser, TeamsState, AuthConfig
+├── api/                   # Routes, handlers (axum)
 │   ├── routes.rs           # Router<TeamsState>
 │   └── handlers/           # users.rs, teams.rs, memberships.rs
 ├── domain/                # Entities, state machines, validation
 │   ├── entities.rs         # User, Team, Membership, Invitation, ApiKey
 │   ├── state.rs            # InvitationStateMachine
-│   ├── auth.rs             # AuthContext
 │   └── validation.rs       # validate_team_slug
 └── repository/            # Database access (sqlx + PostgreSQL)
     ├── users.rs, teams.rs, memberships.rs, invitations.rs, api_keys.rs
@@ -296,38 +298,52 @@ domains/teams/src/
 ### Dependency Flow
 
 ```
-                  framecast-common
-                   ↑    ↑    ↑    ↑
-            ┌──────┘    │    │    └──────┐
-    framecast-teams     │    │     framecast-email
-         ↑              │    │
-         │    ┌─────────┘    │
-    framecast-jobs           │
-         ↑                   │
-    framecast-webhooks ──────┘
-         ↑
-    framecast-app → ALL domains + email
+                       framecast-common
+                    ↑    ↑    ↑    ↑    ↑
+             ┌──────┘    │    │    │    └──────┐
+  framecast-teams        │    │    │    framecast-email
+             ↑           │    │    │          ↑
+  framecast-artifacts    │    │    └──── framecast-llm
+             ↑           │    │               ↑
+  framecast-conversations┘    │               │
+             ↑                │               │
+  framecast-projects          │               │
+             ↑                │               │
+  framecast-jobs              │               │
+             ↑                │               │
+  framecast-webhooks ─────────┘               │
+             ↑                                │
+  framecast-auth (reads teams/artifacts/etc tables via CQRS)
+             ↑
+  framecast-app → teams + artifacts + conversations + auth + email + llm
 ```
 
 - Each domain owns entities + repositories + API handlers (vertical slice)
 - `framecast-teams` has no domain dependencies (only `common` + `email`)
-- `framecast-app` is the composition root (composes all domain routers)
+- `framecast-app` composes teams, artifacts, and conversations routers (not ALL domains)
+- `crates/auth` handles JWT + API key authentication with CQRS read models
 - Cross-domain reads use CQRS: query other domain's tables directly (same DB)
 
 ### Key Patterns
 
 **Error Handling:** `thiserror` for library crates, `anyhow` for application code. Never `.unwrap()` in production.
 
-**Domain State:** Each domain defines its own state (e.g. `TeamsState { repos, auth_config, email }`).
+**Auth:** `crates/auth` provides `AuthBackend` with extractors
+(`AuthUser`, `CreatorUser`, `ApiKeyUser`, `AnyAuth`).
+Each domain's state receives a shared `AuthBackend`.
+
+**Domain State:** Each domain defines its own state (e.g. `TeamsState { repos, auth, email }`).
 The app crate composes them via `Router::merge()` with `.with_state()`.
 
 **Repository Pattern:** Per-domain repository structs (e.g. `TeamsRepositories`) with per-entity repos.
 Cross-domain queries read tables directly (CQRS read-side).
 
-**State Machines:** Job/Project/Invitation states defined in each domain's `domain/state.rs` with explicit transitions.
+**State Machines:** Job/Project/Invitation/Artifact/Conversation states defined in each domain's
+`domain/state.rs` with explicit transitions. Shared `StateError` in `framecast-common`.
 
 **Mutation Testing:** `cargo-mutants` validates test effectiveness on domain/common crates.
 Surviving mutants indicate tests that don't catch injected bugs — fix by adding assertions.
+Targets: `domains/*/src/**/*.rs` + `crates/common/src/**/*.rs`.
 Config in `.cargo/mutants.toml`. Results in `mutants.out/`.
 
 ---
@@ -359,14 +375,18 @@ framecast/
 ├── .env.example            # Config template (III)
 ├── .claude/skills/         # Domain knowledge
 ├── domains/
-│   ├── teams/              # Users, Teams, Memberships, Invitations, Auth
+│   ├── teams/              # Users, Teams, Memberships, Invitations
+│   ├── artifacts/          # Artifacts, SystemAssets
+│   ├── conversations/      # Conversations, Messages
 │   ├── projects/           # Projects, AssetFiles (stub)
 │   ├── jobs/               # Jobs, JobEvents (stub)
 │   └── webhooks/           # Webhooks, WebhookDeliveries (stub)
 ├── crates/
 │   ├── app/                # Composition root, Lambda + local binaries
+│   ├── auth/               # JWT/API key authentication (IV)
+│   ├── llm/                # LLM provider abstraction (IV)
 │   ├── email/              # AWS SES email service (IV)
-│   └── common/             # Shared utilities
+│   └── common/             # Shared error types, URN, StateError
 ├── tests/
 │   ├── integration/        # Rust integration tests
 │   └── e2e/                # Python E2E tests

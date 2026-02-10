@@ -139,6 +139,7 @@ Attributes:
   name          : String (max 100) DEFAULT 'Default'
   key_prefix    : String (8 chars, e.g., "sk_live_")
   key_hash      : String! (unique, format: "hex(32-byte salt):hex(SHA-256(key + salt))")
+  key_hash_prefix : String! (first 16 chars of SHA-256 hex, for O(1) lookup)
   scopes        : JSONB DEFAULT ["*"]
   last_used_at  : Timestamp?
   expires_at    : Timestamp?
@@ -507,7 +508,7 @@ Attributes:
   owner           : URN (determines visibility and storage quota)
   created_by      : UUID FK → User
   project_id      : UUID? FK → Project (ON DELETE CASCADE)
-  kind            : {storyboard | image | audio | video}
+  kind            : {storyboard | image | audio | video | character}
   status          : {pending | ready | failed} DEFAULT pending
   source          : {upload | conversation | job} DEFAULT upload
   filename        : String? (max 255, required for media)
