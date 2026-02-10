@@ -61,8 +61,8 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
 
     let callback_base_url = render_config.callback_base_url.clone();
 
-    // If provider is "mock", create MockRenderService directly to extract behavior+history.
-    // Otherwise use factory.
+    // Build render service — extract mock behavior/history when using mock provider
+    #[cfg(feature = "mock-render")]
     let (render_service_boxed, mock_render_behavior, mock_render_history) =
         if render_config.provider == "mock" {
             let mock = framecast_runpod::mock::MockRenderService::new(
@@ -80,6 +80,10 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
                 .map_err(|e| anyhow::anyhow!("Failed to create Render service: {}", e))?;
             (svc, None, None)
         };
+
+    #[cfg(not(feature = "mock-render"))]
+    let render_service_boxed = RenderServiceFactory::create(render_config)
+        .map_err(|e| anyhow::anyhow!("Failed to create Render service: {}", e))?;
 
     // Create Teams domain state
     let teams_state = TeamsState {
@@ -101,7 +105,9 @@ pub async fn create_app(pool: PgPool) -> Result<Router, anyhow::Error> {
         inngest: Arc::from(inngest_service),
         render: Arc::from(render_service_boxed),
         callback_base_url,
+        #[cfg(feature = "mock-render")]
         mock_render_behavior,
+        #[cfg(feature = "mock-render")]
         mock_render_history,
     };
 
