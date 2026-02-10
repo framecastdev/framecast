@@ -5,6 +5,7 @@ members = [
     "crates/email",
     "crates/inngest",
     "crates/llm",
+    "crates/runpod",
     "crates/common",
     "domains/teams",
     "domains/projects",
@@ -80,6 +81,7 @@ regex = "1.10"
 mutants = "0.0.3"
 
 # === Testing ===
+serial_test = "3"
 tokio-test = "0.4"
 test-log = "0.2"
 
@@ -92,6 +94,7 @@ framecast-common = { path = "crates/common" }
 framecast-email = { path = "crates/email" }
 framecast-inngest = { path = "crates/inngest" }
 framecast-llm = { path = "crates/llm" }
+framecast-runpod = { path = "crates/runpod" }
 framecast-app = { path = "crates/app" }
 
 # === Domain Crates ===

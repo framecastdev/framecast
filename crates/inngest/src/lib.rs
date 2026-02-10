@@ -137,9 +137,11 @@ impl InngestServiceFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     // INN-U01: InngestConfig::from_env() with valid env -> Ok
     #[test]
+    #[serial]
     fn test_config_from_env_valid() {
         std::env::set_var("INNGEST_PROVIDER", "inngest");
         std::env::set_var("INNGEST_EVENT_KEY", "test-key-123");
@@ -160,6 +162,7 @@ mod tests {
 
     // INN-U02: InngestConfig::from_env() with inngest provider but missing event key -> Err
     #[test]
+    #[serial]
     fn test_config_from_env_missing_event_key() {
         std::env::set_var("INNGEST_PROVIDER", "inngest");
         std::env::remove_var("INNGEST_EVENT_KEY");

@@ -1,5 +1,5 @@
 [package]
-name = "framecast-inngest"
+name = "framecast-runpod"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-description = "Inngest service: event-driven workflow orchestration"
+description = "Render service: RunPod GPU compute backend for artifact rendering"
 
 [features]
 test-support = []
@@ -20,6 +20,7 @@ framecast-common.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 # HTTP client
 reqwest = { workspace = true }
@@ -30,7 +31,8 @@ tracing.workspace = true
 # Async traits
 async-trait.workspace = true
 
-[dev-dependencies]
+# Async runtime
 tokio.workspace = true
-serial_test.workspace = true
+
+[dev-dependencies]
 tokio-test.workspace = true
