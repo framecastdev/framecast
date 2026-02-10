@@ -348,12 +348,11 @@ mutants-check *args="":
 
 # CI mutation testing (--in-place modifies source directly, faster in disposable CI environments)
 # Pass shard="k/n" to run a subset (e.g. just ci-mutants "0/8")
-# Only fully-implemented domains (teams) + common — stub domains (projects, jobs, webhooks)
-# have entity test gaps from the monolith split; re-add when fully implemented.
+# Includes all fully-implemented domains + common.
 ci-mutants shard="":
     #!/usr/bin/env bash
     set -euo pipefail
-    PKGS="-p framecast-teams -p framecast-common -p framecast-artifacts -p framecast-conversations"
+    PKGS="-p framecast-teams -p framecast-common -p framecast-artifacts -p framecast-conversations -p framecast-jobs"
     if [ -n "{{shard}}" ]; then
       cargo mutants --in-place --shard "{{shard}}" --baseline skip $PKGS
     else
