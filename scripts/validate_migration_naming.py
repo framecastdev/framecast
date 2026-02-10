@@ -13,16 +13,16 @@ def validate_migration_naming(file_paths):
     """Validate migration file naming convention."""
     errors = []
 
-    # Expected pattern: YYYYMMDDHHMMSS_description.sql
-    pattern = r"^\d{14}_[a-z0-9_]+\.sql$"
+    # Expected pattern: YYYYMMDDHHMMSS_description.(up|down).sql
+    pattern = r"^\d{14}_[a-z0-9_]+\.(up|down)\.sql$"
 
     for file_path in file_paths:
         filename = os.path.basename(file_path)
 
         if not re.match(pattern, filename):
             errors.append(f"Invalid migration filename: {filename}")
-            errors.append("  Expected format: YYYYMMDDHHMMSS_description.sql")
-            errors.append("  Example: 20240130120000_add_user_table.sql")
+            errors.append("  Expected format: YYYYMMDDHHMMSS_description.(up|down).sql")
+            errors.append("  Example: 20240130120000_add_user_table.up.sql")
 
     return errors
 

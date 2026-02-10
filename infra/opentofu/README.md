@@ -39,17 +39,52 @@ infra/opentofu/
 ├── main.tf                    # Root configuration, module imports
 ├── variables.tf               # Input variables
 ├── outputs.tf                 # Output values (API endpoint, etc.)
-├── versions.tf                # Provider requirements
+├── versions.tf                # Provider requirements, S3 backend
 ├── environments/
 │   ├── dev.tfvars             # Development environment
 │   ├── staging.tfvars         # Staging environment
 │   ├── prod.tfvars            # Production environment
-│   └── localstack.tfvars      # LocalStack (local testing)
+│   ├── localstack.tfvars      # LocalStack (local testing)
+│   ├── backend-dev.hcl        # Backend config for dev
+│   ├── backend-staging.hcl    # Backend config for staging
+│   ├── backend-prod.hcl       # Backend config for prod
+│   └── backend-local.hcl      # Backend config for LocalStack
 └── modules/
     ├── lambda/main.tf         # Lambda + IAM + CloudWatch logs
     ├── api-gateway/main.tf    # HTTP API v2 + CORS + routes
     ├── s3/main.tf             # Outputs + Assets buckets
     └── monitoring/main.tf     # CloudWatch Alarms (prod only)
+```
+
+## State Management
+
+State is stored remotely in S3 with DynamoDB locking. Each environment has its own state file under a shared bucket:
+
+```
+s3://framecast-terraform-state/
+├── dev/terraform.tfstate
+├── staging/terraform.tfstate
+├── prod/terraform.tfstate
+└── local/terraform.tfstate
+```
+
+Initialize with the appropriate backend config:
+
+```bash
+just infra-init dev      # AWS dev
+just infra-init prod     # AWS production
+just infra-init local    # LocalStack
+```
+
+**Prerequisites:** Create the S3 bucket and DynamoDB table before first use:
+
+```bash
+aws s3 mb s3://framecast-terraform-state
+aws dynamodb create-table \
+  --table-name framecast-terraform-locks \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST
 ```
 
 ## Quick Start
@@ -106,13 +141,7 @@ Secrets should be passed via `TF_VAR_*` environment variables:
 |----------|-------------|----------|
 | `TF_VAR_database_url` | PostgreSQL connection URL | Yes |
 | `TF_VAR_jwt_secret` | JWT signing secret | Yes |
-| `TF_VAR_supabase_url` | Supabase project URL | No |
-| `TF_VAR_supabase_anon_key` | Supabase anonymous key | No |
 | `TF_VAR_anthropic_api_key` | Anthropic API key | No |
-| `TF_VAR_inngest_event_key` | Inngest event key | No |
-| `TF_VAR_inngest_signing_key` | Inngest signing key | No |
-| `TF_VAR_runpod_api_key` | RunPod API key | No |
-| `TF_VAR_runpod_endpoint_id` | RunPod endpoint ID | No |
 
 ## Modules
 
@@ -169,7 +198,7 @@ Set these in GitHub repository settings:
 
 ```bash
 # Infrastructure management
-just infra-init           # Initialize OpenTofu
+just infra-init dev       # Initialize OpenTofu for dev
 just infra-validate       # Validate configuration
 just infra-plan dev       # Plan changes for dev
 just infra-fmt            # Format .tf files

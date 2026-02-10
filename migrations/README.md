@@ -5,15 +5,18 @@ managed by [sqlx-cli](https://github.com/launchbadge/sqlx/tree/main/sqlx-cli).
 
 ## Migration Files
 
-| File | Description |
-|------|-------------|
-| `20240130000001_schema.sql` | Initial schema: users, teams, memberships, invitations, api_keys, projects, jobs, job_events, asset_files, webhooks, webhook_deliveries, usage, system_assets |
-| `20240130000002_functions.sql` | Job event sequencing, constraint functions, triggers |
-| `20240130000003_fix_urn_validation.sql` | Fix URN validation constraints |
-| `20250208000001_conversations_artifacts.sql` | Add conversations, messages, artifacts tables |
-| `20250209000001_add_character_artifact_kind.sql` | Add `character` to `artifact_kind` enum |
-| `20250209000002_update_artifact_constraints_for_character.sql` | Update artifact spec constraint to include character kind |
-| `20250209000003_add_key_hash_prefix.sql` | Add `key_hash_prefix` column to api_keys for O(1) lookup |
+All migrations are **reversible** (`.up.sql` / `.down.sql` pairs).
+
+| Migration | Description |
+|-----------|-------------|
+| `20240130000001_schema` | Initial schema: users, teams, memberships, invitations, api_keys, projects, jobs, job_events, asset_files, webhooks, webhook_deliveries, usage, system_assets |
+| `20240130000002_functions` | Job event sequencing, concurrency limits, status transitions, project automation, retention, URN validation |
+| `20240130000003_fix_urn_validation` | Fix URN regex to accept hyphens in UUID components |
+| `20250208000001_conversations_artifacts` | Add conversations, messages, artifacts, message_artifacts tables |
+| `20250209000001_add_character_artifact_kind` | Add `character` to `artifact_kind` enum |
+| `20250209000002_update_artifact_constraints_for_character` | Update artifact CHECK constraints for character kind |
+| `20250209000003_add_key_hash_prefix` | Add `key_hash_prefix` column to api_keys for O(1) lookup |
+| `20250210000001_add_attempting_delivery_status` | Add `attempting` to `webhook_delivery_status` enum |
 
 ## Running Migrations
 
@@ -24,7 +27,7 @@ just migrate
 # Check migration status
 just migrate-status
 
-# Create a new migration
+# Create a new migration (reversible by default)
 just migrate-new <name>
 
 # Rollback last migration

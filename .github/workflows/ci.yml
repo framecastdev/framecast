@@ -140,7 +140,7 @@ jobs:
 
       - name: Initialize OpenTofu
         id: tofu-init
-        run: just infra-init
+        run: just ci-infra-init
 
       - name: Validate OpenTofu configuration
         id: tofu-validate
