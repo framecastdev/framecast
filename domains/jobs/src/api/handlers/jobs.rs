@@ -16,7 +16,9 @@ use uuid::Uuid;
 
 use crate::api::middleware::JobsState;
 use crate::domain::entities::{Job, JobEventType, JobFailureType, JobStatus};
-use crate::repository::transactions::{create_job_event_tx, create_job_tx};
+use crate::repository::transactions::{
+    count_active_for_owner_tx, create_job_event_tx, create_job_tx,
+};
 
 /// Job response DTO
 #[derive(Debug, Serialize)]
@@ -220,20 +222,6 @@ pub async fn create_ephemeral_job(
         }
     }
 
-    // Check concurrency limits
-    let active_count = state
-        .repos
-        .jobs
-        .count_active_for_owner(&owner.to_string())
-        .await?;
-    let max_concurrent = if ctx.is_starter() { 1 } else { 5 };
-    if active_count >= max_concurrent {
-        return Err(Error::Conflict(format!(
-            "Concurrency limit exceeded: {} active jobs (max {})",
-            active_count, max_concurrent
-        )));
-    }
-
     // Create job
     let job = Job::new(
         owner,
@@ -245,8 +233,16 @@ pub async fn create_ephemeral_job(
         req.idempotency_key,
     )?;
 
-    // Transaction: create job + initial event
+    // Transaction: check concurrency (FOR UPDATE lock) + create job + initial event
     let mut tx = state.repos.begin().await?;
+    let active_count = count_active_for_owner_tx(&mut tx, &job.owner).await?;
+    let max_concurrent = if ctx.is_starter() { 1 } else { 5 };
+    if active_count >= max_concurrent {
+        return Err(Error::Conflict(format!(
+            "Concurrency limit exceeded: {} active jobs (max {})",
+            active_count, max_concurrent
+        )));
+    }
     let created_job = create_job_tx(&mut tx, &job).await?;
     create_job_event_tx(
         &mut tx,
@@ -420,20 +416,6 @@ pub async fn clone_job(
         None => owner_urn,
     };
 
-    // Check concurrency limit
-    let active_count = state
-        .repos
-        .jobs
-        .count_active_for_owner(&new_owner.to_string())
-        .await?;
-    let max_concurrent = if ctx.is_starter() { 1 } else { 5 };
-    if active_count >= max_concurrent {
-        return Err(Error::Conflict(format!(
-            "Concurrency limit exceeded: {} active jobs (max {})",
-            active_count, max_concurrent
-        )));
-    }
-
     // Create new job from original's spec and options
     let new_job = Job::new(
         new_owner,
@@ -445,8 +427,16 @@ pub async fn clone_job(
         None,
     )?;
 
-    // Transaction: create job + initial event
+    // Transaction: check concurrency (FOR UPDATE lock) + create job + initial event
     let mut tx = state.repos.begin().await?;
+    let active_count = count_active_for_owner_tx(&mut tx, &new_job.owner).await?;
+    let max_concurrent = if ctx.is_starter() { 1 } else { 5 };
+    if active_count >= max_concurrent {
+        return Err(Error::Conflict(format!(
+            "Concurrency limit exceeded: {} active jobs (max {})",
+            active_count, max_concurrent
+        )));
+    }
     let created_job = create_job_tx(&mut tx, &new_job).await?;
     create_job_event_tx(
         &mut tx,
@@ -517,6 +507,9 @@ pub async fn get_job_events(
 
     let stream = async_stream::stream! {
         let mut last_seq = after_sequence.unwrap_or(0);
+        let mut iterations: u32 = 0;
+        // 15-minute maximum duration at 1s intervals prevents resource leak from stuck jobs
+        const MAX_ITERATIONS: u32 = 900;
 
         loop {
             // Query for new events
@@ -547,6 +540,11 @@ pub async fn get_job_events(
                 _ => break,
             };
             if current_job.is_terminal() {
+                break;
+            }
+
+            iterations += 1;
+            if iterations >= MAX_ITERATIONS {
                 break;
             }
 
@@ -625,8 +623,16 @@ pub async fn render_artifact(
         None,
     )?;
 
-    // Transaction: create job + artifact + job event
+    // Transaction: check concurrency (FOR UPDATE lock) + create job + artifact + job event
     let mut tx = state.repos.begin().await?;
+    let active_count = count_active_for_owner_tx(&mut tx, &job.owner).await?;
+    let max_concurrent = if ctx.is_starter() { 1 } else { 5 };
+    if active_count >= max_concurrent {
+        return Err(Error::Conflict(format!(
+            "Concurrency limit exceeded: {} active jobs (max {})",
+            active_count, max_concurrent
+        )));
+    }
 
     let created_job = create_job_tx(&mut tx, &job).await?;
 
@@ -657,7 +663,7 @@ pub async fn render_artifact(
     .bind(&output_filename)
     .bind(&output_s3_key)
     .bind(output_content_type)
-    .bind(1_i64) // placeholder size_bytes
+    .bind(1_i64) // placeholder; updated on job completion via callback
     .bind(&artifact.spec)
     .bind(created_job.id)
     .bind(now)
