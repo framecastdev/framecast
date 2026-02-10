@@ -63,8 +63,7 @@ class TestErrorHandlingE2E:
         resp = await http_client.get(
             f"/v1/teams/{fake_id}", headers=owner.auth_headers()
         )
-        # May be 403 (non-member) or 404
-        assert resp.status_code in [403, 404]
+        assert resp.status_code == 404
 
         body = resp.json()
         assert "error" in body, f"Expected error key in response: {body}"
@@ -122,8 +121,8 @@ class TestErrorHandlingE2E:
         resp = await http_client.get(
             "/v1/teams/not-a-uuid", headers=owner.auth_headers()
         )
-        assert resp.status_code in [400, 404], (
-            f"Expected 400/404 for non-UUID, got {resp.status_code}"
+        assert resp.status_code == 400, (
+            f"Expected 400 for non-UUID, got {resp.status_code}"
         )
 
     async def test_e7_empty_request_body_on_post(

@@ -182,7 +182,7 @@ class TestInvitationWorkflowE2E:
             headers=invitee.auth_headers(),
         )
         # Should get authorization error (not a member of the team)
-        assert resp.status_code in [401, 403]
+        assert resp.status_code == 403
 
     async def test_invitation_revoke_then_accept_fails(
         self,
@@ -223,8 +223,8 @@ class TestInvitationWorkflowE2E:
             f"/v1/invitations/{invitation_id}/accept",
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for revoked invitation accept, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for revoked invitation accept, got {resp.status_code} {resp.text}"
         )
 
     async def test_reinvite_after_decline(

@@ -48,8 +48,8 @@ class TestTeamLimitsE2E:
             json={"name": "Limit Team 11"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected limit error for 11th team, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for 11th team, got {resp.status_code} {resp.text}"
         )
 
     async def test_tl2_max_50_team_memberships(
@@ -108,8 +108,8 @@ class TestTeamLimitsE2E:
             json={"name": "Over Limit Post-Upgrade"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected limit error, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for limit error, got {resp.status_code} {resp.text}"
         )
 
     async def test_tl4_leaving_team_frees_ownership_slot(
@@ -233,8 +233,8 @@ class TestTeamLimitsE2E:
             json={"email": "invite-limit-51@test.com", "role": "member"},
             headers=owner.auth_headers(),
         )
-        assert resp.status_code in [400, 409], (
-            f"Expected limit error for 51st invitation, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for 51st invitation, got {resp.status_code} {resp.text}"
         )
 
     async def test_tl8_accepted_invitation_frees_pending_slot(

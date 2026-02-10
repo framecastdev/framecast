@@ -153,8 +153,8 @@ class TestRoleBasedAccessE2E:
         resp = await http_client.delete(
             f"/v1/teams/{team_id}", headers=invitee.auth_headers()
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for admin deleting team, got {resp.status_code}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for admin deleting team, got {resp.status_code}"
         )
 
     async def test_r3_member_can_view_only(
@@ -356,8 +356,8 @@ class TestRoleBasedAccessE2E:
             json={"role": "owner"},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [400, 403], (
-            f"Expected 400/403 for admin promoting to owner, got {resp.status_code}"
+        assert resp.status_code == 403, (
+            f"Expected 403 for admin promoting to owner, got {resp.status_code}"
         )
 
     async def test_r10_two_owners_one_demotes_the_other(

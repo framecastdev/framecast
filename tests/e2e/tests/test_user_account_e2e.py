@@ -470,8 +470,8 @@ class TestUserAccountE2E:
 
         # Owner tries to delete account — should be blocked (sole owner with members)
         resp = await http_client.delete("/v1/account", headers=owner.auth_headers())
-        assert resp.status_code in [400, 409], (
-            f"Expected 400/409 for sole-owner delete, got {resp.status_code} {resp.text}"
+        assert resp.status_code == 409, (
+            f"Expected 409 for sole-owner delete, got {resp.status_code} {resp.text}"
         )
 
     async def test_u19_credits_non_negative_after_upgrade(

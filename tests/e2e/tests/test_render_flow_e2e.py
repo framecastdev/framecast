@@ -483,7 +483,7 @@ class TestRenderFlowE2E:
             json={"artifact_id": character["id"]},
             headers=invitee.auth_headers(),
         )
-        assert resp.status_code in [403, 404]
+        assert resp.status_code == 404
 
     async def test_rf22_callback_missing_generation_id_returns_400(
         self,
