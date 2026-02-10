@@ -225,7 +225,7 @@ class TestRenderFlowE2E:
         # Verify progress
         resp = await http_client.get(f"/v1/jobs/{job_id}", headers=owner.auth_headers())
         assert resp.status_code == 200
-        assert resp.json()["progress_percent"] == 50.0
+        assert resp.json()["progress"]["percent"] == 50.0
 
     async def test_rf11_completed_job_has_output(
         self,

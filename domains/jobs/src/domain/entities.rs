@@ -105,6 +105,7 @@ impl Job {
         triggered_by: Uuid,
         project_id: Option<Uuid>,
         spec_snapshot: serde_json::Value,
+        options: Option<serde_json::Value>,
         credits_charged: i32,
         idempotency_key: Option<String>,
     ) -> Result<Self> {
@@ -123,7 +124,9 @@ impl Job {
             project_id,
             status: JobStatus::default(),
             spec_snapshot: Json(spec_snapshot),
-            options: Json(serde_json::Value::Object(serde_json::Map::new())),
+            options: Json(
+                options.unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new())),
+            ),
             progress: Json(serde_json::Value::Object(serde_json::Map::new())),
             output: None,
             output_size_bytes: None,
@@ -211,15 +214,15 @@ impl Job {
     fn apply_transition(&self, event: JobEvent) -> Result<JobState> {
         let current_state = self.status.to_state();
         JobStateMachine::transition(current_state, event).map_err(|e| match e {
-            StateError::InvalidTransition { from, event, .. } => Error::Validation(format!(
+            StateError::InvalidTransition { from, event, .. } => Error::Conflict(format!(
                 "Invalid job transition: cannot apply '{}' event from '{}' state",
                 event, from
             )),
-            StateError::TerminalState(state) => Error::Validation(format!(
+            StateError::TerminalState(state) => Error::Conflict(format!(
                 "Job is in terminal state '{}' and cannot transition",
                 state
             )),
-            StateError::GuardFailed(msg) => Error::Validation(msg),
+            StateError::GuardFailed(msg) => Error::Conflict(msg),
         })
     }
 
@@ -530,6 +533,7 @@ mod tests {
             triggered_by,
             None,
             spec.clone(),
+            None,
             credits_charged,
             None,
         )
@@ -548,7 +552,7 @@ mod tests {
     fn test_job_state_transitions() {
         let owner = Urn::user(Uuid::new_v4());
         let triggered_by = Uuid::new_v4();
-        let mut job = Job::new(owner, triggered_by, None, json!({}), 100, None).unwrap();
+        let mut job = Job::new(owner, triggered_by, None, json!({}), None, 100, None).unwrap();
 
         // Start job
         job.start().unwrap();
@@ -568,7 +572,7 @@ mod tests {
     fn test_job_failure() {
         let owner = Urn::user(Uuid::new_v4());
         let triggered_by = Uuid::new_v4();
-        let mut job = Job::new(owner, triggered_by, None, json!({}), 100, None).unwrap();
+        let mut job = Job::new(owner, triggered_by, None, json!({}), None, 100, None).unwrap();
 
         job.start().unwrap();
 
@@ -587,10 +591,10 @@ mod tests {
         let triggered_by = Uuid::new_v4();
 
         // Test negative credits
-        let result = Job::new(owner.clone(), triggered_by, None, json!({}), -1, None);
+        let result = Job::new(owner.clone(), triggered_by, None, json!({}), None, -1, None);
         assert!(result.is_err());
 
-        let mut job = Job::new(owner, triggered_by, None, json!({}), 100, None).unwrap();
+        let mut job = Job::new(owner, triggered_by, None, json!({}), None, 100, None).unwrap();
 
         // Valid job
         assert!(job.validate().is_ok());
@@ -613,6 +617,7 @@ mod tests {
             user_id,
             Some(Uuid::new_v4()), // project_id
             json!({}),
+            None,
             100,
             None,
         )
@@ -625,6 +630,7 @@ mod tests {
             user_id,
             Some(Uuid::new_v4()), // project_id
             json!({}),
+            None,
             100,
             None,
         )
@@ -645,7 +651,7 @@ mod tests {
     fn test_job_refund_calculation() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // Set 40% progress
         job.update_progress(40.0).unwrap();
@@ -673,7 +679,7 @@ mod tests {
     fn test_job_progress_methods() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // Initially 0% progress
         assert_eq!(job.get_progress_percent(), 0.0);
@@ -698,7 +704,7 @@ mod tests {
     fn test_job_fail_with_automatic_refund() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // Start the job
         job.start().unwrap();
@@ -721,7 +727,7 @@ mod tests {
     fn test_job_cancel_with_automatic_refund() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // Start the job
         job.start().unwrap();
@@ -745,7 +751,7 @@ mod tests {
     fn test_job_refund_edge_cases() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // 0% progress - full refund minus fee for cancellation
         job.update_progress(0.0).unwrap();
@@ -762,7 +768,7 @@ mod tests {
 
         // Test with no credits charged
         let user_owner2 = Urn::user(user_id);
-        let mut free_job = Job::new(user_owner2, user_id, None, json!({}), 0, None).unwrap();
+        let mut free_job = Job::new(user_owner2, user_id, None, json!({}), None, 0, None).unwrap();
         free_job.update_progress(50.0).unwrap();
         assert_eq!(free_job.calculate_refund(JobFailureType::System), 0);
         assert_eq!(free_job.calculate_refund(JobFailureType::Canceled), 0);
@@ -802,8 +808,16 @@ mod tests {
         for (credits, progress, expected_validation, expected_cancel, description) in
             precision_test_cases
         {
-            let mut job =
-                Job::new(user_owner.clone(), user_id, None, json!({}), credits, None).unwrap();
+            let mut job = Job::new(
+                user_owner.clone(),
+                user_id,
+                None,
+                json!({}),
+                None,
+                credits,
+                None,
+            )
+            .unwrap();
             job.update_progress(progress).unwrap();
 
             // Test validation refund
@@ -830,7 +844,8 @@ mod tests {
         let user_owner = Urn::user(user_id);
 
         // Test zero credits
-        let mut zero_job = Job::new(user_owner.clone(), user_id, None, json!({}), 0, None).unwrap();
+        let mut zero_job =
+            Job::new(user_owner.clone(), user_id, None, json!({}), None, 0, None).unwrap();
         zero_job.update_progress(50.0).unwrap();
         assert_eq!(zero_job.calculate_refund(JobFailureType::System), 0);
         assert_eq!(zero_job.calculate_refund(JobFailureType::Timeout), 0);
@@ -848,7 +863,7 @@ mod tests {
 
         for (progress, expected_validation, expected_cancel) in single_credit_cases {
             let mut single_job =
-                Job::new(user_owner.clone(), user_id, None, json!({}), 1, None).unwrap();
+                Job::new(user_owner.clone(), user_id, None, json!({}), None, 1, None).unwrap();
             single_job.update_progress(progress).unwrap();
 
             assert_eq!(
@@ -868,8 +883,16 @@ mod tests {
 
         // Test maximum safe integer values
         let max_safe_credits = 1_000_000_000; // Large but safe for i32 math
-        let mut large_job =
-            Job::new(user_owner, user_id, None, json!({}), max_safe_credits, None).unwrap();
+        let mut large_job = Job::new(
+            user_owner,
+            user_id,
+            None,
+            json!({}),
+            None,
+            max_safe_credits,
+            None,
+        )
+        .unwrap();
 
         // Test with small progress to ensure no overflow
         large_job.update_progress(1.0).unwrap();
@@ -905,8 +928,16 @@ mod tests {
 
         for (credits, progress, expected_refund, expected_charge, description) in enforcement_cases
         {
-            let mut job =
-                Job::new(user_owner.clone(), user_id, None, json!({}), credits, None).unwrap();
+            let mut job = Job::new(
+                user_owner.clone(),
+                user_id,
+                None,
+                json!({}),
+                None,
+                credits,
+                None,
+            )
+            .unwrap();
             job.update_progress(progress).unwrap();
 
             let actual_refund = job.calculate_refund(JobFailureType::Canceled);
@@ -941,7 +972,7 @@ mod tests {
         let user_owner = Urn::user(user_id);
 
         // Test that refund calculations are consistent across multiple calls
-        let mut job = Job::new(user_owner, user_id, None, json!({}), 150, None).unwrap();
+        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 150, None).unwrap();
         job.update_progress(33.33).unwrap();
 
         // Call refund calculation multiple times - should be deterministic
@@ -974,8 +1005,16 @@ mod tests {
         // Test mathematical properties that should hold for refund calculations
         for credits in [1, 10, 100, 1000] {
             for progress in [0.0, 25.0, 50.0, 75.0, 100.0] {
-                let mut job =
-                    Job::new(user_owner.clone(), user_id, None, json!({}), credits, None).unwrap();
+                let mut job = Job::new(
+                    user_owner.clone(),
+                    user_id,
+                    None,
+                    json!({}),
+                    None,
+                    credits,
+                    None,
+                )
+                .unwrap();
                 job.update_progress(progress).unwrap();
 
                 // Property 1: System/timeout refunds should always equal charged amount
@@ -1026,7 +1065,7 @@ mod tests {
     fn test_progress_percentage_edge_cases() {
         let user_id = Uuid::new_v4();
         let user_owner = Urn::user(user_id);
-        let mut job = Job::new(user_owner, user_id, None, json!({}), 100, None).unwrap();
+        let mut job = Job::new(user_owner, user_id, None, json!({}), None, 100, None).unwrap();
 
         // Test various progress percentage edge cases
         let progress_cases = vec![

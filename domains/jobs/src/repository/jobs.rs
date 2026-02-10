@@ -144,6 +144,11 @@ impl JobRepository {
 
     /// Delete a job by ID
     pub async fn delete(&self, id: Uuid) -> Result<bool> {
+        // Delete job events first (FK constraint)
+        sqlx::query("DELETE FROM job_events WHERE job_id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
         let result = sqlx::query("DELETE FROM jobs WHERE id = $1")
             .bind(id)
             .execute(&self.pool)

@@ -36,7 +36,11 @@ class TestJobEventsSseE2E:
         job_id: str,
         last_event_id: str | None = None,
     ) -> list[dict]:
-        """Read SSE events from job events endpoint."""
+        """Read SSE events from job events endpoint.
+
+        The job MUST be in a terminal state before calling this, otherwise
+        the SSE stream will poll indefinitely and the request will time out.
+        """
         req_headers = {**headers}
         if last_event_id:
             req_headers["Last-Event-ID"] = last_event_id
@@ -76,6 +80,12 @@ class TestJobEventsSseE2E:
         owner = seed_users.owner
 
         job = await create_ephemeral_job(http_client, owner.auth_headers())
+        # Cancel so the SSE stream closes and we can read the response
+        resp = await http_client.post(
+            f"/v1/jobs/{job['id']}/cancel", headers=owner.auth_headers()
+        )
+        assert resp.status_code == 200
+
         resp = await http_client.get(
             f"/v1/jobs/{job['id']}/events",
             headers=owner.auth_headers(),
@@ -88,14 +98,19 @@ class TestJobEventsSseE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """SSE-02: Queued job has at least a queued/created event."""
+        """SSE-02: Job has at least a queued event."""
         owner = seed_users.owner
 
         job = await create_ephemeral_job(http_client, owner.auth_headers())
+        # Cancel to close the stream (queued event already recorded)
+        await http_client.post(
+            f"/v1/jobs/{job['id']}/cancel", headers=owner.auth_headers()
+        )
         events = await self._read_sse_events(
             http_client, owner.auth_headers(), job["id"]
         )
-        assert len(events) >= 1
+        event_types = [e.get("event") for e in events]
+        assert "queued" in event_types
 
     async def test_sse03_started_callback_produces_event(
         self,
@@ -109,6 +124,16 @@ class TestJobEventsSseE2E:
         job_id = job["id"]
 
         resp = await trigger_callback(http_client, job_id, "started")
+        assert resp.status_code == 200
+
+        # Complete to close the stream
+        resp = await trigger_callback(
+            http_client,
+            job_id,
+            "completed",
+            output={"url": "https://example.com/output.png"},
+            output_size_bytes=12345,
+        )
         assert resp.status_code == 200
 
         events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
@@ -162,7 +187,7 @@ class TestJobEventsSseE2E:
 
         job = await create_ephemeral_job(http_client, owner.auth_headers())
         job_id = job["id"]
-        await trigger_callback(http_client, job_id, "started")
+        await complete_job(http_client, job_id)
 
         events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
         for event in events:
@@ -178,7 +203,7 @@ class TestJobEventsSseE2E:
 
         job = await create_ephemeral_job(http_client, owner.auth_headers())
         job_id = job["id"]
-        await trigger_callback(http_client, job_id, "started")
+        await complete_job(http_client, job_id)
 
         events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
         for event in events:
@@ -194,7 +219,7 @@ class TestJobEventsSseE2E:
 
         job = await create_ephemeral_job(http_client, owner.auth_headers())
         job_id = job["id"]
-        await trigger_callback(http_client, job_id, "started")
+        await complete_job(http_client, job_id)
 
         events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
         for event in events:
@@ -223,7 +248,7 @@ class TestJobEventsSseE2E:
         http_client: httpx.AsyncClient,
         seed_users: SeededUsers,
     ):
-        """SSE-10: Progress event data contains progress_percent."""
+        """SSE-10: Progress event data contains percent."""
         owner = seed_users.owner
 
         job = await create_ephemeral_job(http_client, owner.auth_headers())
@@ -235,11 +260,21 @@ class TestJobEventsSseE2E:
         )
         assert resp.status_code == 200
 
+        # Complete to close the stream
+        resp = await trigger_callback(
+            http_client,
+            job_id,
+            "completed",
+            output={"url": "https://example.com/output.png"},
+            output_size_bytes=12345,
+        )
+        assert resp.status_code == 200
+
         events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
         progress_events = [e for e in events if e.get("event") == "progress"]
         assert len(progress_events) >= 1
         data = json.loads(progress_events[0]["data"])
-        assert data["progress_percent"] == 42.5
+        assert data["percent"] == 42.5
 
     # -------------------------------------------------------------------
     # Last-Event-ID Resumption (SSE-11 through SSE-13)
@@ -257,6 +292,16 @@ class TestJobEventsSseE2E:
         job_id = job["id"]
         await trigger_callback(http_client, job_id, "started")
         await trigger_callback(http_client, job_id, "progress", progress_percent=50.0)
+
+        # Complete to close the stream
+        resp = await trigger_callback(
+            http_client,
+            job_id,
+            "completed",
+            output={"url": "https://example.com/output.png"},
+            output_size_bytes=12345,
+        )
+        assert resp.status_code == 200
 
         # Get all events first
         all_events = await self._read_sse_events(
@@ -286,7 +331,7 @@ class TestJobEventsSseE2E:
 
         job = await create_ephemeral_job(http_client, owner.auth_headers())
         job_id = job["id"]
-        await trigger_callback(http_client, job_id, "started")
+        await complete_job(http_client, job_id)
 
         events = await self._read_sse_events(
             http_client,
@@ -310,6 +355,16 @@ class TestJobEventsSseE2E:
         await trigger_callback(http_client, job_id, "started")
         await trigger_callback(http_client, job_id, "progress", progress_percent=25.0)
         await trigger_callback(http_client, job_id, "progress", progress_percent=75.0)
+
+        # Complete to close the stream
+        resp = await trigger_callback(
+            http_client,
+            job_id,
+            "completed",
+            output={"url": "https://example.com/output.png"},
+            output_size_bytes=12345,
+        )
+        assert resp.status_code == 200
 
         events = await self._read_sse_events(http_client, owner.auth_headers(), job_id)
         ids = [e.get("id") for e in events if e.get("id")]

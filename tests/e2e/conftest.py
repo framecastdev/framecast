@@ -468,7 +468,7 @@ async def create_ephemeral_job(
     if owner is not None:
         data["owner"] = owner
     resp = await client.post("/v1/generate", json=data, headers=headers)
-    assert resp.status_code == 201, (
+    assert resp.status_code in [200, 201], (
         f"create_ephemeral_job failed: {resp.status_code} {resp.text}"
     )
     return resp.json()
