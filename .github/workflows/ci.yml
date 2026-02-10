@@ -13,8 +13,24 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.check.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: check
+        run: |
+          CODE_CHANGES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} -- . ':!*.md' ':!docs/' ':!.claude/' | wc -l)
+          echo "code=$([ "$CODE_CHANGES" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   ci:
     name: CI Pipeline
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
 
     services:
@@ -118,6 +134,8 @@ jobs:
 
   infra-validate:
     name: Validate Infrastructure
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -164,6 +182,8 @@ jobs:
 
   security:
     name: Security Audit
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -198,6 +218,8 @@ jobs:
 
   build-lambda:
     name: Build Lambda
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -522,7 +544,7 @@ jobs:
   ci-passed:
     name: CI Passed
     if: always()
-    needs: [infra-validate, build-lambda, mutation-summary, e2e-tests, security]
+    needs: [changes, infra-validate, build-lambda, mutation-summary, e2e-tests, security]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
