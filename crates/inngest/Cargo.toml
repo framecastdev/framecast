@@ -1,5 +1,5 @@
 [package]
-name = "framecast-jobs"
+name = "framecast-inngest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,7 +7,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-description = "Jobs domain: jobs, job events, usage"
+description = "Inngest service: event-driven workflow orchestration"
+
+[features]
+test-support = []
 
 [dependencies]
 # Shared crates
@@ -16,18 +19,18 @@ framecast-common.workspace = true
 # Core dependencies
 serde.workspace = true
 serde_json.workspace = true
-uuid.workspace = true
-chrono.workspace = true
+thiserror.workspace = true
 
-# Database mapping
-sqlx.workspace = true
-
-# Regex for validation
-regex = "1.0"
+# HTTP client
+reqwest = { workspace = true }
 
 # Logging
 tracing.workspace = true
 
+# Async traits
+async-trait.workspace = true
+
 [dev-dependencies]
 tokio.workspace = true
+serial_test.workspace = true
 tokio-test.workspace = true

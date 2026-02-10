@@ -1,5 +1,5 @@
 [package]
-name = "framecast-jobs"
+name = "framecast-runpod"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,7 +7,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-description = "Jobs domain: jobs, job events, usage"
+description = "Render service: RunPod GPU compute backend for artifact rendering"
+
+[features]
+test-support = []
 
 [dependencies]
 # Shared crates
@@ -16,18 +19,20 @@ framecast-common.workspace = true
 # Core dependencies
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 uuid.workspace = true
-chrono.workspace = true
 
-# Database mapping
-sqlx.workspace = true
-
-# Regex for validation
-regex = "1.0"
+# HTTP client
+reqwest = { workspace = true }
 
 # Logging
 tracing.workspace = true
 
-[dev-dependencies]
+# Async traits
+async-trait.workspace = true
+
+# Async runtime
 tokio.workspace = true
+
+[dev-dependencies]
 tokio-test.workspace = true
