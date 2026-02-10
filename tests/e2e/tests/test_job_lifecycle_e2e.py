@@ -502,7 +502,9 @@ class TestJobLifecycleE2E:
         resp = await http_client.delete(
             f"/v1/jobs/{job_id}", headers=owner.auth_headers()
         )
-        assert resp.status_code == 204
+        assert resp.status_code == 204, (
+            f"DELETE job failed: {resp.status_code} {resp.text}"
+        )
 
         # Artifact should still exist
         resp = await http_client.get(

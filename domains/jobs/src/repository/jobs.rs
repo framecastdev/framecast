@@ -147,7 +147,7 @@ impl JobRepository {
         // Clear artifact references (source_job_consistency CHECK requires
         // source_job_id IS NOT NULL when source = 'job', so clear both)
         sqlx::query(
-            "UPDATE artifacts SET source_job_id = NULL, source = 'upload' WHERE source_job_id = $1",
+            "UPDATE artifacts SET source_job_id = NULL, source = 'upload'::artifact_source WHERE source_job_id = $1",
         )
         .bind(id)
         .execute(&self.pool)
