@@ -10,4 +10,12 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # Remote state backend (S3 + DynamoDB locking)
+  # Configure per-environment via backend config files:
+  #   tofu init -backend-config=environments/backend-dev.hcl
+  #   tofu init -backend-config=environments/backend-prod.hcl
+  # For local development with LocalStack:
+  #   tofu init -backend-config=environments/backend-local.hcl
+  backend "s3" {}
 }

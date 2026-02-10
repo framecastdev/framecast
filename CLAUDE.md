@@ -232,7 +232,7 @@ just mutants-domain           # Run mutation tests (domain crates only)
 just mutants-check            # Re-test only previously missed mutants
 
 # Infrastructure
-just infra-init               # Initialize OpenTofu
+just infra-init dev           # Initialize OpenTofu for env
 just infra-validate           # Validate OpenTofu config
 just infra-plan dev           # Plan changes for environment
 ```

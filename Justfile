@@ -154,7 +154,7 @@ migrate:
 # Create a new migration file
 migrate-new name:
     @echo "Creating new migration: {{name}}"
-    sqlx migrate add "{{name}}" --source migrations
+    sqlx migrate add -r "{{name}}" --source migrations
 
 # Rollback last migration (USE WITH CAUTION)
 migrate-rollback:
@@ -451,11 +451,17 @@ build: lambda-build
 # INFRASTRUCTURE (OpenTofu)
 # ============================================================================
 
-# Initialize OpenTofu (download providers)
-infra-init:
-    @echo "Initializing OpenTofu..."
-    cd infra/opentofu && tofu init
-    @echo "OpenTofu initialized"
+# Initialize OpenTofu with backend config (e.g., just infra-init dev)
+infra-init env="dev":
+    @echo "Initializing OpenTofu for {{env}}..."
+    cd infra/opentofu && tofu init -backend-config=environments/backend-{{env}}.hcl
+    @echo "OpenTofu initialized for {{env}}"
+
+# Initialize OpenTofu without backend (CI validation only)
+ci-infra-init:
+    @echo "Initializing OpenTofu (no backend)..."
+    cd infra/opentofu && tofu init -backend=false
+    @echo "OpenTofu initialized (validation only)"
 
 # Validate OpenTofu configuration
 infra-validate:
