@@ -6,11 +6,18 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
+use std::sync::LazyLock;
 use uuid::Uuid;
 
 use framecast_common::{Error, Result, Urn};
 
-use crate::domain::state::{ArtifactEvent, ArtifactState, ArtifactStateMachine, StateError};
+/// Regex for validating system asset IDs (compiled once)
+static SYSTEM_ASSET_ID_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"^asset_(sfx|ambient|music|transition)_[a-z0-9_]+$")
+        .expect("system asset ID regex is valid")
+});
+
+use crate::domain::state::{ArtifactEvent, ArtifactStateMachine, StateError};
 
 /// Maximum file size (50MB)
 pub const MAX_SIZE_BYTES: i64 = 52_428_800;
@@ -68,21 +75,17 @@ pub enum ArtifactStatus {
 }
 
 impl ArtifactStatus {
-    /// Convert to state machine state
-    pub fn to_state(&self) -> ArtifactState {
-        match self {
-            ArtifactStatus::Pending => ArtifactState::Pending,
-            ArtifactStatus::Ready => ArtifactState::Ready,
-            ArtifactStatus::Failed => ArtifactState::Failed,
-        }
+    /// Check if this is a terminal state
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Ready)
     }
 
-    /// Create from state machine state
-    pub fn from_state(state: ArtifactState) -> Self {
-        match state {
-            ArtifactState::Pending => ArtifactStatus::Pending,
-            ArtifactState::Ready => ArtifactStatus::Ready,
-            ArtifactState::Failed => ArtifactStatus::Failed,
+    /// Get all valid next states from current state
+    pub fn valid_transitions(&self) -> &'static [ArtifactStatus] {
+        match self {
+            Self::Pending => &[Self::Ready, Self::Failed],
+            Self::Ready => &[],
+            Self::Failed => &[Self::Pending],
         }
     }
 }
@@ -262,32 +265,28 @@ impl Artifact {
 
     /// Mark artifact as ready
     pub fn mark_ready(&mut self) -> Result<()> {
-        let new_state = self.apply_transition(ArtifactEvent::Complete)?;
-        self.status = ArtifactStatus::from_state(new_state);
+        self.status = self.apply_transition(ArtifactEvent::Complete)?;
         self.updated_at = Utc::now();
         Ok(())
     }
 
     /// Mark artifact as failed
     pub fn mark_failed(&mut self) -> Result<()> {
-        let new_state = self.apply_transition(ArtifactEvent::Fail)?;
-        self.status = ArtifactStatus::from_state(new_state);
+        self.status = self.apply_transition(ArtifactEvent::Fail)?;
         self.updated_at = Utc::now();
         Ok(())
     }
 
     /// Retry a failed artifact (back to pending)
     pub fn retry(&mut self) -> Result<()> {
-        let new_state = self.apply_transition(ArtifactEvent::Retry)?;
-        self.status = ArtifactStatus::from_state(new_state);
+        self.status = self.apply_transition(ArtifactEvent::Retry)?;
         self.updated_at = Utc::now();
         Ok(())
     }
 
     /// Apply a state transition using the state machine
-    fn apply_transition(&self, event: ArtifactEvent) -> Result<ArtifactState> {
-        let current_state = self.status.to_state();
-        ArtifactStateMachine::transition(current_state, event).map_err(|e| match e {
+    fn apply_transition(&self, event: ArtifactEvent) -> Result<ArtifactStatus> {
+        ArtifactStateMachine::transition(self.status, event).map_err(|e| match e {
             StateError::InvalidTransition { from, event, .. } => Error::Validation(format!(
                 "Invalid artifact transition: cannot apply '{}' event from '{}' state",
                 event, from
@@ -302,7 +301,7 @@ impl Artifact {
 
     /// Check if a transition is valid without applying it
     pub fn can_transition(&self, event: &ArtifactEvent) -> bool {
-        ArtifactStateMachine::can_transition(self.status.to_state(), event)
+        ArtifactStateMachine::can_transition(self.status, event)
     }
 
     /// Validate invariants per spec
@@ -464,9 +463,7 @@ impl SystemAsset {
 
         let id = format!("asset_{}_{}", category_str, name);
 
-        let id_regex = regex::Regex::new(r"^asset_(sfx|ambient|music|transition)_[a-z0-9_]+$")
-            .map_err(|e| Error::Validation(format!("Invalid regex pattern: {}", e)))?;
-        if !id_regex.is_match(&id) {
+        if !SYSTEM_ASSET_ID_REGEX.is_match(&id) {
             return Err(Error::Validation(
                 "Invalid system asset ID format".to_string(),
             ));
@@ -494,9 +491,7 @@ impl SystemAsset {
 
     /// Validate invariants per spec
     pub fn validate(&self) -> Result<()> {
-        let id_regex = regex::Regex::new(r"^asset_(sfx|ambient|music|transition)_[a-z0-9_]+$")
-            .map_err(|e| Error::Validation(format!("Invalid regex pattern: {}", e)))?;
-        if !id_regex.is_match(&self.id) {
+        if !SYSTEM_ASSET_ID_REGEX.is_match(&self.id) {
             return Err(Error::Validation(
                 "Invalid system asset ID format".to_string(),
             ));
@@ -571,16 +566,24 @@ mod tests {
     }
 
     #[test]
-    fn test_artifact_status_to_state_roundtrip() {
-        for status in [
-            ArtifactStatus::Pending,
-            ArtifactStatus::Ready,
-            ArtifactStatus::Failed,
-        ] {
-            let state = status.to_state();
-            let roundtripped = ArtifactStatus::from_state(state);
-            assert_eq!(status, roundtripped);
-        }
+    fn test_artifact_status_is_terminal() {
+        assert!(!ArtifactStatus::Pending.is_terminal());
+        assert!(ArtifactStatus::Ready.is_terminal());
+        assert!(!ArtifactStatus::Failed.is_terminal());
+    }
+
+    #[test]
+    fn test_artifact_status_valid_transitions() {
+        let pending = ArtifactStatus::Pending.valid_transitions();
+        assert_eq!(pending.len(), 2);
+        assert!(pending.contains(&ArtifactStatus::Ready));
+        assert!(pending.contains(&ArtifactStatus::Failed));
+
+        assert!(ArtifactStatus::Ready.valid_transitions().is_empty());
+
+        let failed = ArtifactStatus::Failed.valid_transitions();
+        assert_eq!(failed.len(), 1);
+        assert!(failed.contains(&ArtifactStatus::Pending));
     }
 
     // ========================================================================

@@ -103,8 +103,6 @@ pub struct EmailConfig {
 impl EmailConfig {
     /// Create email config from environment variables
     pub fn from_env() -> Result<Self, EmailError> {
-        dotenvy::dotenv().ok();
-
         let provider = std::env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "mock".to_string());
 
         let aws_region = std::env::var("AWS_REGION").ok();

@@ -70,43 +70,6 @@ impl ApiKeyRepository {
             .transpose()
     }
 
-    /// Authenticate by API key
-    pub async fn authenticate(&self, candidate_key: &str) -> Result<Option<AuthenticatedApiKey>> {
-        if !candidate_key.starts_with("sk_live_") {
-            return Ok(None);
-        }
-
-        let rows: Vec<ApiKeyRow> = sqlx::query_as(
-            r#"
-            SELECT id, user_id, owner, name, key_prefix, key_hash, key_hash_prefix,
-                   scopes, last_used_at, expires_at, revoked_at, created_at
-            FROM api_keys
-            WHERE key_prefix = $1 AND revoked_at IS NULL
-              AND (expires_at IS NULL OR expires_at > NOW())
-            "#,
-        )
-        .bind("sk_live_")
-        .fetch_all(&self.pool)
-        .await?;
-
-        // Find the matching key using constant-time verification
-        for row in rows {
-            let api_key = api_key_from_row(row)?;
-
-            if api_key.verify_key(candidate_key) {
-                // Update last_used_at
-                sqlx::query("UPDATE api_keys SET last_used_at = NOW() WHERE id = $1")
-                    .bind(api_key.id)
-                    .execute(&self.pool)
-                    .await?;
-
-                return Ok(Some(AuthenticatedApiKey::from(api_key)));
-            }
-        }
-
-        Ok(None)
-    }
-
     /// Create new API key
     pub async fn create(&self, api_key: &ApiKey) -> Result<AuthenticatedApiKey> {
         sqlx::query(

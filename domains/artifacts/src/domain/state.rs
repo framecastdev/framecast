@@ -3,60 +3,9 @@
 //! Artifact states: Pending → Ready | Failed; Failed → Pending (retry)
 //! Ready is a terminal state.
 
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
+pub use framecast_common::StateError;
 
-/// Errors that can occur during state transitions
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum StateError {
-    #[error("Invalid transition: cannot transition from {from} to {to} via {event}")]
-    InvalidTransition {
-        from: String,
-        to: String,
-        event: String,
-    },
-
-    #[error("Guard condition failed: {0}")]
-    GuardFailed(String),
-
-    #[error("Terminal state: {0} is a terminal state and cannot transition")]
-    TerminalState(String),
-}
-
-/// Artifact states as defined in spec section 6.7
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ArtifactState {
-    Pending,
-    Ready,
-    Failed,
-}
-
-impl ArtifactState {
-    /// Check if this is a terminal state
-    pub fn is_terminal(&self) -> bool {
-        matches!(self, Self::Ready)
-    }
-
-    /// Get all valid next states from current state
-    pub fn valid_transitions(&self) -> &'static [ArtifactState] {
-        match self {
-            Self::Pending => &[Self::Ready, Self::Failed],
-            Self::Ready => &[],
-            Self::Failed => &[Self::Pending],
-        }
-    }
-}
-
-impl std::fmt::Display for ArtifactState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pending => write!(f, "pending"),
-            Self::Ready => write!(f, "ready"),
-            Self::Failed => write!(f, "failed"),
-        }
-    }
-}
+use crate::domain::entities::ArtifactStatus;
 
 /// Events that trigger artifact state transitions
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -85,17 +34,17 @@ pub struct ArtifactStateMachine;
 impl ArtifactStateMachine {
     /// Attempt a state transition
     pub fn transition(
-        current: ArtifactState,
+        current: ArtifactStatus,
         event: ArtifactEvent,
-    ) -> Result<ArtifactState, StateError> {
+    ) -> Result<ArtifactStatus, StateError> {
         if current.is_terminal() {
             return Err(StateError::TerminalState(current.to_string()));
         }
 
         let next = match (&current, &event) {
-            (ArtifactState::Pending, ArtifactEvent::Complete) => ArtifactState::Ready,
-            (ArtifactState::Pending, ArtifactEvent::Fail) => ArtifactState::Failed,
-            (ArtifactState::Failed, ArtifactEvent::Retry) => ArtifactState::Pending,
+            (ArtifactStatus::Pending, ArtifactEvent::Complete) => ArtifactStatus::Ready,
+            (ArtifactStatus::Pending, ArtifactEvent::Fail) => ArtifactStatus::Failed,
+            (ArtifactStatus::Failed, ArtifactEvent::Retry) => ArtifactStatus::Pending,
             _ => {
                 return Err(StateError::InvalidTransition {
                     from: current.to_string(),
@@ -109,7 +58,7 @@ impl ArtifactStateMachine {
     }
 
     /// Check if a transition is valid without performing it
-    pub fn can_transition(current: ArtifactState, event: &ArtifactEvent) -> bool {
+    pub fn can_transition(current: ArtifactStatus, event: &ArtifactEvent) -> bool {
         Self::transition(current, *event).is_ok()
     }
 }
@@ -124,106 +73,106 @@ mod tests {
         #[test]
         fn test_pending_to_ready() {
             let result =
-                ArtifactStateMachine::transition(ArtifactState::Pending, ArtifactEvent::Complete);
-            assert_eq!(result, Ok(ArtifactState::Ready));
+                ArtifactStateMachine::transition(ArtifactStatus::Pending, ArtifactEvent::Complete);
+            assert_eq!(result, Ok(ArtifactStatus::Ready));
         }
 
         #[test]
         fn test_pending_to_failed() {
             let result =
-                ArtifactStateMachine::transition(ArtifactState::Pending, ArtifactEvent::Fail);
-            assert_eq!(result, Ok(ArtifactState::Failed));
+                ArtifactStateMachine::transition(ArtifactStatus::Pending, ArtifactEvent::Fail);
+            assert_eq!(result, Ok(ArtifactStatus::Failed));
         }
 
         #[test]
         fn test_failed_to_pending_retry() {
             let result =
-                ArtifactStateMachine::transition(ArtifactState::Failed, ArtifactEvent::Retry);
-            assert_eq!(result, Ok(ArtifactState::Pending));
+                ArtifactStateMachine::transition(ArtifactStatus::Failed, ArtifactEvent::Retry);
+            assert_eq!(result, Ok(ArtifactStatus::Pending));
         }
 
         #[test]
         fn test_ready_is_terminal() {
             let result =
-                ArtifactStateMachine::transition(ArtifactState::Ready, ArtifactEvent::Fail);
+                ArtifactStateMachine::transition(ArtifactStatus::Ready, ArtifactEvent::Fail);
             assert!(matches!(result, Err(StateError::TerminalState(_))));
         }
 
         #[test]
         fn test_ready_cannot_retry() {
             let result =
-                ArtifactStateMachine::transition(ArtifactState::Ready, ArtifactEvent::Retry);
+                ArtifactStateMachine::transition(ArtifactStatus::Ready, ArtifactEvent::Retry);
             assert!(matches!(result, Err(StateError::TerminalState(_))));
         }
 
         #[test]
         fn test_pending_cannot_retry() {
             let result =
-                ArtifactStateMachine::transition(ArtifactState::Pending, ArtifactEvent::Retry);
+                ArtifactStateMachine::transition(ArtifactStatus::Pending, ArtifactEvent::Retry);
             assert!(matches!(result, Err(StateError::InvalidTransition { .. })));
         }
 
         #[test]
         fn test_failed_cannot_complete() {
             let result =
-                ArtifactStateMachine::transition(ArtifactState::Failed, ArtifactEvent::Complete);
+                ArtifactStateMachine::transition(ArtifactStatus::Failed, ArtifactEvent::Complete);
             assert!(matches!(result, Err(StateError::InvalidTransition { .. })));
         }
 
         #[test]
         fn test_is_terminal() {
-            assert!(!ArtifactState::Pending.is_terminal());
-            assert!(ArtifactState::Ready.is_terminal());
-            assert!(!ArtifactState::Failed.is_terminal());
+            assert!(!ArtifactStatus::Pending.is_terminal());
+            assert!(ArtifactStatus::Ready.is_terminal());
+            assert!(!ArtifactStatus::Failed.is_terminal());
         }
 
         #[test]
         fn test_valid_transitions() {
-            let pending = ArtifactState::Pending.valid_transitions();
+            let pending = ArtifactStatus::Pending.valid_transitions();
             assert_eq!(pending.len(), 2);
-            assert!(pending.contains(&ArtifactState::Ready));
-            assert!(pending.contains(&ArtifactState::Failed));
+            assert!(pending.contains(&ArtifactStatus::Ready));
+            assert!(pending.contains(&ArtifactStatus::Failed));
 
-            assert!(ArtifactState::Ready.valid_transitions().is_empty());
+            assert!(ArtifactStatus::Ready.valid_transitions().is_empty());
 
-            let failed = ArtifactState::Failed.valid_transitions();
+            let failed = ArtifactStatus::Failed.valid_transitions();
             assert_eq!(failed.len(), 1);
-            assert!(failed.contains(&ArtifactState::Pending));
+            assert!(failed.contains(&ArtifactStatus::Pending));
         }
 
         #[test]
         fn test_can_transition() {
             assert!(ArtifactStateMachine::can_transition(
-                ArtifactState::Pending,
+                ArtifactStatus::Pending,
                 &ArtifactEvent::Complete
             ));
             assert!(ArtifactStateMachine::can_transition(
-                ArtifactState::Pending,
+                ArtifactStatus::Pending,
                 &ArtifactEvent::Fail
             ));
             assert!(!ArtifactStateMachine::can_transition(
-                ArtifactState::Pending,
+                ArtifactStatus::Pending,
                 &ArtifactEvent::Retry
             ));
             assert!(!ArtifactStateMachine::can_transition(
-                ArtifactState::Ready,
+                ArtifactStatus::Ready,
                 &ArtifactEvent::Complete
             ));
             assert!(ArtifactStateMachine::can_transition(
-                ArtifactState::Failed,
+                ArtifactStatus::Failed,
                 &ArtifactEvent::Retry
             ));
             assert!(!ArtifactStateMachine::can_transition(
-                ArtifactState::Failed,
+                ArtifactStatus::Failed,
                 &ArtifactEvent::Complete
             ));
         }
 
         #[test]
-        fn test_state_display() {
-            assert_eq!(ArtifactState::Pending.to_string(), "pending");
-            assert_eq!(ArtifactState::Ready.to_string(), "ready");
-            assert_eq!(ArtifactState::Failed.to_string(), "failed");
+        fn test_status_display() {
+            assert_eq!(ArtifactStatus::Pending.to_string(), "pending");
+            assert_eq!(ArtifactStatus::Ready.to_string(), "ready");
+            assert_eq!(ArtifactStatus::Failed.to_string(), "failed");
         }
 
         #[test]

@@ -2,19 +2,8 @@
 //!
 //! Conversation states: Active ↔ Archived (bidirectional)
 
+pub use framecast_common::StateError;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
-
-/// Errors that can occur during state transitions
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum StateError {
-    #[error("Invalid transition: cannot transition from {from} to {to} via {event}")]
-    InvalidTransition {
-        from: String,
-        to: String,
-        event: String,
-    },
-}
 
 /// Conversation states as defined in spec section 6.6
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

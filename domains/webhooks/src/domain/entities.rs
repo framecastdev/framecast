@@ -10,6 +10,30 @@ use crate::domain::state::{
     WebhookDeliveryStateMachine,
 };
 
+/// Webhook event type — matches the `webhook_event_type` DB enum
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "webhook_event_type", rename_all = "lowercase")]
+pub enum WebhookEventType {
+    #[serde(rename = "job.queued")]
+    #[sqlx(rename = "job.queued")]
+    JobQueued,
+    #[serde(rename = "job.started")]
+    #[sqlx(rename = "job.started")]
+    JobStarted,
+    #[serde(rename = "job.progress")]
+    #[sqlx(rename = "job.progress")]
+    JobProgress,
+    #[serde(rename = "job.completed")]
+    #[sqlx(rename = "job.completed")]
+    JobCompleted,
+    #[serde(rename = "job.failed")]
+    #[sqlx(rename = "job.failed")]
+    JobFailed,
+    #[serde(rename = "job.canceled")]
+    #[sqlx(rename = "job.canceled")]
+    JobCanceled,
+}
+
 /// Webhook entity
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Webhook {
@@ -17,7 +41,7 @@ pub struct Webhook {
     pub team_id: Uuid,
     pub created_by: Uuid,
     pub url: String,
-    pub events: Json<Vec<String>>,
+    pub events: Vec<WebhookEventType>,
     pub secret: String,
     pub is_active: bool,
     pub last_triggered_at: Option<DateTime<Utc>>,
@@ -26,18 +50,13 @@ pub struct Webhook {
 }
 
 impl Webhook {
-    /// Valid webhook events per spec
-    pub const VALID_EVENTS: &'static [&'static str] = &[
-        "job.queued",
-        "job.started",
-        "job.progress",
-        "job.completed",
-        "job.failed",
-        "job.canceled",
-    ];
-
     /// Create a new webhook with validation
-    pub fn new(team_id: Uuid, created_by: Uuid, url: String, events: Vec<String>) -> Result<Self> {
+    pub fn new(
+        team_id: Uuid,
+        created_by: Uuid,
+        url: String,
+        events: Vec<WebhookEventType>,
+    ) -> Result<Self> {
         // Validate URL
         if !url.starts_with("https://") {
             return Err(Error::Validation("Webhook URL must be HTTPS".to_string()));
@@ -56,12 +75,6 @@ impl Webhook {
             ));
         }
 
-        for event in &events {
-            if !Self::VALID_EVENTS.contains(&event.as_str()) {
-                return Err(Error::Validation(format!("Invalid event: {}", event)));
-            }
-        }
-
         // Generate secret for HMAC signing
         let secret = uuid::Uuid::new_v4().to_string().replace('-', "");
 
@@ -71,7 +84,7 @@ impl Webhook {
             team_id,
             created_by,
             url,
-            events: Json(events),
+            events,
             secret,
             is_active: true,
             last_triggered_at: None,
@@ -98,12 +111,6 @@ impl Webhook {
             return Err(Error::Validation(
                 "Must subscribe to at least one event".to_string(),
             ));
-        }
-
-        for event in self.events.iter() {
-            if !Self::VALID_EVENTS.contains(&event.as_str()) {
-                return Err(Error::Validation(format!("Invalid event: {}", event)));
-            }
         }
 
         Ok(())
@@ -325,14 +332,14 @@ mod tests {
         let team_id = Uuid::new_v4();
         let created_by = Uuid::new_v4();
         let url = "https://example.com/webhook".to_string();
-        let events = vec!["job.completed".to_string(), "job.failed".to_string()];
+        let events = vec![WebhookEventType::JobCompleted, WebhookEventType::JobFailed];
 
         let webhook = Webhook::new(team_id, created_by, url.clone(), events.clone()).unwrap();
 
         assert_eq!(webhook.team_id, team_id);
         assert_eq!(webhook.created_by, created_by);
         assert_eq!(webhook.url, url);
-        assert_eq!(webhook.events.0, events);
+        assert_eq!(webhook.events, events);
         assert!(!webhook.secret.is_empty());
         assert!(webhook.is_active);
     }
@@ -347,16 +354,7 @@ mod tests {
             team_id,
             created_by,
             "http://example.com/webhook".to_string(),
-            vec!["job.completed".to_string()],
-        );
-        assert!(result.is_err());
-
-        // Test invalid event
-        let result = Webhook::new(
-            team_id,
-            created_by,
-            "https://example.com/webhook".to_string(),
-            vec!["invalid.event".to_string()],
+            vec![WebhookEventType::JobCompleted],
         );
         assert!(result.is_err());
 
