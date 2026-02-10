@@ -39,6 +39,9 @@ pub enum Error {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Rate limit exceeded: {0}")]
+    RateLimit(String),
 }
 
 impl Error {
@@ -50,6 +53,7 @@ impl Error {
             Error::Validation(_) => StatusCode::BAD_REQUEST,
             Error::NotFound(_) => StatusCode::NOT_FOUND,
             Error::Conflict(_) => StatusCode::CONFLICT,
+            Error::RateLimit(_) => StatusCode::TOO_MANY_REQUESTS,
             Error::Unexpected(_)
             | Error::Database(_)
             | Error::Serialization(_)
@@ -69,6 +73,7 @@ impl Error {
             Error::NotFound(_) => "NOT_FOUND",
             Error::Conflict(_) => "CONFLICT",
             Error::Internal(_) => "INTERNAL_ERROR",
+            Error::RateLimit(_) => "RATE_LIMIT_EXCEEDED",
         }
     }
 }
@@ -135,6 +140,14 @@ mod tests {
     }
 
     #[test]
+    fn test_error_rate_limit_status_code() {
+        assert_eq!(
+            Error::RateLimit("test".to_string()).status_code(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+
+    #[test]
     fn test_error_codes() {
         assert_eq!(
             Error::Authentication("test".to_string()).error_code(),
@@ -148,6 +161,10 @@ mod tests {
         assert_eq!(
             Error::Internal("test".to_string()).error_code(),
             "INTERNAL_ERROR"
+        );
+        assert_eq!(
+            Error::RateLimit("test".to_string()).error_code(),
+            "RATE_LIMIT_EXCEEDED"
         );
     }
 }

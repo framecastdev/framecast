@@ -169,10 +169,10 @@ impl AuthBackend {
                 }
 
                 let scopes: Vec<String> =
-                    serde_json::from_value(row.scopes).unwrap_or_else(|e| {
-                        tracing::warn!(error = %e, api_key_id = %row.id, "Failed to deserialize api_key scopes, defaulting to empty");
-                        vec![]
-                    });
+                    serde_json::from_value(row.scopes).map_err(|e| {
+                        tracing::error!(error = %e, api_key_id = %row.id, "Corrupt api_key scopes JSON");
+                        AuthError::AuthenticationFailed
+                    })?;
 
                 return Ok(Some(AuthApiKey {
                     id: row.id,

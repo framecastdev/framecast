@@ -34,7 +34,10 @@ impl MessageRepository {
         Ok(messages)
     }
 
-    /// Create a new message
+    /// Create a new message with an atomically assigned sequence number.
+    ///
+    /// The sequence is computed via a subquery (`COALESCE(MAX(sequence), 0) + 1`)
+    /// in the INSERT itself, eliminating the race between reading and writing.
     pub async fn create(&self, msg: &Message) -> Result<Message> {
         let created = sqlx::query_as::<_, Message>(
             r#"
@@ -43,7 +46,13 @@ impl MessageRepository {
                 model, input_tokens, output_tokens,
                 sequence, created_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8,
+                (SELECT COALESCE(MAX(sequence), 0) + 1
+                 FROM messages
+                 WHERE conversation_id = $2),
+                $9
+            )
             RETURNING id, conversation_id, role, content, artifacts,
                       model, input_tokens, output_tokens,
                       sequence, created_at
@@ -57,7 +66,6 @@ impl MessageRepository {
         .bind(&msg.model)
         .bind(msg.input_tokens)
         .bind(msg.output_tokens)
-        .bind(msg.sequence)
         .bind(msg.created_at)
         .fetch_one(&self.pool)
         .await?;
@@ -77,17 +85,5 @@ impl MessageRepository {
             .execute(&self.pool)
             .await?;
         Ok(())
-    }
-
-    /// Get the next sequence number for a conversation
-    pub async fn next_sequence(&self, conversation_id: Uuid) -> Result<i32> {
-        let row = sqlx::query_scalar::<_, Option<i32>>(
-            "SELECT MAX(sequence) FROM messages WHERE conversation_id = $1",
-        )
-        .bind(conversation_id)
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(row.unwrap_or(0) + 1)
     }
 }

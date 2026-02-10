@@ -308,7 +308,7 @@ pub async fn count_active_jobs_for_team_tx(
         r#"
         SELECT COUNT(*)
         FROM jobs
-        WHERE owner LIKE 'framecast:team:' || $1::text || '%'
+        WHERE owner = 'framecast:team:' || $1::text
           AND status NOT IN ('completed', 'failed', 'canceled')
         "#,
     )
