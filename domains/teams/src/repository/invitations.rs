@@ -103,109 +103,34 @@ impl InvitationRepository {
         team_id: Uuid,
         state_filter: Option<InvitationState>,
     ) -> Result<Vec<Invitation>> {
-        let rows = match state_filter {
+        let state_clause = match state_filter {
             Some(InvitationState::Pending) => {
-                sqlx::query_as!(
-                    Invitation,
-                    r#"
-                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
-                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
-                    FROM invitations
-                    WHERE team_id = $1
-                      AND accepted_at IS NULL
-                      AND declined_at IS NULL
-                      AND revoked_at IS NULL
-                      AND expires_at > NOW()
-                    ORDER BY created_at DESC
-                    "#,
-                    team_id
-                )
-                .fetch_all(&self.pool)
-                .await?
+                " AND accepted_at IS NULL AND declined_at IS NULL \
+                 AND revoked_at IS NULL AND expires_at > NOW()"
             }
-            Some(InvitationState::Accepted) => {
-                sqlx::query_as!(
-                    Invitation,
-                    r#"
-                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
-                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
-                    FROM invitations
-                    WHERE team_id = $1
-                      AND accepted_at IS NOT NULL
-                    ORDER BY created_at DESC
-                    "#,
-                    team_id
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
-            Some(InvitationState::Declined) => {
-                sqlx::query_as!(
-                    Invitation,
-                    r#"
-                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
-                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
-                    FROM invitations
-                    WHERE team_id = $1
-                      AND declined_at IS NOT NULL
-                    ORDER BY created_at DESC
-                    "#,
-                    team_id
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
+            Some(InvitationState::Accepted) => " AND accepted_at IS NOT NULL",
+            Some(InvitationState::Declined) => " AND declined_at IS NOT NULL",
             Some(InvitationState::Expired) => {
-                sqlx::query_as!(
-                    Invitation,
-                    r#"
-                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
-                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
-                    FROM invitations
-                    WHERE team_id = $1
-                      AND accepted_at IS NULL
-                      AND declined_at IS NULL
-                      AND revoked_at IS NULL
-                      AND expires_at <= NOW()
-                    ORDER BY created_at DESC
-                    "#,
-                    team_id
-                )
-                .fetch_all(&self.pool)
-                .await?
+                " AND accepted_at IS NULL AND declined_at IS NULL \
+                 AND revoked_at IS NULL AND expires_at <= NOW()"
             }
-            Some(InvitationState::Revoked) => {
-                sqlx::query_as!(
-                    Invitation,
-                    r#"
-                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
-                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
-                    FROM invitations
-                    WHERE team_id = $1
-                      AND revoked_at IS NOT NULL
-                    ORDER BY created_at DESC
-                    "#,
-                    team_id
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
-            None => {
-                sqlx::query_as!(
-                    Invitation,
-                    r#"
-                    SELECT id, team_id, invited_by, email, role as "role: InvitationRole",
-                           token, expires_at, accepted_at, declined_at, revoked_at, created_at
-                    FROM invitations
-                    WHERE team_id = $1
-                    ORDER BY created_at DESC
-                    "#,
-                    team_id
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
+            Some(InvitationState::Revoked) => " AND revoked_at IS NOT NULL",
+            None => "",
         };
+
+        let sql = format!(
+            r#"SELECT id, team_id, invited_by, email, role,
+                      token, expires_at, accepted_at, declined_at, revoked_at, created_at
+               FROM invitations
+               WHERE team_id = $1{}
+               ORDER BY created_at DESC"#,
+            state_clause
+        );
+
+        let rows = sqlx::query_as::<_, Invitation>(&sql)
+            .bind(team_id)
+            .fetch_all(&self.pool)
+            .await?;
 
         Ok(rows)
     }

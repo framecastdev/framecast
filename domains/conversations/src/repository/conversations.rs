@@ -38,6 +38,8 @@ impl ConversationRepository {
         &self,
         user_id: Uuid,
         status: Option<ConversationStatus>,
+        limit: i64,
+        offset: i64,
     ) -> Result<Vec<Conversation>> {
         let convs = match status {
             Some(s) => {
@@ -49,10 +51,13 @@ impl ConversationRepository {
                     FROM conversations
                     WHERE user_id = $1 AND status = $2
                     ORDER BY last_message_at DESC NULLS LAST, created_at DESC
+                    LIMIT $3 OFFSET $4
                     "#,
                 )
                 .bind(user_id)
                 .bind(s)
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -63,11 +68,14 @@ impl ConversationRepository {
                            status, message_count, last_message_at,
                            created_at, updated_at
                     FROM conversations
-                    WHERE user_id = $1 AND status = 'active'
+                    WHERE user_id = $1
                     ORDER BY last_message_at DESC NULLS LAST, created_at DESC
+                    LIMIT $2 OFFSET $3
                     "#,
                 )
                 .bind(user_id)
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }

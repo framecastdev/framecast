@@ -68,6 +68,10 @@ jobs:
         id: migrate
         run: just ci-migrate
 
+      - name: Check SQLX offline cache
+        id: sqlx-check
+        run: cargo sqlx prepare --check --workspace
+
       - name: Run tests
         id: test
         run: |
@@ -92,6 +96,7 @@ jobs:
             echo "| Formatting | ${{ steps.fmt.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
             echo "| Clippy | ${{ steps.clippy.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
             echo "| Migrations | ${{ steps.migrate.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
+            echo "| SQLX Cache | ${{ steps.sqlx-check.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
             echo "| Unit Tests | ${{ steps.test.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
             echo "| Integration Tests | ${{ steps.integration-test.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
             echo ""
@@ -155,6 +160,40 @@ jobs:
             echo "| Validate (\`tofu validate\`) | ${{ steps.tofu-validate.outcome == 'failure' && ':x: Failed' || ':white_check_mark: Passed' }} |"
             echo ""
             echo "OpenTofu $(tofu version -json | jq -r '.terraform_version')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-binstall
+
+      - name: Install cargo-audit
+        run: cargo binstall --no-confirm cargo-audit
+
+      - name: Run cargo audit
+        id: audit
+        run: cargo audit
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Security Audit"
+            echo ""
+            if [ "${{ steps.audit.outcome }}" = "failure" ]; then
+              echo ":x: **Vulnerabilities found** — run \`cargo audit\` locally for details"
+            else
+              echo ":white_check_mark: **No known vulnerabilities**"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   build-lambda:
@@ -483,7 +522,7 @@ jobs:
   ci-passed:
     name: CI Passed
     if: always()
-    needs: [infra-validate, build-lambda, mutation-summary, e2e-tests]
+    needs: [infra-validate, build-lambda, mutation-summary, e2e-tests, security]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

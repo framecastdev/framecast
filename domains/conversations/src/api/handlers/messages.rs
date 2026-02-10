@@ -1,13 +1,13 @@
 //! Message API handlers
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
 use chrono::{DateTime, Utc};
 use framecast_auth::AnyAuth;
-use framecast_common::{Error, Result, Urn, ValidatedJson};
+use framecast_common::{Error, Pagination, Result, Urn, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -93,11 +93,11 @@ pub async fn send_message(
 
     let created_user_msg = state.repos.messages.create(&user_msg).await?;
 
-    // Build LLM request from conversation history
+    // Build LLM request from conversation history (all messages, unpaginated)
     let history = state
         .repos
         .messages
-        .list_by_conversation(conversation_id)
+        .list_all_by_conversation(conversation_id)
         .await?;
 
     let llm_messages: Vec<framecast_llm::LlmMessage> = history
@@ -217,6 +217,7 @@ pub async fn list_messages(
     AnyAuth(ctx): AnyAuth,
     State(state): State<ConversationsState>,
     Path(conversation_id): Path<Uuid>,
+    Query(pagination): Query<Pagination>,
 ) -> Result<Json<Vec<MessageResponse>>> {
     // Verify conversation exists and belongs to user
     let conv = state
@@ -233,7 +234,7 @@ pub async fn list_messages(
     let messages = state
         .repos
         .messages
-        .list_by_conversation(conversation_id)
+        .list_by_conversation(conversation_id, pagination.limit(), pagination.offset())
         .await?;
 
     let responses: Vec<MessageResponse> = messages.into_iter().map(Into::into).collect();

@@ -1,12 +1,12 @@
 //! System asset API handlers
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Json,
 };
 use chrono::{DateTime, Utc};
 use framecast_auth::AnyAuth;
-use framecast_common::{Error, Result};
+use framecast_common::{Error, Pagination, Result};
 use serde::Serialize;
 
 use crate::api::middleware::ArtifactsState;
@@ -48,8 +48,13 @@ impl From<crate::domain::entities::SystemAsset> for SystemAssetResponse {
 pub async fn list_system_assets(
     AnyAuth(_ctx): AnyAuth,
     State(state): State<ArtifactsState>,
+    Query(pagination): Query<Pagination>,
 ) -> Result<Json<Vec<SystemAssetResponse>>> {
-    let assets = state.repos.system_assets.list().await?;
+    let assets = state
+        .repos
+        .system_assets
+        .list(pagination.limit(), pagination.offset())
+        .await?;
     let responses: Vec<SystemAssetResponse> = assets.into_iter().map(Into::into).collect();
     Ok(Json(responses))
 }

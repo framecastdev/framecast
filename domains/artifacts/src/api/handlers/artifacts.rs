@@ -1,13 +1,13 @@
 //! Artifact management API handlers
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
 use chrono::{DateTime, Utc};
 use framecast_auth::AnyAuth;
-use framecast_common::{Error, Result, Urn, ValidatedJson};
+use framecast_common::{Error, Pagination, Result, Urn, ValidatedJson};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -78,6 +78,7 @@ impl From<crate::domain::entities::Artifact> for ArtifactResponse {
 pub async fn list_artifacts(
     AnyAuth(ctx): AnyAuth,
     State(state): State<ArtifactsState>,
+    Query(pagination): Query<Pagination>,
 ) -> Result<Json<Vec<ArtifactResponse>>> {
     // Collect all owner URNs the user can access: personal + each team
     let mut owner_urns = vec![Urn::user(ctx.user.id).to_string()];
@@ -85,7 +86,11 @@ pub async fn list_artifacts(
         owner_urns.push(Urn::team(membership.team_id).to_string());
     }
 
-    let artifacts = state.repos.artifacts.list_by_owners(&owner_urns).await?;
+    let artifacts = state
+        .repos
+        .artifacts
+        .list_by_owners(&owner_urns, pagination.limit(), pagination.offset())
+        .await?;
 
     let responses: Vec<ArtifactResponse> = artifacts.into_iter().map(Into::into).collect();
     Ok(Json(responses))

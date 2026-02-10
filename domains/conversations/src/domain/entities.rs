@@ -126,8 +126,17 @@ impl Conversation {
     }
 
     /// Increment message count by a given amount (INV-C4)
-    pub fn increment_message_count(&mut self, count: i32) {
-        self.message_count += count;
+    pub fn increment_message_count(&mut self, count: i32) -> Result<()> {
+        if count < 1 {
+            return Err(Error::Validation(
+                "Message count increment must be at least 1".to_string(),
+            ));
+        }
+        self.message_count = self
+            .message_count
+            .checked_add(count)
+            .ok_or_else(|| Error::Validation("Message count overflow".to_string()))?;
+        Ok(())
     }
 }
 
@@ -551,10 +560,35 @@ mod tests {
         let mut conv = Conversation::new(Uuid::new_v4(), "model".to_string(), None, None).unwrap();
         assert_eq!(conv.message_count, 0);
 
-        conv.increment_message_count(1);
+        conv.increment_message_count(1).unwrap();
         assert_eq!(conv.message_count, 1);
 
-        conv.increment_message_count(2);
+        conv.increment_message_count(2).unwrap();
         assert_eq!(conv.message_count, 3);
+    }
+
+    #[test]
+    fn test_conversation_increment_message_count_zero_rejected() {
+        let mut conv = Conversation::new(Uuid::new_v4(), "model".to_string(), None, None).unwrap();
+        let result = conv.increment_message_count(0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least 1"));
+    }
+
+    #[test]
+    fn test_conversation_increment_message_count_negative_rejected() {
+        let mut conv = Conversation::new(Uuid::new_v4(), "model".to_string(), None, None).unwrap();
+        let result = conv.increment_message_count(-1);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least 1"));
+    }
+
+    #[test]
+    fn test_conversation_increment_message_count_overflow_rejected() {
+        let mut conv = Conversation::new(Uuid::new_v4(), "model".to_string(), None, None).unwrap();
+        conv.message_count = i32::MAX;
+        let result = conv.increment_message_count(1);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("overflow"));
     }
 }
