@@ -48,11 +48,11 @@ markers = [
     "cross_domain: cross-domain interaction tests",
     "journey: full user journey tests spanning multiple domains",
     "jit: just-in-time user provisioning tests",
-    "jobs: job lifecycle tests",
+    "generations: generation lifecycle tests",
     "render: render orchestration tests",
     "sse: server-sent events tests",
-    "job_access: job access control tests",
-    "job_concurrency: job concurrency tests",
+    "generation_access: generation access control tests",
+    "generation_concurrency: generation concurrency tests",
 ]
 
 [tool.coverage.run]

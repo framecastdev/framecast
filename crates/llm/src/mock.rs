@@ -151,24 +151,30 @@ impl ConfigurableMockLlmService {
 
     /// Set the behavior (can be changed between calls)
     pub fn set_behavior(&self, behavior: MockBehavior) {
-        let mut b = self.behavior.lock().unwrap();
+        let mut b = self.behavior.lock().expect("behavior lock poisoned");
         *b = behavior;
     }
 
     /// Get all recorded requests
     pub fn recorded_requests(&self) -> Vec<RecordedRequest> {
-        self.requests.lock().unwrap().clone()
+        self.requests
+            .lock()
+            .expect("requests lock poisoned")
+            .clone()
     }
 
     /// Get the total call count
     pub fn call_count(&self) -> usize {
-        *self.call_count.lock().unwrap()
+        *self.call_count.lock().expect("call_count lock poisoned")
     }
 
     /// Clear recorded requests and reset call count
     pub fn reset(&self) {
-        self.requests.lock().unwrap().clear();
-        *self.call_count.lock().unwrap() = 0;
+        self.requests
+            .lock()
+            .expect("requests lock poisoned")
+            .clear();
+        *self.call_count.lock().expect("call_count lock poisoned") = 0;
     }
 }
 
@@ -191,18 +197,28 @@ impl LlmService for ConfigurableMockLlmService {
                 messages: request.messages.clone(),
                 max_tokens: request.max_tokens,
             };
-            self.requests.lock().unwrap().push(recorded);
+            self.requests
+                .lock()
+                .map_err(|e| LlmError::Request(format!("requests lock poisoned: {e}")))?
+                .push(recorded);
         }
 
         // Increment call count
         let current_count = {
-            let mut count = self.call_count.lock().unwrap();
+            let mut count = self
+                .call_count
+                .lock()
+                .map_err(|e| LlmError::Request(format!("call_count lock poisoned: {e}")))?;
             *count += 1;
             *count
         };
 
         // Determine response based on behavior
-        let behavior = self.behavior.lock().unwrap().clone();
+        let behavior = self
+            .behavior
+            .lock()
+            .map_err(|e| LlmError::Request(format!("behavior lock poisoned: {e}")))?
+            .clone();
         match behavior {
             MockBehavior::FixedResponse(content) => Ok(CompletionResponse {
                 content: content.clone(),

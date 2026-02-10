@@ -15,16 +15,16 @@ API requests are rate-limited based on the user's subscription plan:
 
 Rate limits are evaluated per authenticated user. Anonymous/unauthenticated requests are subject to stricter limits.
 
-## 11.2 Concurrent Job Limits
+## 11.2 Concurrent Generation Limits
 
-The number of concurrent jobs that can be executed simultaneously is limited based on plan:
+The number of concurrent generations that can be executed simultaneously is limited based on plan:
 
-| Plan | Concurrent Jobs | Scope |
-|------|-----------------|-------|
+| Plan | Concurrent Generations | Scope |
+|------|------------------------|-------|
 | Starter | 1 | Per user |
 | Creator | 5 | Per team |
 
-Once a user/team reaches their concurrent job limit, additional job submissions
+Once a user/team reaches their concurrent generation limit, additional generation submissions
 will be queued and executed when resources become available.
 
 ## 11.3 Invitation Limits

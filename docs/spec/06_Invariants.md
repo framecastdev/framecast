@@ -119,54 +119,54 @@ INV-I9: âˆ€ i âˆˆ Invitation : i.created_at < i.expires_at
         (Expiration must be after creation)
 ```
 
-## 6.5 Job Invariants
+## 6.5 Generation Invariants
 
 ```
-INV-J1: âˆ€ j âˆˆ Job : j.status âˆˆ {'queued', 'processing', 'completed', 'failed', 'canceled'}
-        (Job status must be one of allowed values)
+INV-G1: âˆ€ g âˆˆ Generation : g.status âˆˆ {'queued', 'processing', 'completed', 'failed', 'canceled'}
+        (Generation status must be one of allowed values)
 
-INV-J2: âˆ€ j âˆˆ Job : j.status âˆˆ {'completed', 'failed', 'canceled'} â†’
-        j.completed_at IS NOT NULL âˆ§ j.completed_at â‰¥ j.created_at
-        (Terminal jobs have completion timestamp after creation)
+INV-G2: âˆ€ g âˆˆ Generation : g.status âˆˆ {'completed', 'failed', 'canceled'} â†’
+        g.completed_at IS NOT NULL âˆ§ g.completed_at â‰¥ g.created_at
+        (Terminal generations have completion timestamp after creation)
 
-INV-J3: âˆ€ j âˆˆ Job : j.status = 'processing' â†’ j.started_at IS NOT NULL
-        (Processing jobs have start timestamp)
+INV-G3: âˆ€ g âˆˆ Generation : g.status = 'processing' â†’ g.started_at IS NOT NULL
+        (Processing generations have start timestamp)
 
-INV-J4: âˆ€ j âˆˆ Job : j.status = 'completed' â†’ j.output IS NOT NULL
-        (Completed jobs must have output)
+INV-G4: âˆ€ g âˆˆ Generation : g.status = 'completed' â†’ g.output IS NOT NULL
+        (Completed generations must have output)
 
-INV-J5: âˆ€ j âˆˆ Job : j.status = 'failed' â†’ j.error IS NOT NULL
-        (Failed jobs must have error details)
+INV-G5: âˆ€ g âˆˆ Generation : g.status = 'failed' â†’ g.error IS NOT NULL
+        (Failed generations must have error details)
 
-INV-J6: âˆ€ j âˆˆ Job :                                                     // â† NEW in v0.4.1
-        j.status âˆˆ {'failed', 'canceled'} â†’ j.failure_type IS NOT NULL
-        (Failed/canceled jobs must have failure_type)
+INV-G6: âˆ€ g âˆˆ Generation :                                                     // â† NEW in v0.4.1
+        g.status âˆˆ {'failed', 'canceled'} â†’ g.failure_type IS NOT NULL
+        (Failed/canceled generations must have failure_type)
 
-INV-J7: âˆ€ j âˆˆ Job :                                                     // â† NEW in v0.4.1
-        j.status = 'completed' â†’ j.failure_type IS NULL
-        (Completed jobs must not have failure_type)
+INV-G7: âˆ€ g âˆˆ Generation :                                                     // â† NEW in v0.4.1
+        g.status = 'completed' â†’ g.failure_type IS NULL
+        (Completed generations must not have failure_type)
 
-INV-J8: âˆ€ j âˆˆ Job :                                                     // â† NEW in v0.4.1
-        j.credits_refunded â‰¤ j.credits_charged
+INV-G8: âˆ€ g âˆˆ Generation :                                                     // â† NEW in v0.4.1
+        g.credits_refunded â‰¤ g.credits_charged
         (Cannot refund more than charged)
 
-INV-J9: âˆ€ j âˆˆ Job :                                                     // â† NEW in v0.4.1
-        j.credits_refunded â‰¥ 0 âˆ§ j.credits_charged â‰¥ 0
+INV-G9: âˆ€ g âˆˆ Generation :                                                     // â† NEW in v0.4.1
+        g.credits_refunded â‰¥ 0 âˆ§ g.credits_charged â‰¥ 0
         (Credits values cannot be negative)
 
-INV-J10: âˆ€ j âˆˆ Job : j.created_at â‰¤ j.updated_at
+INV-G10: âˆ€ g âˆˆ Generation : g.created_at â‰¤ g.updated_at
         (Creation timestamp precedes update timestamp)
 
-INV-J11: âˆ€ j âˆˆ Job :
-        (j.project_id IS NOT NULL) â†’ (j.owner STARTS WITH 'framecast:team:')
-        (Project-based jobs must be team-owned)
+INV-G11: âˆ€ g âˆˆ Generation :
+        (g.project_id IS NOT NULL) â†’ (g.owner STARTS WITH 'framecast:team:')
+        (Project-based generations must be team-owned)
 
-INV-J12: âˆ€ p âˆˆ Project :
-        |{j âˆˆ Job : j.project_id = p.id âˆ§ j.status âˆˆ {'queued', 'processing'}}| â‰¤ 1
-        (At most one active job per project)
+INV-G12: âˆ€ p âˆˆ Project :
+        |{g âˆˆ Generation : g.project_id = p.id âˆ§ g.status âˆˆ {'queued', 'processing'}}| â‰¤ 1
+        (At most one active generation per project)
 
-INV-J13: âˆ€ j âˆˆ Job : j.triggered_by âˆˆ {u.id : u âˆˆ User}
-        (Job triggered_by reference must exist)
+INV-G13: âˆ€ g âˆˆ Generation : g.triggered_by âˆˆ {u.id : u âˆˆ User}
+        (Generation triggered_by reference must exist)
 ```
 
 ## 6.6 ApiKey Invariants
@@ -214,8 +214,8 @@ INV-P4: âˆ€ p âˆˆ Project : p.created_at â‰¤ p.updated_at
         (Creation timestamp precedes update timestamp)
 
 INV-P5: âˆ€ p âˆˆ Project : p.status = 'rendering' â†’
-        âˆƒ j âˆˆ Job : j.project_id = p.id âˆ§ j.status âˆˆ {'queued', 'processing'}
-        (Rendering project has active job)
+        âˆƒ g âˆˆ Generation : g.project_id = p.id âˆ§ g.status âˆˆ {'queued', 'processing'}
+        (Rendering project has active generation)
 ```
 
 ## 6.8 AssetFile Invariants
@@ -254,8 +254,8 @@ INV-W2: âˆ€ w âˆˆ Webhook : |w.events| > 0
         (Webhook must subscribe to at least one event)
 
 INV-W3: âˆ€ w âˆˆ Webhook : âˆ€ e âˆˆ w.events : e âˆˆ {
-          'job.queued', 'job.started', 'job.progress',
-          'job.completed', 'job.failed', 'job.canceled'
+          'generation.queued', 'generation.started', 'generation.progress',
+          'generation.completed', 'generation.failed', 'generation.canceled'
         }
         (Webhook events must be valid)
 
@@ -372,10 +372,10 @@ INV-ART-CHAR: ∀ a ∈ Artifact : a.kind = 'character' →
 ## 6.13 Cross-Entity Invariants
 
 ```
-INV-X1: âˆ€ j âˆˆ Job :
-        (j.owner = 'framecast:user:' || j.triggered_by) âˆ¨
-        (âˆƒ m âˆˆ Membership : m.team_id âˆˆ extract_team_from_urn(j.owner) âˆ§ m.user_id = j.triggered_by)
-        (Job owner URN must be accessible by triggered_by user)
+INV-X1: âˆ€ g âˆˆ Generation :
+        (g.owner = 'framecast:user:' || g.triggered_by) âˆ¨
+        (âˆƒ m âˆˆ Membership : m.team_id âˆˆ extract_team_from_urn(g.owner) âˆ§ m.user_id = g.triggered_by)
+        (Generation owner URN must be accessible by triggered_by user)
 
 INV-X2: âˆ€ a âˆˆ AssetFile :
         (a.owner = 'framecast:user:' || a.uploaded_by) âˆ¨
@@ -416,15 +416,15 @@ INV-X8: âˆ€ a âˆˆ Artifact :
 ## 6.14 Temporal Invariants
 
 ```
-INV-TIME1: âˆ€ e âˆˆ {User, Team, Project, Job, AssetFile, Webhook, Conversation, Artifact} :
+INV-TIME1: âˆ€ e âˆˆ {User, Team, Project, Generation, AssetFile, Webhook, Conversation, Artifact} :
            e.created_at â‰¤ e.updated_at
            (Creation precedes last update)
 
-INV-TIME2: âˆ€ j âˆˆ Job : j.started_at IS NOT NULL â†’ j.created_at â‰¤ j.started_at
-           (Job start is after creation)
+INV-TIME2: âˆ€ g âˆˆ Generation : g.started_at IS NOT NULL â†’ g.created_at â‰¤ g.started_at
+           (Generation start is after creation)
 
-INV-TIME3: âˆ€ j âˆˆ Job : j.completed_at IS NOT NULL â†’ j.started_at â‰¤ j.completed_at
-           (Job completion is after start)
+INV-TIME3: âˆ€ g âˆˆ Generation : g.completed_at IS NOT NULL â†’ g.started_at â‰¤ g.completed_at
+           (Generation completion is after start)
 
 INV-TIME4: âˆ€ i âˆˆ Invitation : i.created_at < i.expires_at
            (Invitation expiration is after creation)
@@ -450,12 +450,12 @@ CARD-4: âˆ€ t âˆˆ Team : |{i âˆˆ Invitation : i.team_id = t.id âˆ§ 
 
 CARD-5: âˆ€ t âˆˆ Team, owner âˆˆ URN :
         owner STARTS WITH 'framecast:team:' || t.id â†’
-        |{j âˆˆ Job : j.owner = owner âˆ§ j.status âˆˆ {'queued', 'processing'}}| â‰¤ 5
-        (Max 5 concurrent jobs per team)
+        |{g âˆˆ Generation : g.owner = owner âˆ§ g.status âˆˆ {'queued', 'processing'}}| â‰¤ 5
+        (Max 5 concurrent generations per team)
 
 CARD-6: âˆ€ u âˆˆ User WHERE tier = 'starter' :
-        |{j âˆˆ Job : j.owner = 'framecast:user:' || u.id âˆ§ j.status âˆˆ {'queued', 'processing'}}| â‰¤ 1
-        (Max 1 concurrent job per starter user)
+        |{g âˆˆ Generation : g.owner = 'framecast:user:' || u.id âˆ§ g.status âˆˆ {'queued', 'processing'}}| â‰¤ 1
+        (Max 1 concurrent generation per starter user)
 ```
 
 ---

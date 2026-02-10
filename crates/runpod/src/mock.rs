@@ -49,46 +49,64 @@ impl MockRenderBehavior {
 
     /// Configure the mock outcome
     pub fn set_outcome(&self, outcome: MockOutcome) {
-        *self.outcome.write().unwrap() = outcome;
+        *self.outcome.write().expect("outcome lock poisoned") = outcome;
     }
 
     /// Configure delay before postback
     pub fn set_delay_ms(&self, delay: u64) {
-        *self.delay_ms.write().unwrap() = delay;
+        *self.delay_ms.write().expect("delay_ms lock poisoned") = delay;
     }
 
     /// Configure progress steps to send before final callback
     pub fn set_progress_steps(&self, steps: Vec<f64>) {
-        *self.progress_steps.write().unwrap() = steps;
+        *self
+            .progress_steps
+            .write()
+            .expect("progress_steps lock poisoned") = steps;
     }
 
     /// Configure error payload for failure outcome
     pub fn set_error_payload(&self, payload: serde_json::Value) {
-        *self.error_payload.write().unwrap() = Some(payload);
+        *self
+            .error_payload
+            .write()
+            .expect("error_payload lock poisoned") = Some(payload);
     }
 
     /// Configure output payload for success outcome
     pub fn set_output_payload(&self, payload: serde_json::Value) {
-        *self.output_payload.write().unwrap() = Some(payload);
+        *self
+            .output_payload
+            .write()
+            .expect("output_payload lock poisoned") = Some(payload);
     }
 
     /// Reset to default behavior
     pub fn reset(&self) {
-        *self.outcome.write().unwrap() = MockOutcome::Complete;
-        *self.delay_ms.write().unwrap() = 50;
-        *self.progress_steps.write().unwrap() = Vec::new();
-        *self.error_payload.write().unwrap() = None;
-        *self.output_payload.write().unwrap() = None;
+        *self.outcome.write().expect("outcome lock poisoned") = MockOutcome::Complete;
+        *self.delay_ms.write().expect("delay_ms lock poisoned") = 50;
+        *self
+            .progress_steps
+            .write()
+            .expect("progress_steps lock poisoned") = Vec::new();
+        *self
+            .error_payload
+            .write()
+            .expect("error_payload lock poisoned") = None;
+        *self
+            .output_payload
+            .write()
+            .expect("output_payload lock poisoned") = None;
     }
 
     /// Read current outcome
     pub fn get_outcome(&self) -> MockOutcome {
-        self.outcome.read().unwrap().clone()
+        self.outcome.read().expect("outcome lock poisoned").clone()
     }
 
     /// Read current delay
     pub fn get_delay_ms(&self) -> u64 {
-        *self.delay_ms.read().unwrap()
+        *self.delay_ms.read().expect("delay_ms lock poisoned")
     }
 }
 
@@ -133,7 +151,7 @@ impl MockRenderService {
 
     /// Get recorded render requests
     pub fn recorded_requests(&self) -> Vec<RecordedRenderRequest> {
-        self.history.lock().unwrap().clone()
+        self.history.lock().expect("history lock poisoned").clone()
     }
 
     /// Get request history (shared ref for admin endpoints)
@@ -143,7 +161,7 @@ impl MockRenderService {
 
     /// Clear history
     pub fn reset_history(&self) {
-        self.history.lock().unwrap().clear();
+        self.history.lock().expect("history lock poisoned").clear();
     }
 
     /// Get the callback base URL
@@ -165,15 +183,33 @@ impl RenderService for MockRenderService {
                 options: request.options.clone(),
                 callback_url: request.callback_url.clone(),
             };
-            self.history.lock().unwrap().push(recorded);
+            self.history
+                .lock()
+                .map_err(|e| RenderError::Request(format!("history lock poisoned: {e}")))?
+                .push(recorded);
         }
 
         // Read behavior settings
         let outcome = self.behavior.get_outcome();
         let delay_ms = self.behavior.get_delay_ms();
-        let progress_steps = self.behavior.progress_steps.read().unwrap().clone();
-        let error_payload = self.behavior.error_payload.read().unwrap().clone();
-        let output_payload = self.behavior.output_payload.read().unwrap().clone();
+        let progress_steps = self
+            .behavior
+            .progress_steps
+            .read()
+            .map_err(|e| RenderError::Request(format!("progress_steps lock poisoned: {e}")))?
+            .clone();
+        let error_payload = self
+            .behavior
+            .error_payload
+            .read()
+            .map_err(|e| RenderError::Request(format!("error_payload lock poisoned: {e}")))?
+            .clone();
+        let output_payload = self
+            .behavior
+            .output_payload
+            .read()
+            .map_err(|e| RenderError::Request(format!("output_payload lock poisoned: {e}")))?
+            .clone();
 
         // If timeout, just return without posting anything
         if outcome == MockOutcome::Timeout {
